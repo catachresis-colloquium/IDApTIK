@@ -463,7 +463,7 @@ pub struct NetViewDrag {
 pub fn pan_net_view(
     buttons: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
-    cameras: Query<(&Camera, &GlobalTransform)>,
+    cameras: Query<(&Camera, &GlobalTransform), With<crate::seats::MainCam>>,
     mut drag: ResMut<NetViewDrag>,
     mut roots: Query<&mut Transform, With<NetViewRoot>>,
 ) {
@@ -536,7 +536,7 @@ pub fn net_view_click(
     windows: Query<&Window>,
     // The single shared camera (see Task 14): Net View spawns no camera of
     // its own, so this is the same `Camera2d` the Ghost Lobby scene uses.
-    cameras: Query<(&Camera, &GlobalTransform)>,
+    cameras: Query<(&Camera, &GlobalTransform), With<crate::seats::MainCam>>,
     nodes: Query<(&NetNodeMarker, &GlobalTransform)>,
     drag: Res<NetViewDrag>,
     mut queue: ResMut<CommandQueue>,

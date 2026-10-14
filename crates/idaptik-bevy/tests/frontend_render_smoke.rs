@@ -16,9 +16,11 @@ fn shared_renderer_spawns_camera_player_and_hud() {
         .add_plugins(bevy::state::app::StatesPlugin)
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<ColorMaterial>>()
+        .init_resource::<Assets<Image>>()
         .add_plugins(SimDriverPlugin {
             cfg: RunConfig::standard(),
             seed: 123456,
+            wired: true,
         })
         .add_plugins(FrontendRenderPlugin);
 
@@ -43,7 +45,8 @@ fn shared_renderer_spawns_camera_player_and_hud() {
     let players = world.query::<&PlayerMarker>().iter(world).count();
     let status_lines = world.query::<&StatusText>().iter(world).count();
 
-    assert_eq!(cameras, 1);
+    // One per seat, the hacker's deck layer and the UI camera.
+    assert_eq!(cameras, 4);
     assert_eq!(players, 1);
     assert_eq!(status_lines, 1);
 }

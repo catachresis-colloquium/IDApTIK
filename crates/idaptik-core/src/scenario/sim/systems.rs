@@ -21,6 +21,7 @@ use crate::scenario::event::Event;
 use crate::scenario::floor_graph::camera_node_id;
 use crate::scenario::ids::RoomId;
 use crate::scenario::mathf::{TICK_DT, approach, clamp, dist, powf, sin};
+use crate::scenario::state::Place;
 
 impl GhostLobbySim {
     // 1. TIMERS ------------------------------------------------------------
@@ -72,6 +73,11 @@ impl GhostLobbySim {
     // 2. PLAYER ------------------------------------------------------------
     pub(super) fn system_player(&mut self, input: &TickInput) {
         let dt = TICK_DT;
+        // On the rope the body only goes up or down it.
+        if let Place::Rope { down } = self.state.player.place {
+            self.rope_step(down);
+            return;
+        }
         let old_x = self.state.player.x;
         let left = input.buttons.has(Button::Left);
         let right = input.buttons.has(Button::Right);
@@ -123,22 +129,39 @@ impl GhostLobbySim {
         self.state.player.x += self.state.player.vx * dt;
         self.state.player.y += self.state.player.vy * dt;
         let h = self.def.player.h;
-        if self.state.player.y + h >= c::FLOOR {
+        // The roof is the ground up there; the floor line, indoors and out.
+        let place = self.state.player.place;
+        let ext = self.def.exterior.as_ref();
+        let ground = match (place, ext) {
+            (Place::Roof, Some(e)) => e.roof_y,
+            _ => c::FLOOR,
+        };
+        if self.state.player.y + h >= ground {
             if !self.state.player.grounded && self.state.player.vy > c::LAND_VY {
                 self.state.player.noise = self.state.player.noise.max(c::NOISE_LAND);
             }
-            self.state.player.y = c::FLOOR - h;
+            self.state.player.y = ground - h;
             self.state.player.vy = 0.0;
             self.state.player.grounded = true;
         }
 
-        self.state.player.x = clamp(self.state.player.x, c::PLAYER_CLAMP_LO, c::PLAYER_CLAMP_HI);
-        let (nx, blocked) = Self::constrain_by_doors(
-            &self.state.doors,
-            old_x,
-            self.state.player.x,
-            self.def.player.w,
-        );
+        let (lo, hi) = match (place, ext) {
+            (Place::Roof, Some(e)) => e.roof,
+            (_, Some(e)) => (e.street_lo, c::PLAYER_CLAMP_HI),
+            _ => (c::PLAYER_CLAMP_LO, c::PLAYER_CLAMP_HI),
+        };
+        self.state.player.x = clamp(self.state.player.x, lo, hi);
+        // Doors stand on the floor line; the roof has none.
+        let (nx, blocked) = if place == Place::Floor {
+            Self::constrain_by_doors(
+                &self.state.doors,
+                old_x,
+                self.state.player.x,
+                self.def.player.w,
+            )
+        } else {
+            (self.state.player.x, false)
+        };
         self.state.player.x = nx;
         if blocked {
             self.state.player.vx = 0.0;
@@ -147,8 +170,11 @@ impl GhostLobbySim {
         // hidden
         let cx = self.state.player.x + self.def.player.w / 2.0;
         let room_id = Self::room_id_at(&self.def, self.state.player.x).map(|s| s.to_owned());
+        let outside = self.infiltrator_outside();
         let spot = self.def.hide_spots.iter().position(|hspot| {
-            dist(cx, hspot.x) <= hspot.radius && room_id.as_deref() == Some(hspot.room.as_str())
+            !outside
+                && dist(cx, hspot.x) <= hspot.radius
+                && room_id.as_deref() == Some(hspot.room.as_str())
         });
         self.state.player.hide_spot = spot;
         self.state.player.hidden = crouch
@@ -187,6 +213,16 @@ impl GhostLobbySim {
         let interact_pressed = input.edges.contains(&Edge::InteractPress);
         let jump_pressed = input.edges.contains(&Edge::JumpUp);
         let throw = input.edges.contains(&Edge::Throw);
+        // Outside, only the outside's own handholds: the rope, the hatches
+        // and the front door's lock.
+        if self.def.exterior.is_some() {
+            if self.exterior_interaction(interact_pressed, interact_held) {
+                return;
+            }
+            if self.infiltrator_outside() {
+                return;
+            }
+        }
         let room = Self::room_id_at(&self.def, self.state.player.x).map(|s| s.to_owned());
         let room = room.as_deref();
         let mut active = false;
@@ -266,6 +302,13 @@ impl GhostLobbySim {
             }
         }
 
+        // console use: the lowest ordinary priority, so it never steals the
+        // note, the USB or the chute (floors without consoles never get here
+        // with anything to use)
+        if !active && self.console_interaction(interact_pressed) {
+            active = true;
+        }
+
         // pickpocket during lights-out
         let billy_center = self.state.billy.x + self.def.billy.w / 2.0;
         if !active
@@ -305,6 +348,114 @@ impl GhostLobbySim {
         // throw
         if self.state.player.has_usb && throw {
             self.throw_usb();
+        }
+    }
+
+    /// One tick on the rope: down to the street, or up to the roof.
+    fn rope_step(&mut self, down: bool) {
+        let dt = TICK_DT;
+        let (w, h) = (self.def.player.w, self.def.player.h);
+        let Some((rope, roof_y)) = self.def.exterior.as_ref().map(|e| (e.rope, e.roof_y)) else {
+            self.state.player.place = Place::Floor;
+            return;
+        };
+        let p = &mut self.state.player;
+        p.vx = 0.0;
+        p.vy = 0.0;
+        p.grounded = false;
+        p.sprinting = false;
+        p.hidden = false;
+        p.hide_spot = None;
+        p.x = rope.foot_x - w / 2.0;
+        if down {
+            p.y += rope.speed * dt;
+            if p.y + h >= c::FLOOR {
+                p.y = c::FLOOR - h;
+                p.place = Place::Floor;
+                p.grounded = true;
+            }
+        } else {
+            p.y -= rope.speed * dt;
+            if p.y + h <= roof_y {
+                p.y = roof_y - h;
+                p.x = rope.top_x - w / 2.0;
+                p.place = Place::Roof;
+                p.grounded = true;
+            }
+        }
+        p.noise = (p.noise - c::NOISE_DECAY * dt).max(0.0);
+    }
+
+    /// The outside's handholds, in order: the rope (top or foot), a hatch,
+    /// and from the street the front door's lock. Returns whether one was in
+    /// reach (it then owns the interact key this tick).
+    fn exterior_interaction(&mut self, pressed: bool, held: bool) -> bool {
+        let dt = TICK_DT;
+        let Some(ext) = self.def.exterior.clone() else {
+            return false;
+        };
+        let w = self.def.player.w;
+        let cx = self.state.player.x + w / 2.0;
+        match self.state.player.place {
+            Place::Roof => {
+                if dist(cx, ext.rope.top_x) <= c::ROPE_REACH {
+                    if pressed {
+                        self.state.player.place = Place::Rope { down: true };
+                        self.state.player.x = ext.rope.foot_x - w / 2.0;
+                        self.events.push(Event::RopeTaken { down: true });
+                    }
+                    return true;
+                }
+                if let Some(hatch) = ext.hatches.iter().find(|h| dist(cx, h.x) <= c::HATCH_REACH) {
+                    if pressed {
+                        // Down through the ceiling; the fall makes its own noise.
+                        let p = &mut self.state.player;
+                        p.place = Place::Floor;
+                        p.x = hatch.x - w / 2.0;
+                        p.y = c::FLOOR - c::ROOM_H;
+                        p.vx = 0.0;
+                        p.vy = 0.0;
+                        p.grounded = false;
+                        self.events.push(Event::HatchDropped {
+                            hatch: hatch.id.clone(),
+                        });
+                    }
+                    return true;
+                }
+                false
+            }
+            Place::Floor if self.infiltrator_outside() => {
+                if dist(cx, ext.rope.foot_x) <= c::ROPE_REACH {
+                    if pressed {
+                        self.state.player.place = Place::Rope { down: false };
+                        self.events.push(Event::RopeTaken { down: false });
+                    }
+                    return true;
+                }
+                let Some(i) = self.state.doors.iter().position(|d| d.id == ext.front_door) else {
+                    return false;
+                };
+                let door = &self.state.doors[i];
+                let locked = !door.unlocked && door.open <= 0.0;
+                if !(locked && cx < door.x && door.x - cx <= c::PICK_REACH) {
+                    return false;
+                }
+                let p = &mut self.state.player;
+                if held {
+                    p.lockpick += dt;
+                    p.vx *= 0.7;
+                    p.noise = p.noise.max(c::NOISE_PICK);
+                    if p.lockpick >= ext.pick_time {
+                        p.lockpick = 0.0;
+                        self.state.doors[i].unlocked = true;
+                        self.events.push(Event::FrontDoorPicked);
+                    }
+                } else {
+                    p.lockpick = (p.lockpick - 1.5 * dt).max(0.0);
+                }
+                true
+            }
+            _ => false,
         }
     }
 
@@ -490,29 +641,7 @@ impl GhostLobbySim {
         }
         let ridx = Self::room_index_at(&self.def, self.state.player.x);
         let room_id = self.def.rooms.get(ridx).map(|r| r.id.clone());
-        let cx = self.state.player.x + self.def.player.w / 2.0;
-        let t = self.state.t;
-        let hidden = self.state.player.hidden;
-        let crouch = self.state.player.crouching;
-        let vx = self.state.player.vx;
-        let cur = room_id.as_ref();
-        let looped = &self.state.camera_looped;
-        let dead = &self.state.dead_nodes;
-        let seen = self.def.cameras.iter().enumerate().any(|(i, cam)| {
-            if cur != Some(&cam.room) || cam.stale {
-                return false;
-            }
-            // A looped camera is showing the operator yesterday's corridor, and an
-            // unpowered one is showing nothing at all. Neither can flag anybody, so
-            // the hack the hacker paid for is worth exactly what it promised.
-            if looped.get(i).is_some_and(|left| *left > 0.0) || dead.contains(&camera_node_id(i)) {
-                return false;
-            }
-            let sweep = sin(t * c::CAM_SWEEP_W + cam.phase) * c::CAM_SWEEP_A;
-            let lo = cam.range.0 + sweep.min(0.0);
-            let hi = cam.range.1 + sweep.max(0.0);
-            cx >= lo && cx <= hi && !hidden && !(crouch && vx.abs() < c::CROUCH_CAM_VX)
-        });
+        let seen = (0..self.def.cameras.len()).any(|i| self.camera_sees_player(i));
         if seen {
             self.state.camera_detection += dt;
             if self.state.camera_detection >= self.preset.camera_lock {
@@ -552,12 +681,16 @@ impl GhostLobbySim {
     pub(super) fn system_support(&mut self) {
         let dt = TICK_DT;
         let ridx = Self::room_index_at(&self.def, self.state.player.x);
-        let (base, ping_bonus) = self
-            .def
-            .rooms
-            .get(ridx)
-            .map(|r| (r.support, r.ping_support_bonus))
-            .unwrap_or((c::SUPPORT_CLAMP_MIN, 0.0));
+        let (base, ping_bonus) = match &self.def.exterior {
+            // Outside, the van is in plain sight.
+            Some(ext) if self.infiltrator_outside() => (ext.support, 0.0),
+            _ => self
+                .def
+                .rooms
+                .get(ridx)
+                .map(|r| (r.support, r.ping_support_bonus))
+                .unwrap_or((c::SUPPORT_CLAMP_MIN, 0.0)),
+        };
         let mut target = base;
         if self.state.camera_ping > 0.0 {
             target += ping_bonus;
@@ -1016,6 +1149,12 @@ impl GhostLobbySim {
         {
             return;
         }
+        // Nobody grabs you on the roof, nor through the building's wall.
+        if self.state.player.place != Place::Floor
+            || self.infiltrator_outside() != self.billy_outside()
+        {
+            return;
+        }
         let pc = self.state.player.x + self.def.player.w / 2.0;
         let bc = self.state.billy.x + self.def.billy.w / 2.0;
         let same_room = Self::room_index_at(&self.def, self.state.player.x)
@@ -1079,5 +1218,45 @@ impl GhostLobbySim {
                 exit,
             });
         }
+    }
+}
+
+impl GhostLobbySim {
+    /// Whether camera `i` has the player in frame right now: same room, not
+    /// stale, not looped, powered, not switched off or left in the dark by a
+    /// wire, and the player inside its sweep and not hiding from it. Excludes
+    /// the floor-wide lockout and flicker, which the camera system checks first.
+    pub(crate) fn camera_sees_player(&self, i: usize) -> bool {
+        let Some(cam) = self.def.cameras.get(i) else {
+            return false;
+        };
+        let s = &self.state;
+        // The cameras watch the rooms, not the roof or the street.
+        if self.infiltrator_outside() {
+            return false;
+        }
+        let ridx = Self::room_index_at(&self.def, s.player.x);
+        if self.def.rooms.get(ridx).map(|r| &r.id) != Some(&cam.room) || cam.stale {
+            return false;
+        }
+        // A looped camera is showing the operator yesterday's corridor, and an
+        // unpowered one is showing nothing at all. Neither can flag anybody, so
+        // the hack the hacker paid for is worth exactly what it promised.
+        if s.camera_looped.get(i).is_some_and(|left| *left > 0.0)
+            || s.dead_nodes.contains(&camera_node_id(i))
+        {
+            return false;
+        }
+        if self.signal_blinds_camera(i) {
+            return false;
+        }
+        let cx = s.player.x + self.def.player.w / 2.0;
+        let sweep = sin(s.t * c::CAM_SWEEP_W + cam.phase) * c::CAM_SWEEP_A;
+        let lo = cam.range.0 + sweep.min(0.0);
+        let hi = cam.range.1 + sweep.max(0.0);
+        cx >= lo
+            && cx <= hi
+            && !s.player.hidden
+            && !(s.player.crouching && s.player.vx.abs() < c::CROUCH_CAM_VX)
     }
 }

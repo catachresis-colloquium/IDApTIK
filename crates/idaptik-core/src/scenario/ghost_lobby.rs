@@ -596,6 +596,10 @@ pub fn ghost_lobby() -> ScenarioDefinition {
             door_delay: (c::SPAWN_DOOR_DELAY_BASE, c::SPAWN_DOOR_DELAY_SPAN),
             operator_door_penalty: c::OPERATOR_DOOR_PENALTY,
         },
+        signal: None,
+        arrival_clock: crate::scenario::definition::ArrivalClock::RunStart,
+        consoles: Vec::new(),
+        exterior: None,
     }
 }
 

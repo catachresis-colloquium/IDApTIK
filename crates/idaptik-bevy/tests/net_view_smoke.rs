@@ -25,9 +25,11 @@ fn headless_app() -> App {
         .add_plugins(bevy::state::app::StatesPlugin)
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<ColorMaterial>>()
+        .init_resource::<Assets<Image>>()
         .add_plugins(SimDriverPlugin {
             cfg: RunConfig::standard(),
             seed: 123456,
+            wired: true,
         })
         .init_state::<AppMode>()
         .add_systems(OnEnter(AppMode::NetView), setup_net_view)

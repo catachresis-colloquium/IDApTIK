@@ -11,6 +11,7 @@
   { "cmd": "ThrowUsb" },
   { "cmd": "NetSsh", "node": 0 },
   { "cmd": "NetHack", "node": 1 },
+  { "cmd": "Signal", "op": { "op": "Wire", "by": "hacker", "from": 22, "from_port": "compromised", "to": 0, "to_port": "open" } },
   { "cmd": "Pause", "on": true },
   { "cmd": "Pause", "on": false },
   { "cmd": "ForceCrisis" },

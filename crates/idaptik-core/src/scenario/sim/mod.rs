@@ -9,6 +9,8 @@
 //! The code path is panic-free: no `unwrap`/`expect`/panicking index; fallible
 //! construction returns `Result`; arithmetic is clamped; matches are exhaustive.
 
+mod console;
+mod signal;
 mod systems;
 
 use crate::netsim::graph::GroundedGraph;
@@ -180,6 +182,7 @@ impl GhostLobbySim {
             seed: self.seed,
             difficulty: self.cfg.difficulty,
             reduced_motion: self.cfg.reduced_motion,
+            outside: self.def.exterior.is_some(),
         });
         self.events.push(Event::SeedAnnounced { seed: self.seed });
     }
@@ -375,6 +378,9 @@ impl GhostLobbySim {
                     crate::scenario::command::Command::NetHack { node } => {
                         self.net_hack(*node);
                     }
+                    crate::scenario::command::Command::Signal { op } => {
+                        self.signal_command(*op);
+                    }
                     crate::scenario::command::Command::ForceCrisis => {
                         self.begin_crisis(CrisisReason::Test);
                     }
@@ -403,6 +409,30 @@ impl GhostLobbySim {
         self.tick += 1;
 
         self.system_timers();
+        // Hands busy at a wiring panel hold still and touch nothing else. A
+        // run that never wires never sets the timer, so this is the input
+        // unchanged.
+        // Sitting at a console is the same: still, but interact still works,
+        // because interact is how you get up again.
+        let idle;
+        let input = if self.state.signal_busy > 0.0 {
+            idle = TickInput::default();
+            &idle
+        } else if self.state.using_console.is_some() {
+            idle = TickInput {
+                edges: input
+                    .edges
+                    .iter()
+                    .copied()
+                    .filter(|e| *e == crate::scenario::command::Edge::InteractPress)
+                    .collect(),
+                ..TickInput::default()
+            };
+            &idle
+        } else {
+            input
+        };
+        self.system_signal();
         self.system_player(input);
 
         //## The network vantage follows the body
@@ -414,11 +444,35 @@ impl GhostLobbySim {
         // calling it every tick would wipe a pivot they had only just made. A room
         // the graph gives no vantage leaves them where they were rather than
         // unseating them, since the fuzz test drives this with any definition.
-        if let Some(room) = Self::room_id_at(&self.def, self.state.player.x)
+        if !self.infiltrator_outside()
+            && let Some(room) = Self::room_id_at(&self.def, self.state.player.x)
             && let Some(vantage) = inside_vantage(&self.graph, room)
             && vantage.entry_ip != self.state.agents.infiltrator.vantage().entry_ip
         {
             self.state.agents.infiltrator.set_vantage(vantage);
+        }
+
+        //## Billy waits until the infiltrator is under way
+        // On a floor that asks for it, the arrival countdown is frozen until
+        // the infiltrator first leaves the room they spawned in: the seeded
+        // roll still decides how long Billy then takes, but nobody is caught
+        // while still learning the controls. Pulling the USB still starts the
+        // crisis at once.
+        if self.state.arrival_held {
+            let spawn_room = Self::room_id_at(&self.def, self.def.player.spawn_x);
+            let here = Self::room_id_at(&self.def, self.state.player.x);
+            // Starting outside, the clock runs once they are in the building.
+            let under_way = if self.def.exterior.is_some() {
+                !self.infiltrator_outside()
+            } else {
+                here.is_some() && here != spawn_room
+            };
+            if under_way {
+                self.state.arrival_held = false;
+                self.events.push(Event::ArrivalClockStarted);
+            } else {
+                self.state.crisis_at += TICK_DT;
+            }
         }
 
         self.system_interactions(input);
@@ -428,6 +482,7 @@ impl GhostLobbySim {
         self.system_usb();
         self.system_vacuum();
         self.system_cameras();
+        self.system_intel();
         self.system_support();
         if self.state.ended {
             return;
@@ -490,6 +545,38 @@ impl GhostLobbySim {
         def.rooms.get(Self::room_index_at(def, x))
     }
 
+    /// The front door's x, on a floor with an outside.
+    pub(crate) fn front_door_x(&self) -> Option<f64> {
+        let ext = self.def.exterior.as_ref()?;
+        self.def
+            .doors
+            .iter()
+            .find(|d| d.id == ext.front_door)
+            .map(|d| d.x)
+    }
+
+    /// Whether a body (left edge `x`, width `w`) on the floor line is out on
+    /// the street, before the front door.
+    fn on_street(&self, x: f64, w: f64) -> bool {
+        self.front_door_x().is_some_and(|door| x + w / 2.0 < door)
+    }
+
+    /// Whether the infiltrator is outside the building: on the roof, on the
+    /// rope, or on the street. Never, on a floor with no outside.
+    pub fn infiltrator_outside(&self) -> bool {
+        match self.state.player.place {
+            crate::scenario::state::Place::Floor => {
+                self.on_street(self.state.player.x, self.def.player.w)
+            }
+            _ => true,
+        }
+    }
+
+    /// Whether Billy is out on the street.
+    pub(crate) fn billy_outside(&self) -> bool {
+        self.on_street(self.state.billy.x, self.def.billy.w)
+    }
+
     /// Index of the nearest door to `x` (first wins ties).
     pub(crate) fn nearest_door(doors: &[DoorState], x: f64) -> Option<usize> {
         let mut best: Option<(usize, f64)> = None;
@@ -517,7 +604,7 @@ impl GhostLobbySim {
         let mut new_center = x + w / 2.0;
         let mut blocked = false;
         for door in doors {
-            if door.open > 0.0 {
+            if door.open > 0.0 || door.unlocked {
                 continue;
             }
             let crossed_right = old_center < door.x && new_center >= door.x;
@@ -548,7 +635,17 @@ impl GhostLobbySim {
         if p.hidden || s.lights_flicker > 0.0 || b.stun > 0.0 {
             return false;
         }
+        // A room whose lights a wire has switched off is dark to him too.
+        if Self::room_id_at(&self.def, p.x).is_some_and(|room| self.signal_room_dark(room)) {
+            return false;
+        }
         if Self::room_index_at(&self.def, b.x) != Self::room_index_at(&self.def, p.x) {
+            return false;
+        }
+        // Not up on the roof, and not through the building's outer wall.
+        if p.place != crate::scenario::state::Place::Floor
+            || self.infiltrator_outside() != self.billy_outside()
+        {
             return false;
         }
         let a = &self.actor.stats;

@@ -9,14 +9,12 @@
 //! runtime slots in as extra rows without touching the mapping.
 
 use bevy::camera::ScalingMode;
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use idaptik_core::interp::VisualSlot;
-use idaptik_core::scenario::camera_node_id;
 use idaptik_core::scenario::common::BillyMode;
-use idaptik_core::scenario::constants as c;
 
 use crate::driver::{SimState, VisualBuffers};
+use crate::palette;
 use crate::sprites;
 
 /// How far through the current simulation tick this frame is drawn.
@@ -33,24 +31,35 @@ fn render_alpha(fixed: &Time<Fixed>) -> f64 {
     fixed.overstep_fraction_f64()
 }
 
+/// Room height, floor to ceiling (canvas units). Render-only: the sim has no
+/// ceiling. About 2.8 people tall (the infiltrator is 54), which a jump (head
+/// about 140 above the floor at the apex) never reaches.
+pub const ROOM_H: f64 = 150.0;
 /// World-y (canvas, downwards) of the room ceiling line for a floor row.
-pub const CEILING_Y: f64 = 230.0;
+pub const CEILING_Y: f64 = idaptik_core::scenario::constants::FLOOR - ROOM_H;
 /// Vertical scene-space gap between stacked floor rows (future multi-floor).
 pub const ROW_STACK: f32 = 440.0;
 /// How far the whole cross-section is shifted down so it centres on screen.
-const VIEW_LIFT: f32 = 170.0;
-/// Door slab visual size.
-const DOOR_W: f32 = 12.0;
-const DOOR_H: f32 = 96.0;
+const VIEW_LIFT: f32 = 250.0;
+/// The floor camera's base zoom, in world units per screen pixel: three
+/// screen pixels per art pixel, so the pixel art stays square and even. Every
+/// shot scale multiplies this (the hacker's 0.6 gives five per art pixel).
+pub const PIXEL_SCALE: f32 = 1.0 / (3.0 * sprites::SPRITE_PX);
+/// Door slab size: the door sprite's own (16 x 71 px at [`sprites::SPRITE_PX`]).
+const DOOR_W: f32 = 16.0 / sprites::SPRITE_PX;
+const DOOR_H: f32 = 71.0 / sprites::SPRITE_PX;
+/// Door state is a tint over the steel slab (white leaves it as drawn).
+const DOOR_SHUT: Color = Color::WHITE;
+const DOOR_ROUTING: Color = Color::srgb(1.0, 0.92, 0.62);
+const DOOR_OPEN: Color = Color::srgb(0.72, 0.82, 1.0);
+const DOOR_WIRE_LOCKED: Color = Color::srgb(1.0, 0.52, 0.52);
 
 // Z layering: rooms behind everything, actors in front.
 const Z_ROOM: f32 = 0.0;
 const Z_FLOOR: f32 = 1.0;
-const Z_HIDE: f32 = 1.5;
 const Z_DOOR: f32 = 2.0;
 const Z_PROP: f32 = 3.0;
 const Z_ACTOR: f32 = 4.0;
-const Z_LABEL: f32 = 5.0;
 
 /// Canvas-space → scene-space mapping for one floor row.
 #[derive(Resource, Clone, Copy)]
@@ -93,15 +102,9 @@ impl SceneMap {
 /// Marker: the infiltrator's body quad.
 #[derive(Component)]
 pub struct PlayerMarker;
-/// Marker: the small facing-indicator quad parented to the player.
-#[derive(Component)]
-pub struct PlayerNose;
 /// Marker: Billy's body quad.
 #[derive(Component)]
 pub struct BillyMarker;
-/// Marker: Billy's facing-indicator quad.
-#[derive(Component)]
-pub struct BillyNose;
 /// Marker: a door slab, by definition index.
 #[derive(Component)]
 pub struct DoorMarker(pub usize);
@@ -123,239 +126,185 @@ pub struct VacuumMarker;
 #[derive(Component)]
 pub struct GhostLobbySceneMarker;
 
-fn label(text: &str, size: f32, at: Vec2) -> impl Bundle {
-    (
-        Text2d::new(text),
-        TextFont::from_font_size(size),
-        TextColor(Color::srgba(0.75, 0.78, 0.85, 0.9)),
-        Transform::from_translation(at.extend(Z_LABEL)),
-    )
-}
-
 /// Spawn the whole static scene from the scenario definition, plus the dynamic
 /// entities the sync systems drive. Everything is data-driven: rooms, doors,
 /// cameras, hide spots and props come from the definition, never from names.
-pub fn setup_scene(
-    mut commands: Commands,
-    sim: Res<SimState>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+/// Colours come from [`palette`]; the environment layers, props and grain live
+/// in [`crate::art`].
+pub fn setup_scene(mut commands: Commands, sim: Res<SimState>, mut images: ResMut<Assets<Image>>) {
     let def = sim.sim.definition();
     let map = SceneMap::new(def.world.width, def.world.floor, def.floor_id);
     let floor = def.world.floor;
     let room_h = floor - CEILING_Y;
+    let figures = sprites::FigureImages::new(&mut images);
+    let painted = sprites::PaintedSprites::new(&mut images);
 
-    commands.spawn((
-        Camera2d,
-        Projection::Orthographic(OrthographicProjection {
-            scaling_mode: ScalingMode::AutoMin {
-                min_width: map.width + 120.0,
-                min_height: 820.0,
-            },
-            ..OrthographicProjection::default_2d()
-        }),
-    ));
-    commands.insert_resource(ClearColor(Color::srgb(0.05, 0.06, 0.08)));
+    // One camera per seat, the hacker's deck layer and the UI camera;
+    // `seats::layout_seats` gives each its pane and `follow_camera` moves them.
+    crate::seats::spawn_cameras(&mut commands, PIXEL_SCALE);
+    commands.insert_resource(ClearColor(palette::PITCH));
 
-    // The walk line the whole row stands on.
+    // The floor the whole row stands on: worn linoleum in 24 px lengths.
+    let floor_tile = crate::pixel::floor_tile(24, 7, palette::SLATE, palette::DUST, palette::INK2)
+        .into_painted(&mut images);
     commands.spawn((
         GhostLobbySceneMarker,
-        Sprite::from_color(
-            Color::srgb(0.35, 0.37, 0.42),
-            Vec2::new(map.width + 8.0, 8.0),
-        ),
+        Sprite {
+            image: floor_tile.image.clone(),
+            custom_size: Some(Vec2::new(map.width + 8.0, floor_tile.size.y)),
+            image_mode: SpriteImageMode::Tiled {
+                tile_x: true,
+                tile_y: false,
+                stretch_value: 1.0 / sprites::SPRITE_PX,
+            },
+            ..Default::default()
+        },
         Transform::from_translation(
-            map.point(def.world.width * 0.5, floor + 4.0)
-                .extend(Z_FLOOR),
+            map.point(
+                def.world.width * 0.5,
+                floor + f64::from(floor_tile.size.y) * 0.5,
+            )
+            .extend(Z_FLOOR),
         ),
     ));
 
-    // Rooms: a row of side-view boxes, one per definition.
-    for (i, room) in def.rooms.iter().enumerate() {
-        let color = if room.lit {
-            Color::srgb(0.23, 0.21, 0.15)
-        } else if i % 2 == 0 {
-            Color::srgb(0.12, 0.14, 0.18)
+    // Rooms: a row of side-view boxes, one per definition (bible §5.4, layer 8).
+    for room in &def.rooms {
+        let fill = if room.lit {
+            palette::ROOM_FILL_LIT
         } else {
-            Color::srgb(0.15, 0.17, 0.22)
+            palette::ROOM_FILL
         };
         commands.spawn((
             GhostLobbySceneMarker,
-            Sprite::from_color(color, Vec2::new(room.w as f32 - 6.0, room_h as f32)),
+            Sprite::from_color(fill, Vec2::new(room.w as f32 - 6.0, room_h as f32)),
             Transform::from_translation(
                 map.box_center(room.x, CEILING_Y, room.w, room_h)
                     .extend(Z_ROOM),
             ),
         ));
-        commands.spawn((
-            GhostLobbySceneMarker,
-            label(
-                &room.name,
-                13.0,
-                map.point(room.x + room.w * 0.5, CEILING_Y + 22.0),
-            ),
-        ));
-    }
-
-    // Hide spots: faint bands at the walk line.
-    for spot in &def.hide_spots {
-        commands.spawn((
-            GhostLobbySceneMarker,
-            Sprite::from_color(
-                Color::srgba(0.25, 0.35, 0.55, 0.35),
-                Vec2::new(spot.radius as f32 * 2.0, 44.0),
-            ),
-            Transform::from_translation(map.point(spot.x, floor - 22.0).extend(Z_HIDE)),
-        ));
-    }
-
-    // Camera mounts at the ceiling; the sweep cones are drawn with gizmos.
-    for cam in &def.cameras {
-        commands
-            .spawn((
-                GhostLobbySceneMarker,
-                Transform::from_translation(map.point(cam.x, CEILING_Y + 10.0).extend(Z_PROP))
-                    .with_scale(Vec3::splat(0.18)),
-                Visibility::Inherited,
-            ))
-            .with_children(|parent| {
-                sprites::spawn_device_icon(
-                    parent,
-                    &mut meshes,
-                    &mut materials,
-                    idaptik_core::device::DeviceKind::IotCamera,
-                );
-            });
     }
 
     // Door slabs (positions/colours are synced from state every frame).
-    for (i, _door) in def.doors.iter().enumerate() {
+    // Each door hangs in a steel frame: jambs and a head round the opening,
+    // in front of the slab so a sliding door disappears up into the wall.
+    let frame =
+        crate::pixel::door_frame(16, 71, 2, palette::SLAB, palette::DUST).into_painted(&mut images);
+    for (i, door) in def.doors.iter().enumerate() {
+        commands.spawn((
+            GhostLobbySceneMarker,
+            sprites::painted_bundle(&frame, map.point(door.x, floor), Z_DOOR + 0.1, Color::WHITE),
+        ));
         commands.spawn((
             GhostLobbySceneMarker,
             DoorMarker(i),
-            Sprite::from_color(Color::srgb(0.5, 0.5, 0.55), Vec2::new(DOOR_W, DOOR_H)),
+            Sprite {
+                image: painted.door.image.clone(),
+                custom_size: Some(Vec2::new(DOOR_W, DOOR_H)),
+                ..Default::default()
+            },
             Transform::from_translation(Vec3::new(0.0, 0.0, Z_DOOR)),
         ));
     }
 
-    // The extraction edge: the right end of the row.
+    // The extraction edge: a fire exit door at the right end of the row.
     commands.spawn((
         GhostLobbySceneMarker,
-        Sprite::from_color(
-            Color::srgba(0.2, 0.9, 0.4, 0.5),
-            Vec2::new(8.0, room_h as f32),
-        ),
-        Transform::from_translation(
-            map.point(def.world.width - 4.0, (CEILING_Y + floor) * 0.5)
-                .extend(Z_DOOR),
-        ),
-    ));
-    commands.spawn((
-        GhostLobbySceneMarker,
-        label(
-            "EXIT",
-            13.0,
-            map.point(def.world.width - 30.0, CEILING_Y + 40.0),
+        sprites::painted_bundle(
+            &painted.exit_door,
+            map.point(
+                def.world.width - f64::from(painted.exit_door.size.x) * 0.5 - 2.0,
+                floor,
+            ),
+            Z_DOOR,
+            Color::WHITE,
         ),
     ));
 
-    // Props.
-    commands
-        .spawn((
-            GhostLobbySceneMarker,
-            NoteMarker,
-            Sprite::from_color(Color::srgb(0.95, 0.85, 0.35), Vec2::new(12.0, 9.0)),
-            Transform::from_translation(Vec3::new(0.0, 0.0, Z_PROP)),
-        ))
-        .with_children(|parent| {
-            // A single fold line, so the note reads as paper rather than a tile.
-            parent.spawn((
-                Sprite::from_color(Color::srgb(0.8, 0.72, 0.3), Vec2::new(10.0, 1.0)),
-                Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
-            ));
-        });
-    commands
-        .spawn((
-            GhostLobbySceneMarker,
-            UsbMarker,
-            Sprite::from_color(Color::srgb(0.3, 0.85, 0.9), Vec2::new(10.0, 7.0)),
-            Transform::from_translation(Vec3::new(0.0, 0.0, Z_PROP)),
-        ))
-        .with_children(|parent| {
-            // The connector end.
-            parent.spawn((
-                Sprite::from_color(Color::srgb(0.7, 0.7, 0.72), Vec2::new(4.0, 4.0)),
-                Transform::from_translation(Vec3::new(6.0, 0.0, 0.1)),
-            ));
-        });
+    // Pickups and devices. Each sprite is centred where the sim puts it; the
+    // sync system moves and tints it.
+    let centred = |p: &sprites::Painted| Sprite {
+        image: p.image.clone(),
+        custom_size: Some(p.size),
+        ..Default::default()
+    };
+    commands.spawn((
+        GhostLobbySceneMarker,
+        NoteMarker,
+        centred(&painted.note),
+        Transform::from_translation(Vec3::new(0.0, 0.0, Z_PROP)),
+    ));
+    commands.spawn((
+        GhostLobbySceneMarker,
+        UsbMarker,
+        centred(&painted.usb),
+        Transform::from_translation(Vec3::new(0.0, 0.0, Z_PROP)),
+    ));
+    // The laundry chute stands on the floor at its x, its hatch up the wall.
     commands.spawn((
         GhostLobbySceneMarker,
         ChuteMarker,
-        Sprite::from_color(
-            Color::srgb(0.1, 0.1, 0.12),
-            Vec2::new(30.0, (floor - def.props.chute.y) as f32),
-        ),
-        Transform::from_translation(
-            map.box_center(
-                def.props.chute.x - 15.0,
-                def.props.chute.y,
-                30.0,
-                floor - def.props.chute.y,
-            )
-            .extend(Z_PROP),
+        sprites::painted_bundle(
+            &painted.chute,
+            map.point(def.props.chute.x, floor),
+            Z_PROP,
+            Color::WHITE,
         ),
     ));
     commands.spawn((
         GhostLobbySceneMarker,
         VacuumMarker,
-        Sprite::from_color(Color::srgb(0.45, 0.45, 0.5), Vec2::new(30.0, 12.0)),
+        centred(&painted.vacuum),
         Transform::from_translation(Vec3::new(0.0, 0.0, Z_PROP)),
     ));
 
-    // The infiltrator and Billy, with small facing-indicator noses.
+    // The infiltrator and Billy: invisible body boxes the sync systems place,
+    // carrying the painted figures (feet at the box bottom).
     commands
         .spawn((
             GhostLobbySceneMarker,
             PlayerMarker,
             Sprite::from_color(
-                sprites::player_colours(false, false).0,
+                Color::NONE,
                 Vec2::new(def.player.w as f32, def.player.h as f32),
             ),
             Transform::from_translation(Vec3::new(0.0, 0.0, Z_ACTOR)),
         ))
         .with_children(|parent| {
-            parent.spawn((
-                PlayerNose,
-                Sprite::from_color(Color::srgb(0.35, 0.75, 1.0), Vec2::new(7.0, 7.0)),
-                Transform::from_translation(Vec3::new(0.0, 0.0, 0.5)),
-            ));
-            sprites::spawn_player_children(parent, &mut meshes, &mut materials);
+            sprites::spawn_person(
+                parent,
+                &painted,
+                sprites::Actor::Infiltrator,
+                &sprites::Pose::all_for(sprites::Actor::Infiltrator),
+            );
         });
     commands
         .spawn((
             GhostLobbySceneMarker,
             BillyMarker,
             Sprite::from_color(
-                Color::srgb(0.95, 0.6, 0.25),
+                Color::NONE,
                 Vec2::new(def.billy.w as f32, def.billy.h as f32),
             ),
             Transform::from_translation(Vec3::new(0.0, 0.0, Z_ACTOR)),
         ))
         .with_children(|parent| {
-            parent.spawn((
-                BillyNose,
-                Sprite::from_color(Color::srgb(1.0, 0.35, 0.25), Vec2::new(8.0, 8.0)),
-                Transform::from_translation(Vec3::new(0.0, 0.0, 0.5)),
-            ));
-            sprites::spawn_billy_children(parent, &mut meshes, &mut materials);
+            sprites::spawn_person(
+                parent,
+                &painted,
+                sprites::Actor::Guard,
+                &sprites::Pose::all_for(sprites::Actor::Guard),
+            );
         });
 
+    commands.insert_resource(figures);
+    commands.insert_resource(painted);
     commands.insert_resource(map);
 }
 
-/// Door slabs: colour says closed / routed / held-open, and an opening door
-/// slides up out of the walk line, Gunpoint-style.
+/// Door slabs: colour says shut / routing / open / locked by a wire, and an
+/// opening door slides up out of the walk line, Gunpoint-style. Jamb colours
+/// follow the bible (§7.3): shut doors oxblood, open ones verdigris.
 pub fn sync_doors(
     sim: Res<SimState>,
     map: Res<SceneMap>,
@@ -365,6 +314,7 @@ pub fn sync_doors(
 ) {
     let s = sim.sim.state();
     let alpha = render_alpha(&fixed);
+    let def = sim.sim.definition();
     for (marker, mut tf, mut sprite) in &mut doors {
         let Some(door) = s.doors.get(marker.0) else {
             continue;
@@ -372,18 +322,31 @@ pub fn sync_doors(
         // The slab slides open over several ticks, so its openness interpolates
         // like a position. Colour keys off the live tick.
         let open = visual.doors.sample(marker.0, alpha).clamp(0.0, 1.0) as f32;
-        let base = map.point(
-            door.x,
-            sim.sim.definition().world.floor - f64::from(DOOR_H) * 0.5,
-        );
+        let base = map.point(door.x, def.world.floor - f64::from(DOOR_H) * 0.5);
         tf.translation.x = base.x;
         tf.translation.y = base.y + open * DOOR_H * 0.92;
-        sprite.color = if open > 0.05 {
-            Color::srgb(0.25, 0.85, 0.4)
+        let node = idaptik_core::scenario::floor_graph::door_node_id(door.id.clone());
+        let wire_locked = match (&def.signal, &s.signal) {
+            (Some(net), Some(st)) => net
+                .devices
+                .iter()
+                .zip(&st.devices)
+                .any(|(d, ds)| d.node.as_deref() == Some(node.as_str()) && ds.locked),
+            _ => false,
+        };
+        // The front door is locked until picked or hacked.
+        let front_locked = def
+            .exterior
+            .as_ref()
+            .is_some_and(|e| e.front_door == door.id && !door.unlocked);
+        sprite.color = if wire_locked || (front_locked && open <= 0.05) {
+            DOOR_WIRE_LOCKED
+        } else if open > 0.05 {
+            DOOR_OPEN
         } else if door.pending > 0.0 {
-            Color::srgb(0.95, 0.75, 0.25)
+            DOOR_ROUTING
         } else {
-            Color::srgb(0.55, 0.3, 0.3)
+            DOOR_SHUT
         };
     }
 }
@@ -413,8 +376,29 @@ fn place_body(
     sprite.custom_size = Some(Vec2::new(body.w as f32, dh as f32));
 }
 
-/// The infiltrator: body, crouch squash, hidden fade, facing nose, plus the
-/// head/laptop/screen composite whose colour and visibility track player state.
+/// Render-only: how far to shift a figure drawn at canvas centre `cx` (half
+/// its drawn width `half`) so it stands clear of every closed door. The sim
+/// stops a body when its *centre* is 3 units short of a closed door's plane
+/// (ported behaviour, pinned by the goldens), which would otherwise draw half
+/// the figure inside the door.
+pub fn door_clearance(
+    cx: f64,
+    half: f64,
+    doors: &[idaptik_core::scenario::state::DoorState],
+) -> f64 {
+    let reach = half + f64::from(DOOR_W) * 0.5;
+    let mut dx = 0.0;
+    for door in doors.iter().filter(|d| d.open <= 0.0 && !d.unlocked) {
+        let gap = cx + dx - door.x;
+        if gap.abs() < reach {
+            dx += gap.signum() * (reach - gap.abs());
+        }
+    }
+    dx
+}
+
+/// The infiltrator: places the body box, then poses, faces and fades the
+/// figure on it. Position interpolates; every discrete flag is read live.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn sync_player(
     sim: Res<SimState>,
@@ -422,27 +406,16 @@ pub fn sync_player(
     visual: Res<VisualBuffers>,
     fixed: Res<Time<Fixed>>,
     mut body: Query<(&mut Transform, &mut Sprite), With<PlayerMarker>>,
-    mut nose: Query<&mut Transform, (With<PlayerNose>, Without<PlayerMarker>)>,
-    mut laptop: Query<
-        &mut Visibility,
-        (
-            With<sprites::PlayerLaptop>,
-            Without<PlayerMarker>,
-            Without<sprites::PlayerLaptopScreen>,
-        ),
+    mut roots: Query<
+        (&sprites::Actor, &mut Transform),
+        (With<sprites::FigureRoot>, Without<PlayerMarker>),
     >,
-    mut laptop_screen: Query<
-        &mut Visibility,
-        (
-            With<sprites::PlayerLaptopScreen>,
-            Without<PlayerMarker>,
-            Without<sprites::PlayerLaptop>,
-        ),
-    >,
+    mut poses: Query<(&sprites::Actor, &sprites::Pose, &mut Visibility)>,
+    mut parts: Query<(&sprites::Actor, &sprites::FigurePart, &mut Sprite), Without<PlayerMarker>>,
+    art: Res<sprites::PaintedSprites>,
+    time: Res<Time>,
 ) {
     let def = sim.sim.definition();
-    // Position is interpolated; every discrete flag is read live from the
-    // current tick. Blending `crouching` or `hidden` would be meaningless.
     let p = &sim.sim.state().player;
     let pose = visual
         .poses
@@ -463,108 +436,87 @@ pub fn sync_player(
         },
         crouch,
     );
-    if let Ok(mut nose_tf) = nose.single_mut() {
-        nose_tf.translation.x = pose.facing as f32 * (def.player.w as f32 * 0.5 + 5.0);
-        nose_tf.translation.y = def.player.h as f32 * crouch as f32 * 0.22;
+    sprite.color = Color::NONE;
+    // Sprites are drawn at their true size: no figure scaling.
+    let scale = 1.0;
+    let feet = -(def.player.h * crouch) as f32 * 0.5;
+    let facing = if pose.facing < 0.0 { -1.0 } else { 1.0 };
+    for (actor, mut root) in &mut roots {
+        if *actor == sprites::Actor::Infiltrator {
+            root.translation.y = feet;
+            root.scale = Vec3::new(facing * scale, scale, 1.0);
+        }
     }
-    let (body_colour, laptop_shows) = sprites::player_colours(p.crouching, p.sprinting);
-    sprite.color = body_colour.with_alpha(if p.hidden { 0.35 } else { 1.0 });
-    let laptop_vis = if laptop_shows {
-        Visibility::Inherited
+    // Walking steps through the cycle by distance; in the air, or still, the
+    // figure stands (or crouches).
+    let gait = if p.grounded {
+        let stride = if p.crouching {
+            sprites::SNEAK_STRIDE
+        } else {
+            sprites::STRIDE
+        };
+        sprites::gait_frame(pose.x, p.vx, stride)
     } else {
-        Visibility::Hidden
+        None
     };
-    if let Ok(mut vis) = laptop.single_mut() {
-        *vis = laptop_vis;
+    let s = sim.sim.state();
+    let want = match (p.crouching, gait) {
+        // Seated at a console: the typing loop.
+        _ if s.using_console.is_some() => {
+            sprites::Pose::Type(sprites::type_frame(time.elapsed_secs()))
+        }
+        // In the air: rising, top, falling.
+        _ if !p.grounded => sprites::Pose::Jump(sprites::jump_frame(p.vy)),
+        (true, Some(f)) => sprites::Pose::Sneak(f),
+        (true, None) => sprites::Pose::Crouch,
+        (false, Some(f)) => sprites::Pose::Walk(f),
+        (false, None) => sprites::Pose::Stand,
+    };
+    let half = f64::from(art.figure(sprites::Actor::Infiltrator, want).size.x * scale) * 0.5;
+    // Doors stand on the floor line: nothing up on the roof or the rope.
+    let on_floor = p.place == idaptik_core::scenario::state::Place::Floor;
+    let shift = if on_floor {
+        door_clearance(pose.x + def.player.w * 0.5, half, &sim.sim.state().doors) as f32
+    } else {
+        0.0
+    };
+    for (actor, mut root) in &mut roots {
+        if *actor == sprites::Actor::Infiltrator {
+            root.translation.x = shift;
+        }
     }
-    if let Ok(mut vis) = laptop_screen.single_mut() {
-        *vis = laptop_vis;
+    for (actor, pose, mut vis) in &mut poses {
+        if *actor == sprites::Actor::Infiltrator {
+            *vis = if *pose == want {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+        }
+    }
+    // Hidden reads as a fade, not a disappearance: you still know where you are.
+    let fade = if p.hidden { 0.35 } else { 1.0 };
+    for (actor, part, mut s) in &mut parts {
+        if *actor == sprites::Actor::Infiltrator {
+            s.color = part.0.with_alpha(part.0.alpha() * fade);
+        }
     }
 }
 
-/// Billy's related scene queries, grouped so the render system's signature
-/// describes one visual concern rather than each individual sprite layer.
-type BillyBodyFilter = (
-    With<BillyMarker>,
-    Without<BillyNose>,
-    Without<sprites::BillyEyeLeft>,
-    Without<sprites::BillyEyeRight>,
-    Without<sprites::BillyMouth>,
-    Without<sprites::BillyHat>,
-    Without<sprites::BillyBadge>,
-);
-type BillyNoseFilter = (
-    With<BillyNose>,
-    Without<BillyMarker>,
-    Without<sprites::BillyEyeLeft>,
-    Without<sprites::BillyEyeRight>,
-    Without<sprites::BillyMouth>,
-);
-type BillyEyeLeftFilter = (
-    With<sprites::BillyEyeLeft>,
-    Without<BillyMarker>,
-    Without<BillyNose>,
-    Without<sprites::BillyEyeRight>,
-    Without<sprites::BillyMouth>,
-    Without<sprites::BillyHat>,
-);
-type BillyEyeRightFilter = (
-    With<sprites::BillyEyeRight>,
-    Without<BillyMarker>,
-    Without<BillyNose>,
-    Without<sprites::BillyEyeLeft>,
-    Without<sprites::BillyMouth>,
-    Without<sprites::BillyHat>,
-);
-type BillyMouthFilter = (
-    With<sprites::BillyMouth>,
-    Without<BillyMarker>,
-    Without<BillyNose>,
-    Without<sprites::BillyEyeLeft>,
-    Without<sprites::BillyEyeRight>,
-    Without<sprites::BillyHat>,
-);
-type BillyHatFilter = (
-    With<sprites::BillyHat>,
-    Without<BillyMarker>,
-    Without<sprites::BillyEyeLeft>,
-    Without<sprites::BillyEyeRight>,
-    Without<sprites::BillyMouth>,
-    Without<sprites::BillyBadge>,
-);
-type BillyBadgeFilter = (
-    With<sprites::BillyBadge>,
-    Without<BillyMarker>,
-    Without<sprites::BillyHat>,
-);
-
-#[derive(SystemParam)]
-pub struct BillyVisuals<'w, 's> {
-    body: Query<
-        'w,
-        's,
-        (
-            &'static mut Transform,
-            &'static mut Sprite,
-            &'static mut Visibility,
-        ),
-        BillyBodyFilter,
-    >,
-    nose: Query<'w, 's, &'static mut Transform, BillyNoseFilter>,
-    eyes_left: Query<'w, 's, (&'static mut Sprite, &'static mut Transform), BillyEyeLeftFilter>,
-    eyes_right: Query<'w, 's, (&'static mut Sprite, &'static mut Transform), BillyEyeRightFilter>,
-    mouths: Query<'w, 's, (&'static mut Sprite, &'static mut Transform), BillyMouthFilter>,
-    hats: Query<'w, 's, (&'static mut Visibility, &'static mut Sprite), BillyHatFilter>,
-    badges: Query<'w, 's, &'static mut Visibility, BillyBadgeFilter>,
-}
-
-/// Billy: body, offsite hides him, facing nose, and mode-based visual states.
+/// Billy: placed like the infiltrator, hidden while offsite, faced and scaled.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn sync_billy(
     sim: Res<SimState>,
     map: Res<SceneMap>,
     visual: Res<VisualBuffers>,
     fixed: Res<Time<Fixed>>,
-    mut visuals: BillyVisuals,
+    mut body: Query<(&mut Transform, &mut Sprite, &mut Visibility), With<BillyMarker>>,
+    mut roots: Query<
+        (&sprites::Actor, &mut Transform),
+        (With<sprites::FigureRoot>, Without<BillyMarker>),
+    >,
+    mut poses: Query<(&sprites::Actor, &sprites::Pose, &mut Visibility), Without<BillyMarker>>,
+    art: Res<sprites::PaintedSprites>,
 ) {
     let def = sim.sim.definition();
     // `mode` is discrete and read live; only the pose interpolates.
@@ -572,7 +524,7 @@ pub fn sync_billy(
     let pose = visual
         .poses
         .sample(VisualSlot::Billy.index(), render_alpha(&fixed));
-    let Ok((mut tf, mut sprite, mut vis)) = visuals.body.single_mut() else {
+    let Ok((mut tf, mut sprite, mut vis)) = body.single_mut() else {
         return;
     };
     *vis = if b.mode == BillyMode::Offsite {
@@ -592,158 +544,28 @@ pub fn sync_billy(
         },
         1.0,
     );
-    if let Ok(mut nose_tf) = visuals.nose.single_mut() {
-        nose_tf.translation.x = pose.facing as f32 * (def.billy.w as f32 * 0.5 + 5.0);
-        nose_tf.translation.y = def.billy.h as f32 * 0.25;
+    sprite.color = Color::NONE;
+    let scale = 1.0;
+    let facing = if pose.facing < 0.0 { -1.0 } else { 1.0 };
+    let want = sprites::gait_frame(pose.x, b.vx, sprites::STRIDE)
+        .map_or(sprites::Pose::Stand, sprites::Pose::Walk);
+    for (actor, p, mut vis) in &mut poses {
+        if *actor == sprites::Actor::Guard {
+            *vis = if *p == want {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+        }
     }
-
-    // Update Billy's facial features and accessories based on mode
-    update_billy_visual_state(
-        b.mode,
-        visuals.eyes_left,
-        visuals.eyes_right,
-        visuals.mouths,
-        visuals.hats,
-        visuals.badges,
-    );
-}
-
-/// Update Billy's visual state based on his current mode.
-/// This enhances immersion by showing Billy's expressions and equipment.
-fn update_billy_visual_state(
-    mode: BillyMode,
-    mut eyes_left: Query<(&mut Sprite, &mut Transform), BillyEyeLeftFilter>,
-    mut eyes_right: Query<(&mut Sprite, &mut Transform), BillyEyeRightFilter>,
-    mut mouths: Query<(&mut Sprite, &mut Transform), BillyMouthFilter>,
-    mut hats: Query<(&mut Visibility, &mut Sprite), BillyHatFilter>,
-    mut badges: Query<&mut Visibility, BillyBadgeFilter>,
-) {
-    use idaptik_core::scenario::common::BillyMode as Mode;
-
-    // Eye colors and mouth shapes based on Billy's alertness and mood
-    let (eye_color, mouth_color, mouth_size, show_hat, show_badge) = match mode {
-        Mode::Offsite => {
-            // Not present - all features hidden (handled by main visibility)
-            (
-                Color::srgb(0.1, 0.1, 0.1),
-                Color::srgb(0.5, 0.2, 0.1),
-                Vec2::new(6.0, 2.0),
-                false,
-                false,
-            )
+    let half = f64::from(art.figure(sprites::Actor::Guard, want).size.x * scale) * 0.5;
+    let shift = door_clearance(pose.x + def.billy.w * 0.5, half, &sim.sim.state().doors) as f32;
+    for (actor, mut root) in &mut roots {
+        if *actor == sprites::Actor::Guard {
+            root.translation.x = shift;
+            root.translation.y = -def.billy.h as f32 * 0.5;
+            root.scale = Vec3::new(facing * scale, scale, 1.0);
         }
-        Mode::Entering => {
-            // Cautious entry - wide eyes, neutral mouth
-            (
-                Color::srgb(0.2, 0.2, 0.2),
-                Color::srgb(0.6, 0.3, 0.2),
-                Vec2::new(6.0, 2.0),
-                false,
-                false,
-            )
-        }
-        Mode::Shock => {
-            // Shocked/discovered - wide eyes, open mouth
-            (
-                Color::WHITE,
-                Color::srgb(0.9, 0.1, 0.1),
-                Vec2::new(8.0, 3.0),
-                false,
-                false,
-            )
-        }
-        Mode::Assess => {
-            // Assessing - focused eyes, neutral mouth
-            (
-                Color::srgb(0.3, 0.5, 0.3),
-                Color::srgb(0.5, 0.3, 0.2),
-                Vec2::new(6.0, 2.0),
-                false,
-                false,
-            )
-        }
-        Mode::Investigate => {
-            // Investigating - alert eyes, slightly open mouth
-            (
-                Color::srgb(0.4, 0.6, 0.4),
-                Color::srgb(0.7, 0.4, 0.2),
-                Vec2::new(7.0, 2.5),
-                false,
-                false,
-            )
-        }
-        Mode::Secure => {
-            // Securing area - focused eyes, determined mouth
-            (
-                Color::srgb(0.2, 0.4, 0.6),
-                Color::srgb(0.4, 0.2, 0.1),
-                Vec2::new(6.0, 1.5),
-                true,
-                false,
-            )
-        }
-        Mode::Guard => {
-            // Guarding - alert eyes, serious mouth, hat visible
-            (
-                Color::srgb(0.1, 0.3, 0.5),
-                Color::srgb(0.3, 0.15, 0.1),
-                Vec2::new(5.0, 1.0),
-                true,
-                true,
-            )
-        }
-        Mode::CallBoss => {
-            // Calling for backup - wide eyes, open mouth, badge visible
-            (
-                Color::srgb(0.5, 0.2, 0.1),
-                Color::srgb(0.8, 0.8, 0.1),
-                Vec2::new(8.0, 3.0),
-                true,
-                true,
-            )
-        }
-        Mode::Pursue => {
-            // Pursuing infiltrator - intense eyes, snarling mouth, hat visible
-            (
-                Color::srgb(1.0, 0.0, 0.0),
-                Color::srgb(0.8, 0.1, 0.1),
-                Vec2::new(9.0, 2.0),
-                true,
-                true,
-            )
-        }
-    };
-
-    // Update eyes
-    if let Ok((mut left_eye, _)) = eyes_left.single_mut() {
-        left_eye.color = eye_color;
-    }
-    if let Ok((mut right_eye, _)) = eyes_right.single_mut() {
-        right_eye.color = eye_color;
-    }
-
-    // Update mouth
-    if let Ok((mut mouth_sprite, _)) = mouths.single_mut() {
-        mouth_sprite.color = mouth_color;
-        mouth_sprite.custom_size = Some(mouth_size);
-    }
-
-    // Update hat visibility
-    if let Ok((mut hat_vis, _)) = hats.single_mut() {
-        *hat_vis = if show_hat {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-    }
-
-    // Update badge visibility
-    if let Ok(mut badge_vis) = badges.single_mut() {
-        *badge_vis = if show_badge {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
     }
 }
 
@@ -799,18 +621,20 @@ pub fn sync_props(
         } else {
             Visibility::Inherited
         };
+        // A wiped stick goes dull.
         sprite.color = if s.usb.wiped {
-            Color::srgb(0.35, 0.45, 0.48)
+            Color::srgb(0.5, 0.5, 0.55)
         } else {
-            Color::srgb(0.3, 0.85, 0.9)
+            Color::WHITE
         };
     }
 
     if let Ok(mut sprite) = chute.single_mut() {
+        // Unnoticed, the chute sits back in the wall; found, it reads fully.
         sprite.color = if s.chute.revealed {
-            Color::srgb(0.02, 0.02, 0.03)
+            Color::WHITE
         } else {
-            Color::srgb(0.18, 0.19, 0.22)
+            Color::srgb(0.62, 0.62, 0.66)
         };
     }
 
@@ -825,38 +649,346 @@ pub fn sync_props(
             Visibility::Inherited
         };
         sprite.color = if s.vacuum.active {
-            Color::srgb(0.4, 0.9, 0.6)
+            Color::WHITE
         } else {
-            Color::srgb(0.45, 0.45, 0.5)
+            Color::srgb(0.7, 0.7, 0.74)
         };
     }
 }
 
-/// Camera view cones, drawn as gizmo wireframes each frame using the exact
-/// sweep the simulation's camera system uses (a pure view; nothing here can
-/// disagree with detection because the formula and constants are the sim's).
-pub fn draw_camera_cones(sim: Res<SimState>, map: Res<SceneMap>, mut gizmos: Gizmos) {
+/// What the camera frames for one seat: a point (scene space) and a zoom
+/// (orthographic scale; below 1 is closer).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Shot {
+    pub at: Vec2,
+    pub scale: f32,
+}
+
+/// The kind of space a character is in. The camera frames the space, not
+/// the level or the character: a room close, the outside wide, the inside of
+/// the van closer still.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Space {
+    Room,
+    Street,
+    /// On the rope, against the front facade.
+    Facade,
+    Roof,
+    Vehicle,
+}
+
+impl Space {
+    /// How close the camera sits on this space (orthographic scale; below 1
+    /// is closer). Each is a whole step of the pixel grid: three screen
+    /// pixels per art pixel in a room, two outside, five in the van.
+    pub fn zoom(self) -> f32 {
+        match self {
+            Space::Room => 1.0,
+            Space::Street | Space::Facade | Space::Roof => 1.5,
+            Space::Vehicle => 0.6,
+        }
+    }
+}
+
+/// The space the infiltrator's body is in.
+pub fn infiltrator_space(sim: &idaptik_core::scenario::GhostLobbySim) -> Space {
+    use idaptik_core::scenario::state::Place;
+    match sim.state().player.place {
+        Place::Roof => Space::Roof,
+        Place::Rope { .. } => Space::Facade,
+        Place::Floor if sim.infiltrator_outside() => Space::Street,
+        Place::Floor => Space::Room,
+    }
+}
+
+/// The shot on a space, following `focus_x` (scene x) along it. Pure, so it
+/// is testable.
+pub fn shot_for(
+    space: Space,
+    focus_x: f32,
+    map: &SceneMap,
+    world_width: f64,
+    floor: f64,
+    roof_y: f64,
+) -> Shot {
+    let scale = space.zoom();
+    let y = match space {
+        Space::Vehicle => {
+            let (x, y) = crate::art::van_anchor(world_width, floor);
+            return Shot {
+                at: map.point(x, y - 10.0),
+                scale,
+            };
+        }
+        // Each at a fixed height, so the frame never bobs.
+        Space::Room => floor - 100.0,
+        // The pavement and the facade above it.
+        Space::Street => floor - 140.0,
+        Space::Facade => (roof_y + floor) * 0.5,
+        // The roof, and the sky over it.
+        Space::Roof => roof_y - 60.0,
+    };
+    // Keep the street in frame, no further.
+    let lo = map.point(-160.0, floor).x;
+    let hi = map.point(world_width + 300.0, floor).x;
+    Shot {
+        at: Vec2::new(focus_x.clamp(lo, hi), map.point(0.0, y).y),
+        scale,
+    }
+}
+
+/// One frame on the outside for both characters: halfway between the
+/// infiltrator and the van, from the infiltrator's level (roof or street) down
+/// to the van's wheels.
+pub fn merged_shot(
+    space: Space,
+    focus_x: f32,
+    map: &SceneMap,
+    world_width: f64,
+    floor: f64,
+    roof_y: f64,
+) -> Shot {
+    let (van_x, _) = crate::art::van_anchor(world_width, floor);
+    let van = map.point(van_x, floor);
+    let top = match space {
+        Space::Roof => roof_y - 50.0,
+        Space::Facade => roof_y,
+        _ => floor - 140.0,
+    };
+    Shot {
+        at: Vec2::new(
+            (focus_x + van.x) * 0.5,
+            map.point(0.0, (top + floor + 20.0) * 0.5).y,
+        ),
+        scale: Space::Street.zoom(),
+    }
+}
+
+/// Each seat's camera follows its body — the infiltrator on the floor, the
+/// hacker in the van — at the zoom that suits the space they are in. It eases
+/// position and zoom together rather than snapping. The infiltrator's camera
+/// also dives into a console's CRT when they sit at one, and pulls back out.
+#[allow(clippy::too_many_arguments)]
+pub fn follow_camera(
+    sim: Res<SimState>,
+    map: Res<SceneMap>,
+    time: Res<Time>,
+    mut screen: Option<ResMut<crate::screen::Screen>>,
+    seats: Option<Res<crate::seats::Seats>>,
+    player: Query<&Transform, (With<PlayerMarker>, Without<crate::seats::SeatCam>)>,
+    mut cameras: Query<(&crate::seats::SeatCam, &mut Transform, &mut Projection)>,
+    mut placed: Local<[bool; 2]>,
+) {
+    use crate::screen::{DIVE_SCALE, Phase, SCREEN_AT, crt_canvas};
+    use idaptik_core::scenario::signal::sim::Seat;
     let def = sim.sim.definition();
-    let s = sim.sim.state();
-    let floor = def.world.floor;
-    let all_off = s.camera_lockout > 0.0 || s.lights_flicker > 0.0;
-    for (i, cam) in def.cameras.iter().enumerate() {
-        let sweep = (s.t * c::CAM_SWEEP_W + cam.phase).sin() * c::CAM_SWEEP_A;
-        let lo = cam.range.0 + sweep.min(0.0);
-        let hi = cam.range.1 + sweep.max(0.0);
-        let looped = s.camera_looped.get(i).is_some_and(|left| *left > 0.0);
-        let dead = s.dead_nodes.contains(&camera_node_id(i));
-        let live = !(cam.stale || looped || dead || all_off);
-        let color = if live {
-            Color::srgba(1.0, 0.35, 0.25, 0.55)
-        } else {
-            Color::srgba(0.4, 0.5, 0.7, 0.25)
+    let player_x = player.single().map(|p| p.translation.x).unwrap_or(0.0);
+    for (seat, mut cam, mut projection) in &mut cameras {
+        let Projection::Orthographic(ortho) = &mut *projection else {
+            continue;
         };
-        let mount = map.point(cam.x, CEILING_Y + 14.0);
-        let a = map.point(lo, floor);
-        let b = map.point(hi, floor);
-        gizmos.line_2d(mount, a, color);
-        gizmos.line_2d(mount, b, color);
-        gizmos.line_2d(a, b, color);
+        // Net View or a screen may have switched to fit-to-size; take it back.
+        if !matches!(ortho.scaling_mode, ScalingMode::WindowSize) {
+            ortho.scaling_mode = ScalingMode::WindowSize;
+            ortho.scale = PIXEL_SCALE;
+        }
+        // Shot scales are relative to the pixel-art base zoom.
+        let mut zoom = ortho.scale / PIXEL_SCALE;
+        let hacker = seat.0 == Seat::Hacker;
+        let space = if hacker {
+            Space::Vehicle
+        } else {
+            infiltrator_space(&sim.sim)
+        };
+        let roof_y = def.exterior.as_ref().map_or(CEILING_Y - 21.0, |e| e.roof_y);
+        let mut shot = shot_for(
+            space,
+            player_x,
+            &map,
+            def.world.width,
+            def.world.floor,
+            roof_y,
+        );
+        // Merged: the infiltrator's camera frames both of them, outside.
+        if !hacker && seats.as_ref().is_some_and(|s| s.merged) {
+            shot = merged_shot(
+                space,
+                player_x,
+                &map,
+                def.world.width,
+                def.world.floor,
+                roof_y,
+            );
+        }
+
+        // Using a console: dive into its CRT, cut to the schematic, and on
+        // the way out cut back to the CRT and pull away.
+        if !hacker && let Some(screen) = screen.as_deref_mut() {
+            let inf = &mut screen.infiltrator;
+            let crt = inf
+                .console
+                .as_ref()
+                .and_then(|id| def.consoles.iter().find(|c| &c.id == id))
+                .map(|con| {
+                    let (x, y) = crt_canvas(con, def.world.width, def.world.floor);
+                    map.point(x, y)
+                });
+            match (inf.phase, crt) {
+                (Phase::DivingIn, Some(crt)) => {
+                    shot = Shot {
+                        at: crt,
+                        scale: DIVE_SCALE,
+                    };
+                    if zoom <= DIVE_SCALE * 1.4 {
+                        inf.phase = Phase::On;
+                    }
+                }
+                (Phase::On, _) => {
+                    cam.translation.x = SCREEN_AT.x;
+                    cam.translation.y = SCREEN_AT.y + 28.0;
+                    // The schematic is laid out for a fixed frame, not pixel art.
+                    ortho.scaling_mode = ScalingMode::AutoMin {
+                        min_width: 900.0,
+                        min_height: 560.0,
+                    };
+                    ortho.scale = 1.0;
+                    continue;
+                }
+                (Phase::PullingOut, Some(crt)) => {
+                    if cam.translation.y < SCREEN_AT.y + 2000.0 {
+                        cam.translation.x = crt.x;
+                        cam.translation.y = crt.y;
+                        zoom = DIVE_SCALE;
+                    }
+                    if (zoom - shot.scale).abs() < shot.scale * 0.05 {
+                        *inf = crate::screen::SeatScreen::default();
+                    }
+                }
+                (Phase::DivingIn | Phase::PullingOut, None) => {
+                    *inf = crate::screen::SeatScreen::default();
+                }
+                (Phase::Closed, _) => {}
+            }
+        }
+
+        let first = &mut placed[usize::from(hacker)];
+        let k = if *first {
+            1.0 - (-6.0 * time.delta_secs()).exp()
+        } else {
+            *first = true;
+            1.0
+        };
+        cam.translation.x += (shot.at.x - cam.translation.x) * k;
+        cam.translation.y += (shot.at.y - cam.translation.y) * k;
+        zoom += (shot.scale - zoom) * k;
+        ortho.scale = zoom * PIXEL_SCALE;
+        // Snap to the screen-pixel grid so the art does not shimmer as it moves.
+        let step = ortho.scale;
+        cam.translation.x = (cam.translation.x / step).round() * step;
+        cam.translation.y = (cam.translation.y / step).round() * step;
+    }
+}
+
+/// Net View is laid out around the origin at full zoom: reset on the way in.
+pub fn centre_camera(
+    mut camera: Query<(&mut Transform, &mut Projection), With<crate::seats::MainCam>>,
+) {
+    if let Ok((mut cam, mut projection)) = camera.single_mut() {
+        cam.translation.x = 0.0;
+        cam.translation.y = 0.0;
+        if let Projection::Orthographic(ortho) = &mut *projection {
+            ortho.scaling_mode = ScalingMode::AutoMin {
+                min_width: 900.0,
+                min_height: 560.0,
+            };
+            ortho.scale = 1.0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod camera_tests {
+    #[test]
+    fn door_constants_match_the_door_sprite() {
+        let mut images = bevy::prelude::Assets::<bevy::prelude::Image>::default();
+        let art = super::sprites::PaintedSprites::new(&mut images);
+        assert!((art.door.size.x - super::DOOR_W).abs() < 1e-3);
+        assert!((art.door.size.y - super::DOOR_H).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_figure_is_drawn_clear_of_a_closed_door_and_not_of_an_open_one() {
+        use idaptik_core::scenario::state::DoorState;
+        let mut door = DoorState {
+            id: "d".into(),
+            x: 100.0,
+            open: 0.0,
+            pending: 0.0,
+            route_delay: 0.0,
+            route_duration: 0.0,
+            badge_logged: false,
+            unlocked: false,
+        };
+        // The sim parks a centre 3 short of the plane: drawn flush, not inside.
+        let dx = super::door_clearance(97.0, 8.0, std::slice::from_ref(&door));
+        let flush = 100.0 - 8.0 - f64::from(super::DOOR_W) * 0.5;
+        assert!((97.0 + dx - flush).abs() < 1e-9, "shift {dx}");
+        // Far from any door: untouched.
+        assert_eq!(
+            super::door_clearance(40.0, 8.0, std::slice::from_ref(&door)),
+            0.0
+        );
+        // An open door is walked through, not pushed off.
+        door.open = 1.0;
+        assert_eq!(
+            super::door_clearance(97.0, 8.0, std::slice::from_ref(&door)),
+            0.0
+        );
+    }
+
+    use super::*;
+
+    fn map() -> SceneMap {
+        SceneMap::new(1260.0, 585.0, 0)
+    }
+
+    fn shot(space: Space, x: f32) -> Shot {
+        shot_for(space, x, &map(), 1260.0, 585.0, 414.0)
+    }
+
+    #[test]
+    fn the_van_is_framed_closer_than_a_room_and_the_outside_wider() {
+        let room = shot(Space::Room, 0.0);
+        let van = shot(Space::Vehicle, 0.0);
+        let street = shot(Space::Street, 0.0);
+        assert!(van.scale < room.scale);
+        assert!(street.scale > room.scale);
+        assert!(
+            van.at.x > room.at.x,
+            "the van is past the building's right wall"
+        );
+        // Every zoom lands on whole screen pixels per art pixel.
+        for s in [
+            Space::Room,
+            Space::Street,
+            Space::Facade,
+            Space::Roof,
+            Space::Vehicle,
+        ] {
+            let per_art = 1.0 / (s.zoom() * PIXEL_SCALE * sprites::SPRITE_PX);
+            assert!((per_art - per_art.round()).abs() < 1e-3, "{s:?}: {per_art}");
+        }
+    }
+
+    #[test]
+    fn a_shot_tracks_x_but_holds_its_height() {
+        for space in [Space::Room, Space::Street, Space::Roof] {
+            let a = shot(space, -100.0);
+            let b = shot(space, 200.0);
+            assert_eq!(a.at.y, b.at.y);
+            assert!(b.at.x > a.at.x);
+        }
+        // The roof is framed above the room.
+        assert!(shot(Space::Roof, 0.0).at.y > shot(Space::Room, 0.0).at.y);
     }
 }

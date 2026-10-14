@@ -7,6 +7,7 @@
 //! set — this is the seam the Elixir session layer and the TUI frontend share.
 
 use crate::scenario::common::{ExtractMethod, FailReason};
+use crate::scenario::signal::sim::SignalOp;
 use crate::scenario::tuning::{ActionKind, DifficultyId};
 use serde::{Deserialize, Serialize};
 
@@ -137,6 +138,10 @@ pub enum Command {
     /// exact economy; every other actuatable node runs a new, separate flat
     /// cost/cooldown gate.
     NetHack { node: NetNodeIndex },
+    /// Immediate: lay, cut or invert a wire, or re-program a relay, on the
+    /// floor's signal network (ADR-0012). Either seat; `op` says which, and
+    /// the sim checks that seat can touch the receiving device.
+    Signal { op: SignalOp },
     /// Immediate test hook: force the crisis phase.
     ForceCrisis,
     /// Immediate test hook: force an extraction.
@@ -177,6 +182,7 @@ pub fn fold(cmds: &[Command], held: &mut Buttons) -> TickInput {
             | Command::Unpivot
             | Command::NetSsh { .. }
             | Command::NetHack { .. }
+            | Command::Signal { .. }
             | Command::ForceCrisis
             | Command::ForceExtract { .. }
             | Command::ForceFail { .. }

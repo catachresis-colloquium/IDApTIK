@@ -17,11 +17,31 @@ use crate::scenario::floor_graph::floor_graph;
 use crate::scenario::ids::DoorId;
 use crate::scenario::outcome::Debrief;
 use crate::scenario::rng::InitRoll;
+use crate::scenario::signal::sim::SignalState;
 use crate::scenario::sim::GhostLobbySim;
 use crate::scenario::tuning::{ActionKind, DifficultyPreset};
 use crate::scenario::vsm::SupervisionState;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+
+/// Where the infiltrator's body is: on the floor line (indoors, or on the
+/// street outside), on the roof, or on the rope between them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub enum Place {
+    #[default]
+    Floor,
+    Roof,
+    Rope {
+        /// Abseiling down (or climbing up).
+        down: bool,
+    },
+}
+
+impl Place {
+    fn is_floor(&self) -> bool {
+        *self == Place::Floor
+    }
+}
 
 /// The infiltrator's physical and interaction state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,6 +63,13 @@ pub struct PlayerState {
     pub has_usb: bool,
     /// Index of the nearby hide spot, if the player is within one.
     pub hide_spot: Option<usize>,
+    /// Floor, roof or rope. Always the floor on a floor with no outside, so
+    /// the canonical snapshots are unchanged.
+    #[serde(default, skip_serializing_if = "Place::is_floor")]
+    pub place: Place,
+    /// Seconds spent picking the front door's lock.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lockpick: f64,
 }
 
 /// Billy's physical state, FSM bookkeeping and belief meters.
@@ -85,6 +112,9 @@ pub struct DoorState {
     pub route_delay: f64,
     pub route_duration: f64,
     pub badge_logged: bool,
+    /// A picked lock: the door no longer stops anyone.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unlocked: bool,
 }
 
 /// The contact note.
@@ -250,6 +280,30 @@ pub struct RuntimeState {
     pub supervision: SupervisionState,
     pub ended: bool,
     pub result: Option<Debrief>,
+    /// The floor's signal network state, when the definition carries one
+    /// (ADR-0012). Skipped when absent, so an unwired run's snapshot is
+    /// byte-identical to one from before wiring existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<SignalState>,
+    /// Seconds the infiltrator's hands are still busy at a wiring panel.
+    /// Movement and interaction wait until it runs out.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub signal_busy: f64,
+    /// Billy's arrival countdown is held (frozen) until the infiltrator first
+    /// leaves the spawn room. Only ever set on a floor that asks for it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub arrival_held: bool,
+    /// The console the infiltrator is using, if any. They hold still while
+    /// they do; interact again steps away.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub using_console: Option<String>,
+    /// What the building's systems have observed (only on floors with
+    /// consoles).
+    #[serde(
+        default,
+        skip_serializing_if = "crate::scenario::console::Intel::is_empty"
+    )]
+    pub intel: crate::scenario::console::Intel,
 }
 
 impl RuntimeState {
@@ -272,6 +326,7 @@ impl RuntimeState {
                 route_delay: roll.door_delay.get(i).copied().unwrap_or(0.0),
                 route_duration: c::ROUTE_DURATION,
                 badge_logged: false,
+                unlocked: false,
             })
             .collect();
 
@@ -325,6 +380,13 @@ impl RuntimeState {
                 has_note: false,
                 has_usb: false,
                 hide_spot: None,
+                // A floor with an outside starts on the roof.
+                place: if def.exterior.is_some() {
+                    Place::Roof
+                } else {
+                    Place::Floor
+                },
+                lockpick: 0.0,
             },
             billy: BillyState {
                 x: def.billy.spawn_x,
@@ -405,6 +467,20 @@ impl RuntimeState {
             supervision: SupervisionState::new(c::SUPERVISION_TEAM_ID),
             ended: false,
             result: None,
+            signal: def.signal.as_ref().map(SignalState::initial),
+            signal_busy: 0.0,
+            arrival_held: def.arrival_clock
+                == crate::scenario::definition::ArrivalClock::LeftSpawnRoom,
+            using_console: None,
+            intel: crate::scenario::console::Intel::default(),
         }
     }
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }

@@ -1,0 +1,155 @@
+{
+  "format": "idaptik-signal/1",
+  "network_id": "ghost-lobby-wiring",
+  "name": "Envelope 001 — Ghost Lobby — signal network",
+  "devices": [
+    {
+      "id": "door-d1",
+      "kind": "door",
+      "label": "KITCHEN/HALL",
+      "node": "door-d1",
+      "room": "hall"
+    },
+    {
+      "id": "door-d2",
+      "kind": "door",
+      "label": "HALL/OFFICE",
+      "node": "door-d2",
+      "room": "office"
+    },
+    {
+      "id": "door-d3",
+      "kind": "door",
+      "label": "OFFICE/LAUNDRY",
+      "node": "door-d3",
+      "room": "laundry"
+    },
+    {
+      "id": "door-d4",
+      "kind": "door",
+      "label": "SERVICE EXIT",
+      "node": "door-d4",
+      "room": "exit"
+    },
+    {
+      "id": "cam-0",
+      "kind": "camera",
+      "label": "cam-hall",
+      "node": "cam-0",
+      "room": "hall"
+    },
+    {
+      "id": "cam-1",
+      "kind": "camera",
+      "label": "cam-office",
+      "node": "cam-1",
+      "room": "office"
+    },
+    {
+      "id": "cam-2",
+      "kind": "camera",
+      "label": "cam-laundry",
+      "node": "cam-2",
+      "room": "laundry"
+    },
+    {
+      "id": "light-kitchen",
+      "kind": "light",
+      "label": "KITCHEN / BREAK ROOM",
+      "node": "light-kitchen",
+      "room": "kitchen"
+    },
+    {
+      "id": "light-hall",
+      "kind": "light",
+      "label": "HALLWAY",
+      "node": "light-hall",
+      "room": "hall"
+    },
+    {
+      "id": "light-office",
+      "kind": "light",
+      "label": "LIT OFFICE / USB TRAP",
+      "node": "light-office",
+      "room": "office"
+    },
+    {
+      "id": "light-laundry",
+      "kind": "light",
+      "label": "LAUNDRY / WARDROBE",
+      "node": "light-laundry",
+      "room": "laundry"
+    },
+    {
+      "id": "light-exit",
+      "kind": "light",
+      "label": "SERVICE EXIT",
+      "node": "light-exit",
+      "room": "exit"
+    },
+    {
+      "id": "vac-0",
+      "kind": "vacuum",
+      "label": "Robot vacuum",
+      "node": "vac-0"
+    },
+    {
+      "id": "billy",
+      "kind": "guard",
+      "label": "Billy"
+    },
+    {
+      "id": "bms-bridge",
+      "kind": "terminal",
+      "label": "Maintenance bridge",
+      "node": "bms-bridge"
+    },
+    {
+      "id": "bms-interlock",
+      "kind": "relay",
+      "label": "Bridge interlock",
+      "node": "bms-bridge",
+      "gate": "or",
+      "hacker_only": true
+    }
+  ],
+  "links": [
+    {
+      "from": "billy",
+      "from_port": "tripped",
+      "to": "bms-interlock",
+      "to_port": "a",
+      "builtin": true
+    },
+    {
+      "from": "cam-0",
+      "from_port": "tripped",
+      "to": "bms-interlock",
+      "to_port": "b",
+      "builtin": true
+    },
+    {
+      "from": "bms-interlock",
+      "from_port": "q",
+      "to": "door-d4",
+      "to_port": "lock",
+      "builtin": true
+    }
+  ],
+  "budget": 3,
+  "tuning": {
+    "infiltrator": {
+      "wire_bandwidth": 0,
+      "wire_busy_ticks": 90,
+      "may_reprogram": false,
+      "may_wire_hacker_only": false
+    },
+    "hacker": {
+      "wire_bandwidth": 10,
+      "wire_busy_ticks": 0,
+      "may_reprogram": true,
+      "may_wire_hacker_only": true
+    },
+    "door_pulse_ticks": 192
+  }
+}

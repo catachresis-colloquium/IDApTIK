@@ -27,6 +27,10 @@ pub enum Event {
         seed: u32,
         difficulty: DifficultyId,
         reduced_motion: bool,
+        /// The infiltrator starts outside (on the roof). Absent from the
+        /// canonical floor's events, so its replays are unchanged.
+        #[serde(default, skip_serializing_if = "is_false")]
+        outside: bool,
     },
     /// Hacker channel: the seed readout.
     SeedAnnounced { seed: u32 },
@@ -65,6 +69,10 @@ pub enum Event {
     NetHackAction { node_id: String },
     /// A direct Net View hack was denied.
     NetHackDenied { node_id: String, reason: DenyReason },
+    /// Something happened on the floor's signal network (ADR-0012).
+    Signal {
+        signal: crate::scenario::signal::sim::SignalEvent,
+    },
     /// A door hold became active.
     DoorHoldActive { door: DoorId, duration: f64 },
     /// The contact note was secured.
@@ -132,6 +140,17 @@ pub enum Event {
     /// Supervision: the security team retargeted world coverage
     /// (announce-once; supervised runs only).
     CoverageRetargeted { target: String },
+    /// The infiltrator sat down at a console (`on`) or stepped away from it.
+    ConsoleUsed { console: String, on: bool },
+    /// Billy's arrival countdown started, on a floor that holds it until the
+    /// infiltrator leaves the room they began in (or, starting outside, gets in).
+    ArrivalClockStarted,
+    /// The infiltrator took the rope: abseiling down, or climbing up.
+    RopeTaken { down: bool },
+    /// The infiltrator dropped through a roof hatch.
+    HatchDropped { hatch: String },
+    /// The infiltrator picked the front door's lock.
+    FrontDoorPicked,
     /// Frontend-only prompt (excluded from the canonical determinism diff).
     ContextHint { text: String },
     /// Frontend-only tutorial cue (excluded from the canonical determinism diff).
@@ -180,8 +199,15 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
     use Severity::{Bad, Billy, Good, Hacker, Info, Warn};
 
     match e {
-        Event::RunStarted { .. } => line(
+        Event::RunStarted { outside: false, .. } => line(
             "You are in the dark kitchen. Search fast. The note is boring, the USB shiny, the chute silly.".into(),
+            Info,
+            Log,
+        ),
+        Event::RunStarted { outside: true, .. } => line(
+            "You are on the roof. Rope at the front edge, down to the street and the front door; \
+             or the hatch over the laundry, straight in."
+                .into(),
             Info,
             Log,
         ),
@@ -345,6 +371,43 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
             };
             line(text, Billy, Log)
         }
+        Event::Signal { signal } => {
+            let (text, severity) = signal_line(signal)?;
+            line(text, severity, Log)
+        }
+        Event::ConsoleUsed { console, on } => line(
+            if *on {
+                format!("You sit down at {console}.")
+            } else {
+                format!("You step away from {console}.")
+            },
+            Info,
+            Log,
+        ),
+        Event::ArrivalClockStarted => line(
+            "Hacker: you're under way. Billy's shift clock is running now.".into(),
+            Hacker,
+            Log,
+        ),
+        Event::RopeTaken { down } => line(
+            if *down {
+                "You clip on and go over the edge.".into()
+            } else {
+                "You take the rope and climb.".into()
+            },
+            Info,
+            Log,
+        ),
+        Event::HatchDropped { .. } => line(
+            "You drop through the hatch. That landing was not quiet.".into(),
+            Info,
+            Log,
+        ),
+        Event::FrontDoorPicked => line(
+            "The front door's lock gives. You're in.".into(),
+            Info,
+            Log,
+        ),
         Event::ContextHint { text } => line(text.clone(), Info, Prompt),
         Event::TutorialCue { text, .. } => line(text.clone(), Info, Tutorial),
 
@@ -361,6 +424,76 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
         | Event::Resumed
         | Event::Restarted { .. } => None,
     }
+}
+
+/// The log line for a signal-network event, or `None` for pure telemetry.
+fn signal_line(e: &crate::scenario::signal::sim::SignalEvent) -> Option<(String, Severity)> {
+    use crate::scenario::signal::sim::{Seat, SignalDenyReason as D, SignalEvent as S, Switch};
+    let who = |by: &Seat| match by {
+        Seat::Infiltrator => "You",
+        Seat::Hacker => "Hacker",
+    };
+    let wire = |l: &crate::scenario::signal::LinkDef| {
+        format!(
+            "{}.{:?} -> {}.{:?}{}",
+            l.from,
+            l.from_port,
+            l.to,
+            l.to_port,
+            if l.invert { " (inverted)" } else { "" }
+        )
+    };
+    Some(match e {
+        S::Wired { link, by, .. } => (
+            format!("{} wired {}.", who(by), wire(link)),
+            Severity::Hacker,
+        ),
+        S::Cut { link, by, .. } => (format!("{} cut {}.", who(by), wire(link)), Severity::Hacker),
+        S::Inverted { link, by, .. } => (
+            format!("{} flipped {}.", who(by), wire(link)),
+            Severity::Hacker,
+        ),
+        S::Reprogrammed {
+            relay, gate, by, ..
+        } => (
+            format!("{} re-programmed {relay} as {gate:?}.", who(by)),
+            Severity::Hacker,
+        ),
+        S::Denied { by, reason } => {
+            let why = match reason {
+                D::NoAccess { device } => format!("can't reach {device} from here"),
+                D::BadWire { .. } => "those ports don't connect".to_owned(),
+                D::Hardwired => "that wire is hardwired".to_owned(),
+                D::NoSuchWire => "no wire there".to_owned(),
+                D::AlreadyWired => "already wired".to_owned(),
+                D::BudgetFull { budget } => format!("all {budget} spare wires are in use"),
+                D::NotARelay { device } => format!("{device} is not a relay"),
+                D::Unskilled => "that needs the hacker".to_owned(),
+                D::HackerOnly { device } => format!("only the hacker can wire into {device}"),
+                D::NoSuchDevice { index } => format!("no device #{index}"),
+                D::NoBandwidth => "not enough bandwidth".to_owned(),
+                D::Busy => "hands still busy at the panel".to_owned(),
+            };
+            (format!("{}: {why}.", who(by)), Severity::Warn)
+        }
+        S::Switched { device, what, on } => {
+            let state = match (what, on) {
+                (Switch::Open, true) => "opens",
+                (Switch::Open, false) => "closes",
+                (Switch::Locked, true) => "locks",
+                (Switch::Locked, false) => "unlocks",
+                (Switch::Active, true) => "comes on",
+                (Switch::Active, false) => "goes dark",
+            };
+            (format!("{device} {state}."), Severity::Info)
+        }
+        S::VacuumRouted { .. } => return None,
+    })
+}
+
+/// Serde: leave a false flag out of the wire form.
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[cfg(test)]

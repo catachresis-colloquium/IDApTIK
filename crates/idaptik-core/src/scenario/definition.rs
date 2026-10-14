@@ -7,7 +7,9 @@
 //! [`ValidationReport`] of named checks; [`ScenarioDefinition::ok`] projects the
 //! failed checks into typed [`ValidationError`]s.
 
-use crate::scenario::ids::{CameraId, DoorId, HideSpotId, ObjectiveId, RoomId};
+use crate::scenario::floor_graph::floor_graph;
+use crate::scenario::ids::{CameraId, DoorId, HideSpotId, ObjectiveId, RoomId, SignalId};
+use crate::scenario::signal::{SignalNetworkDef, SignalValidationError};
 use crate::scenario::tuning::{
     ActionKind, ActionSpec, DifficultyId, DifficultyPreset, ScoringDef, TuningConstants,
 };
@@ -136,6 +138,53 @@ pub struct ObjectiveDef {
     pub room: Option<RoomId>,
 }
 
+/// What a console can show. A screen is a view over the network session of
+/// whoever is using it, filtered by what the equipment can do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ConsoleCap {
+    /// Doors, lights and the vacuum: the building automation.
+    Building,
+    /// Camera feeds, and with them sightings of people.
+    Cameras,
+    /// The signal network: wires and relays.
+    Wiring,
+}
+
+/// Where a console physically is.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ConsolePlace {
+    /// In a room on this floor, at canvas `x`. The infiltrator uses it by
+    /// standing at it and pressing interact.
+    Room { room: RoomId, x: f64 },
+    /// In the hacker's van: the hacker's own kit.
+    Van,
+}
+
+/// A piece of equipment with a screen.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConsoleDef {
+    pub id: String,
+    pub label: String,
+    pub place: ConsolePlace,
+    pub caps: Vec<ConsoleCap>,
+}
+
+/// When the arrival countdown (the seeded `arrival` roll) starts running.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ArrivalClock {
+    /// From the first tick (the prototype's behaviour).
+    #[default]
+    RunStart,
+    /// From the moment the infiltrator first leaves the room they spawned in.
+    LeftSpawnRoom,
+}
+
+impl ArrivalClock {
+    fn is_run_start(&self) -> bool {
+        *self == ArrivalClock::RunStart
+    }
+}
+
 /// The (base, span) reset-RNG ranges — draw order is load-bearing.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SpawnRanges {
@@ -168,6 +217,70 @@ pub struct ScenarioDefinition {
     pub tuning: TuningConstants,
     pub scoring: ScoringDef,
     pub spawn: SpawnRanges,
+    /// The floor's signal network (ADR-0012), if it has one. Absent on the
+    /// canonical Ghost Lobby, so its golden and every replay are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<SignalNetworkDef>,
+    /// When Billy's arrival countdown starts. The canonical floor starts it with
+    /// the run; a floor for new players can hold it until the infiltrator has
+    /// found their way out of the starting room.
+    #[serde(default, skip_serializing_if = "ArrivalClock::is_run_start")]
+    pub arrival_clock: ArrivalClock,
+    /// Equipment with screens on this floor. Empty on the canonical floor.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub consoles: Vec<ConsoleDef>,
+    /// The building's outside: its roof, a rope down the front, hatches, the
+    /// street and a front door. Absent on the canonical floor, which starts
+    /// inside; a floor with one starts the infiltrator on the roof.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exterior: Option<ExteriorDef>,
+}
+
+/// Outside the building: the roof the infiltrator starts on, two ways in
+/// (a rope down the front facade to the street and the front door, or a hatch
+/// straight into a room), and the street in front.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExteriorDef {
+    /// Canvas y of the roof's walking surface (feet stand on it).
+    pub roof_y: f64,
+    /// How far along the roof the body can go (its left edge, like the
+    /// floor's clamp).
+    pub roof: (f64, f64),
+    /// How far down the street the body can go (left edge), outside the front
+    /// door.
+    pub street_lo: f64,
+    /// The rope down the front facade.
+    pub rope: RopeDef,
+    /// Hatches in the roof, each dropping into the room below.
+    pub hatches: Vec<HatchDef>,
+    /// The front door: one of `doors`, on the building's outer wall. It is
+    /// locked: the infiltrator picks it from the street, or the hacker opens
+    /// it like any other door.
+    pub front_door: DoorId,
+    /// Seconds of picking that open the front door's lock.
+    pub pick_time: f64,
+    /// The hacker's support outside (the van is in plain sight).
+    pub support: f64,
+}
+
+/// A rope from the roof's edge down to the street.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RopeDef {
+    /// Where on the roof the rope is tied off (body centre).
+    pub top_x: f64,
+    /// Where it reaches the street, just off the facade (body centre).
+    pub foot_x: f64,
+    /// Climbing and abseiling speed, canvas units a second.
+    pub speed: f64,
+}
+
+/// A hatch in the roof over a room.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HatchDef {
+    pub id: String,
+    /// Centre, canvas x.
+    pub x: f64,
+    pub room: RoomId,
 }
 
 /// A typed validation failure.
@@ -209,6 +322,19 @@ pub enum ValidationError {
     /// A snapshot whose format tag is not the one this build restores.
     UnsupportedSnapshotFormat {
         found: String,
+    },
+    /// The floor's signal network does not validate.
+    SignalNetwork {
+        errors: Vec<SignalValidationError>,
+    },
+    /// A signal device names a grounded-network node the floor does not carry.
+    SignalNodeMissing {
+        device: SignalId,
+        node: String,
+    },
+    /// A console stands in a room the floor does not have, or outside it.
+    ConsoleOffFloor {
+        console: String,
     },
 }
 
@@ -422,6 +548,64 @@ impl ScenarioDefinition {
                 has_exit,
                 format!("exit objective present={has_exit}"),
                 Some(ValidationError::NoExtractionRoom),
+            );
+        }
+
+        // --- signal network (only when the floor has one, so a floor without
+        // wiring reports exactly the checks it always did) -------------------
+        if let Some(net) = &self.signal {
+            let errors = net.validate();
+            check(
+                &mut checks,
+                "signal",
+                "signal.valid",
+                "The signal network validates",
+                errors.is_empty(),
+                format!(
+                    "{} device(s), {} problem(s)",
+                    net.devices.len(),
+                    errors.len()
+                ),
+                Some(ValidationError::SignalNetwork { errors }),
+            );
+            let graph = floor_graph(self);
+            let missing = net.devices.iter().find_map(|d| {
+                let node = d.node.as_ref()?;
+                graph
+                    .node(node)
+                    .is_none()
+                    .then(|| (d.id.clone(), node.clone()))
+            });
+            check(
+                &mut checks,
+                "signal",
+                "signal.nodes",
+                "Every signal device's node exists on the floor",
+                missing.is_none(),
+                format!("missing={missing:?}"),
+                missing.map(|(device, node)| ValidationError::SignalNodeMissing { device, node }),
+            );
+        }
+
+        // --- consoles stand inside the room they name (only when present) ---
+        if !self.consoles.is_empty() {
+            let off = self.consoles.iter().find(|c| match &c.place {
+                ConsolePlace::Van => false,
+                ConsolePlace::Room { room, x } => !self
+                    .rooms
+                    .iter()
+                    .any(|r| &r.id == room && *x >= r.x && *x < r.x + r.w),
+            });
+            check(
+                &mut checks,
+                "consoles",
+                "consoles.placed",
+                "Every console stands inside the room it names",
+                off.is_none(),
+                format!("off-floor={:?}", off.map(|c| &c.id)),
+                off.map(|c| ValidationError::ConsoleOffFloor {
+                    console: c.id.clone(),
+                }),
             );
         }
 

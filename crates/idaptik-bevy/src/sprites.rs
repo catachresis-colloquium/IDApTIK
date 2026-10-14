@@ -1,190 +1,385 @@
-//! Vector-sprite composites ported from IDApixiTIK's `PlayerGraphics.res` and
-//! `WorldScreen.res`'s `WorldDeviceIcon`: layered flat-colour shapes (rects
-//! and, where a circle is needed, a `Mesh2d` disc) rather than a single flat
-//! quad per actor.
+//! Sprites: the pixel-art figures and props on the floor, and the layered
+//! device and network icons Net View draws.
+//!
+//! The figures and props are pixel art at one fixed density (`assets/sprites/`,
+//! embedded at build time so nothing is loaded from disk at run time), drawn
+//! at their true size and sampled nearest-neighbour so pixels stay square. A
+//! hidden infiltrator fades by tinting sprite alpha alone.
 
+use bevy::asset::RenderAssetUsages;
+use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::prelude::*;
 
-//## Player
+//## Painted sprites
 
-/// The player body colour and whether the laptop shows, from the same two
-/// state flags Ghost Lobby actually tracks (`crouching`, `sprinting`) --
-/// collapsed from `PlayerGraphics.res`'s six-state `visualState`, since this
-/// sim has no separate Jumping/ChargingJump visual state.
-pub fn player_colours(crouching: bool, sprinting: bool) -> (Color, bool) {
-    if crouching {
-        (Color::srgb(0.267, 0.333, 0.6), false)
-    } else if sprinting {
-        (Color::srgb(0.133, 0.267, 0.533), true)
-    } else {
-        (Color::srgb(0.2, 0.4, 0.8), true)
+/// Art pixels per canvas unit: every sprite is pixel art at this density (the
+/// 54-unit infiltrator is 48 px tall), so its drawn size follows from its pixel
+/// size alone, and nothing is scaled.
+pub const SPRITE_PX: f32 = 48.0 / 54.0;
+
+/// One painted sprite and its size in canvas units.
+#[derive(Clone)]
+pub struct Painted {
+    pub image: Handle<Image>,
+    pub size: Vec2,
+}
+
+/// Every painted sprite, decoded once at start-up.
+#[derive(Resource, Clone)]
+pub struct PaintedSprites {
+    pub infiltrator_stand: Painted,
+    pub infiltrator_crouch: Painted,
+    pub guard_stand: Painted,
+    pub hacker_sit: Painted,
+    pub van: Painted,
+    pub counter: Painted,
+    pub fridge: Painted,
+    pub copier: Painted,
+    pub desk: Painted,
+    pub locker: Painted,
+    pub crate_: Painted,
+    pub crt_console: Painted,
+    pub door: Painted,
+    pub camera: Painted,
+    pub ceiling_light: Painted,
+    pub note: Painted,
+    pub usb: Painted,
+    pub chute: Painted,
+    pub vacuum: Painted,
+    pub badge_reader: Painted,
+    pub exit_door: Painted,
+    /// Walk cycles, [`WALK_FRAMES`] each, near foot forward first.
+    pub infiltrator_walk: Vec<Painted>,
+    pub infiltrator_sneak: Vec<Painted>,
+    /// Rising, top, falling.
+    pub infiltrator_jump: Vec<Painted>,
+    pub guard_walk: Vec<Painted>,
+    pub hacker_walk: Vec<Painted>,
+    /// Seated typing loops, [`TYPE_FRAMES`] each.
+    pub infiltrator_type: Vec<Painted>,
+    pub hacker_type: Vec<Painted>,
+}
+
+/// Decode one embedded PNG cut at [`SPRITE_PX`]; its size follows from its pixels.
+pub fn load_png(images: &mut Assets<Image>, png: &[u8]) -> Painted {
+    let image = Image::from_buffer(
+        png,
+        ImageType::Extension("png"),
+        CompressedImageFormats::NONE,
+        true,
+        ImageSampler::nearest(),
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .expect("embedded sprite is a valid PNG");
+    let size = Vec2::new(image.width() as f32, image.height() as f32) / SPRITE_PX;
+    Painted {
+        image: images.add(image),
+        size,
     }
 }
 
-/// Marker: the player's circular head.
-#[derive(Component)]
-pub struct PlayerHead;
-/// Marker: the player's laptop base.
-#[derive(Component)]
-pub struct PlayerLaptop;
-/// Marker: the player's laptop screen.
-#[derive(Component)]
-pub struct PlayerLaptopScreen;
+impl PaintedSprites {
+    pub fn new(images: &mut Assets<Image>) -> Self {
+        let mut load = |png: &[u8]| load_png(images, png);
+        macro_rules! png {
+            ($name:literal) => {
+                load(include_bytes!(concat!("../assets/sprites/", $name, ".png")))
+            };
+        }
+        macro_rules! frames {
+            ($name:literal, $($n:literal),+) => {
+                vec![$(load(include_bytes!(concat!("../assets/sprites/", $name, "_", stringify!($n), ".png")))),+]
+            };
+        }
+        Self {
+            infiltrator_stand: png!("infiltrator_stand"),
+            infiltrator_crouch: png!("infiltrator_crouch"),
+            guard_stand: png!("guard_stand"),
+            hacker_sit: png!("hacker_sit"),
+            van: png!("van"),
+            counter: png!("counter"),
+            fridge: png!("fridge"),
+            copier: png!("copier"),
+            desk: png!("desk"),
+            locker: png!("locker"),
+            crate_: png!("crate"),
+            crt_console: png!("crt_console"),
+            door: png!("door"),
+            camera: png!("camera"),
+            ceiling_light: png!("ceiling_light"),
+            note: png!("note"),
+            usb: png!("usb"),
+            chute: png!("chute"),
+            vacuum: png!("vacuum"),
+            badge_reader: png!("badge_reader"),
+            exit_door: png!("exit_door"),
+            infiltrator_walk: frames!("infiltrator_walk", 0, 1, 2, 3, 4, 5),
+            infiltrator_sneak: frames!("infiltrator_sneak", 0, 1, 2, 3, 4, 5),
+            infiltrator_jump: frames!("infiltrator_jump", 0, 1, 2),
+            guard_walk: frames!("guard_walk", 0, 1, 2, 3, 4, 5),
+            hacker_walk: frames!("hacker_walk", 0, 1, 2, 3, 4, 5),
+            infiltrator_type: frames!("infiltrator_type", 0, 1, 2, 3),
+            hacker_type: frames!("hacker_type", 0, 1, 2, 3),
+        }
+    }
 
-/// Head radius, laptop size and vertical offsets, transliterated from
-/// `PlayerGraphics.res`'s `Dimensions` module (its `y` is canvas-down; these
-/// are Bevy scene-space, so the sign is flipped once here rather than at
-/// every call site).
-const HEAD_RADIUS: f32 = 6.0;
-const HEAD_Y: f32 = 24.0;
-const LAPTOP_W: f32 = 10.0;
-const LAPTOP_H: f32 = 6.0;
-const LAPTOP_Y: f32 = 12.0;
-const LAPTOP_SCREEN_PAD: f32 = 1.0;
-
-/// Spawn the player's head, laptop and laptop-screen as children of the
-/// entity this is called from within (the existing `PlayerMarker` body).
-/// Colours/visibility are then driven each frame by `sync_player`, so this
-/// only needs to exist -- its first-frame look is set below and refined there.
-pub fn spawn_player_children(
-    parent: &mut ChildSpawnerCommands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ColorMaterial>,
-) {
-    let head_mesh = meshes.add(Circle::new(HEAD_RADIUS));
-    let head_material = materials.add(ColorMaterial::from(Color::srgb(1.0, 0.8, 0.667)));
-    parent.spawn((
-        PlayerHead,
-        Mesh2d(head_mesh),
-        MeshMaterial2d(head_material),
-        Transform::from_translation(Vec3::new(0.0, HEAD_Y, 0.6)),
-    ));
-    parent.spawn((
-        PlayerLaptop,
-        Sprite::from_color(Color::srgb(0.2, 0.2, 0.2), Vec2::new(LAPTOP_W, LAPTOP_H)),
-        Transform::from_translation(Vec3::new(0.0, LAPTOP_Y, 0.55)),
-    ));
-    parent.spawn((
-        PlayerLaptopScreen,
-        Sprite::from_color(
-            Color::srgb(0.0, 1.0, 0.0),
-            Vec2::new(
-                LAPTOP_W - LAPTOP_SCREEN_PAD * 2.0,
-                LAPTOP_H - LAPTOP_SCREEN_PAD * 2.0,
-            ),
-        ),
-        Transform::from_translation(Vec3::new(0.0, LAPTOP_Y, 0.56)),
-    ));
+    /// The figure for an actor in a pose. Every painted figure faces right.
+    pub fn figure(&self, actor: Actor, pose: Pose) -> &Painted {
+        match (actor, pose) {
+            (Actor::Infiltrator, Pose::Walk(f)) => cycle(&self.infiltrator_walk, f),
+            (Actor::Infiltrator, Pose::Sneak(f)) => cycle(&self.infiltrator_sneak, f),
+            (Actor::Infiltrator, Pose::Type(f)) => cycle(&self.infiltrator_type, f),
+            (Actor::Infiltrator, Pose::Jump(f)) => cycle(&self.infiltrator_jump, f),
+            (Actor::Guard, Pose::Walk(f)) => cycle(&self.guard_walk, f),
+            (Actor::Hacker, Pose::Walk(f)) => cycle(&self.hacker_walk, f),
+            (Actor::Hacker, Pose::Type(f)) => cycle(&self.hacker_type, f),
+            (Actor::Infiltrator, Pose::Crouch) => &self.infiltrator_crouch,
+            (Actor::Infiltrator, _) => &self.infiltrator_stand,
+            (Actor::Guard, _) => &self.guard_stand,
+            (Actor::Hacker, _) => &self.hacker_sit,
+        }
+    }
 }
 
-//## Billy
+/// A painted sprite standing with its bottom centre at `at`, tinted `color`
+/// (white leaves it as painted).
+pub fn painted_bundle(p: &Painted, at: Vec2, z: f32, color: Color) -> impl Bundle {
+    (
+        Sprite {
+            image: p.image.clone(),
+            color,
+            custom_size: Some(p.size),
+            ..Default::default()
+        },
+        Transform::from_translation((at + Vec2::new(0.0, p.size.y * 0.5)).extend(z)),
+    )
+}
 
-/// Marker: Billy's circular head.
+//## Person
+
+/// Whose figure a part belongs to, so each sync system touches only its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component)]
+pub enum Actor {
+    Infiltrator,
+    Guard,
+    Hacker,
+}
+
+/// A figure's pose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component)]
+pub enum Pose {
+    Stand,
+    Sit,
+    Crouch,
+    /// A walk-cycle frame.
+    Walk(u8),
+    /// A crouched sneak-cycle frame.
+    Sneak(u8),
+    /// A seated typing frame.
+    Type(u8),
+    /// In the air: 0 rising, 1 at the top, 2 falling.
+    Jump(u8),
+}
+
+/// Frames in a walk or sneak cycle, and in a typing loop.
+pub const WALK_FRAMES: u8 = 6;
+pub const TYPE_FRAMES: u8 = 4;
+/// Typing speed (steps a second).
+pub const TYPE_FPS: f32 = 12.0;
+/// The typing frames in order: 0 and 2 are the hands at rest, 1 the front
+/// hand lifted, 3 the back hand. An irregular run of taps with the odd pause
+/// reads as typing; a strict alternation reads as a machine.
+const TYPE_STEPS: [u8; 24] = [
+    1, 0, 3, 0, 1, 3, 0, 1, 0, 0, 3, 1, 0, 3, 0, 1, 1, 0, 3, 0, 2, 2, 2, 0,
+];
+
+fn cycle(frames: &[Painted], f: u8) -> &Painted {
+    &frames[usize::from(f) % frames.len()]
+}
+
+impl Pose {
+    /// Every pose a figure has, for spawning one child per pose.
+    pub fn all_for(actor: Actor) -> Vec<Pose> {
+        let walk = |f: fn(u8) -> Pose| (0..WALK_FRAMES).map(f).collect::<Vec<_>>();
+        let typing = || (0..TYPE_FRAMES).map(Pose::Type).collect::<Vec<_>>();
+        match actor {
+            Actor::Infiltrator => [
+                vec![Pose::Stand, Pose::Crouch],
+                walk(Pose::Walk),
+                walk(Pose::Sneak),
+                typing(),
+                (0..3).map(Pose::Jump).collect(),
+            ]
+            .concat(),
+            Actor::Guard => [vec![Pose::Stand], walk(Pose::Walk)].concat(),
+            Actor::Hacker => [vec![Pose::Sit], typing(), walk(Pose::Walk)].concat(),
+        }
+    }
+}
+
+/// Canvas units walked per walk-cycle frame: a cycle (two steps of about
+/// 45 units, roughly as long as the drawn legs reach) spans the six frames.
+/// At the player's walking speed that is about 11 frames a second.
+pub const STRIDE: f64 = 15.0;
+/// The same for the sneak: shorter, bent-kneed steps (about 8 frames a second
+/// at crouching speed).
+pub const SNEAK_STRIDE: f64 = 10.0;
+/// Below this speed (canvas units a second) a figure stands rather than walks.
+pub const WALK_MIN_VX: f64 = 18.0;
+
+/// The jump frame for a vertical speed (canvas units a second, down positive):
+/// rising, near the top, falling.
+pub fn jump_frame(vy: f64) -> u8 {
+    if vy < -120.0 {
+        0
+    } else if vy < 120.0 {
+        1
+    } else {
+        2
+    }
+}
+
+/// The typing-loop frame at time `t` (seconds).
+pub fn type_frame(t: f32) -> u8 {
+    TYPE_STEPS[(t.max(0.0) * TYPE_FPS) as usize % TYPE_STEPS.len()]
+}
+
+/// The walk-cycle frame for a figure at `x` moving at `vx` with `stride`
+/// units per frame, or none when it is standing still. Chosen by distance
+/// walked, not time, so feet never slide.
+pub fn gait_frame(x: f64, vx: f64, stride: f64) -> Option<u8> {
+    (vx.abs() >= WALK_MIN_VX).then(|| ((x.abs() / stride) as u64 % u64::from(WALK_FRAMES)) as u8)
+}
+
+/// Marker: the root a figure's parts hang from (feet at its origin).
 #[derive(Component)]
-pub struct BillyHead;
+pub struct FigureRoot;
 
-/// Marker: Billy's left eye.
-#[derive(Component)]
-pub struct BillyEyeLeft;
+/// One part of a figure, remembering its own colour so a fade can be applied
+/// as alpha without losing it.
+#[derive(Component, Clone, Copy)]
+pub struct FigurePart(pub Color);
 
-/// Marker: Billy's right eye.
-#[derive(Component)]
-pub struct BillyEyeRight;
+/// The white disc image the light pools and wheels tint.
+#[derive(Resource, Clone)]
+pub struct FigureImages {
+    pub disc: Handle<Image>,
+}
 
-/// Marker: Billy's mouth.
-#[derive(Component)]
-pub struct BillyMouth;
+impl FigureImages {
+    /// Rasterise the disc once (64 px, anti-aliased edge).
+    pub fn new(images: &mut Assets<Image>) -> Self {
+        Self {
+            disc: images.add(disc_image()),
+        }
+    }
+}
 
-/// Marker: Billy's guard hat.
-#[derive(Component)]
-pub struct BillyHat;
+fn disc_image() -> Image {
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    const N: u32 = 64;
+    let mut data = Vec::with_capacity((N * N * 4) as usize);
+    let c = (N as f32 - 1.0) * 0.5;
+    for y in 0..N {
+        for x in 0..N {
+            let (dx, dy) = (x as f32 - c, y as f32 - c);
+            let a = (c + 0.5 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            data.extend_from_slice(&[255, 255, 255, (a * 255.0) as u8]);
+        }
+    }
+    Image::new(
+        Extent3d {
+            width: N,
+            height: N,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
 
-/// Marker: Billy's badge (authority indicator).
-#[derive(Component)]
-pub struct BillyBadge;
-
-/// Constants for Billy facial features
-const BILLY_EYE_RADIUS: f32 = 2.0;
-const BILLY_EYE_Y: f32 = 28.0; // Positioned on head
-const BILLY_EYE_X_OFFSET: f32 = 3.0; // Distance from center to each eye
-const BILLY_MOUTH_W: f32 = 6.0;
-const BILLY_MOUTH_H: f32 = 2.0;
-const BILLY_MOUTH_Y: f32 = 23.0;
-const BILLY_HAT_W: f32 = 16.0;
-const BILLY_HAT_H: f32 = 4.0;
-const BILLY_HAT_Y: f32 = 35.0;
-const BILLY_BADGE_SIZE: f32 = 4.0;
-const BILLY_BADGE_Y: f32 = 26.0;
-
-/// Spawn Billy's head as a child of the existing `BillyMarker` body. Billy has
-/// no source art in IDApixiTIK (there is no guard/NPC anywhere in that
-/// prototype); this extends the same layered-shape language the player just
-/// got, rather than porting anything literal.
-pub fn spawn_billy_children(
+/// Spawn a full figure with one child per pose in `poses`, all hidden but the
+/// first. Coordinates are canvas units with the feet at the origin; the caller
+/// finds the poses by [`Pose`].
+pub fn spawn_person(
     parent: &mut ChildSpawnerCommands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ColorMaterial>,
+    art: &PaintedSprites,
+    actor: Actor,
+    poses: &[Pose],
 ) {
-    // Head (base layer)
-    let head_mesh = meshes.add(Circle::new(HEAD_RADIUS + 1.0));
-    let head_material = materials.add(ColorMaterial::from(Color::srgb(1.0, 0.8, 0.667)));
-    parent.spawn((
-        BillyHead,
-        Mesh2d(head_mesh),
-        MeshMaterial2d(head_material),
-        Transform::from_translation(Vec3::new(0.0, HEAD_Y + 4.0, 0.6)),
-    ));
+    parent
+        .spawn((
+            actor,
+            FigureRoot,
+            Transform::default(),
+            Visibility::Inherited,
+        ))
+        .with_children(|root| {
+            for (k, pose) in poses.iter().enumerate() {
+                root.spawn((
+                    actor,
+                    *pose,
+                    FigurePart(Color::WHITE),
+                    painted_bundle(art.figure(actor, *pose), Vec2::ZERO, 0.1, Color::WHITE),
+                    if k == 0 {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    },
+                ));
+            }
+        });
+}
 
-    // Eyes as sprites (easier to change color dynamically)
-    parent.spawn((
-        BillyEyeLeft,
-        Sprite::from_color(
-            Color::srgb(0.1, 0.1, 0.1),
-            Vec2::new(BILLY_EYE_RADIUS * 2.0, BILLY_EYE_RADIUS * 2.0),
-        ),
-        Transform::from_translation(Vec3::new(-BILLY_EYE_X_OFFSET, BILLY_EYE_Y, 0.7)),
-    ));
+#[cfg(test)]
+mod gait_tests {
+    use super::*;
 
-    parent.spawn((
-        BillyEyeRight,
-        Sprite::from_color(
-            Color::srgb(0.1, 0.1, 0.1),
-            Vec2::new(BILLY_EYE_RADIUS * 2.0, BILLY_EYE_RADIUS * 2.0),
-        ),
-        Transform::from_translation(Vec3::new(BILLY_EYE_X_OFFSET, BILLY_EYE_Y, 0.7)),
-    ));
+    #[test]
+    fn standing_still_has_no_frame_and_walking_steps_through_every_frame() {
+        assert_eq!(gait_frame(100.0, 0.0, STRIDE), None);
+        assert_eq!(gait_frame(100.0, WALK_MIN_VX * 0.5, STRIDE), None);
+        let frames: Vec<u8> = (0..6)
+            .map(|k| gait_frame(k as f64 * STRIDE + 0.5, 60.0, STRIDE).unwrap())
+            .collect();
+        assert_eq!(frames, [0, 1, 2, 3, 4, 5]);
+        // Walking left steps the same cycle.
+        assert!(gait_frame(-50.0, -60.0, STRIDE).is_some());
+    }
 
-    // Mouth (will change based on mode)
-    parent.spawn((
-        BillyMouth,
-        Sprite::from_color(
-            Color::srgb(0.5, 0.2, 0.1),
-            Vec2::new(BILLY_MOUTH_W, BILLY_MOUTH_H),
-        ),
-        Transform::from_translation(Vec3::new(0.0, BILLY_MOUTH_Y, 0.7)),
-    ));
+    #[test]
+    fn the_walk_plays_at_a_readable_rate() {
+        // Pixel walk cycles read at roughly 8-14 frames a second.
+        let fps = |speed: f64, stride: f64| speed / stride;
+        let walk = fps(
+            idaptik_core::scenario::constants::STORY_PLAYER_SPEED,
+            STRIDE,
+        );
+        let sneak = fps(
+            idaptik_core::scenario::constants::STORY_PLAYER_SPEED
+                * idaptik_core::scenario::constants::CROUCH_SPEED,
+            SNEAK_STRIDE,
+        );
+        assert!((8.0..=14.0).contains(&walk), "walk {walk} fps");
+        assert!((6.0..=12.0).contains(&sneak), "sneak {sneak} fps");
+    }
 
-    // Guard hat (only visible in certain modes)
-    parent.spawn((
-        BillyHat,
-        Sprite::from_color(
-            Color::srgb(0.2, 0.25, 0.3),
-            Vec2::new(BILLY_HAT_W, BILLY_HAT_H),
-        ),
-        Transform::from_translation(Vec3::new(0.0, BILLY_HAT_Y, 0.8)),
-        Visibility::Hidden, // Hidden by default, shown in guard modes
-    ));
+    #[test]
+    fn typing_steps_only_through_the_typing_frames() {
+        assert!(TYPE_STEPS.iter().all(|&f| f < TYPE_FRAMES));
+        let frames: std::collections::HashSet<u8> =
+            (0..48).map(|k| type_frame(k as f32 / TYPE_FPS)).collect();
+        assert_eq!(frames.len(), usize::from(TYPE_FRAMES));
+    }
 
-    // Badge (authority indicator)
-    parent.spawn((
-        BillyBadge,
-        Sprite::from_color(
-            Color::srgb(0.8, 0.6, 0.2),
-            Vec2::new(BILLY_BADGE_SIZE, BILLY_BADGE_SIZE),
-        ),
-        Transform::from_translation(Vec3::new(0.0, BILLY_BADGE_Y, 0.75)),
-        Visibility::Hidden, // Hidden by default
-    ));
+    #[test]
+    fn a_jump_rises_peaks_and_falls() {
+        assert_eq!(jump_frame(-400.0), 0);
+        assert_eq!(jump_frame(0.0), 1);
+        assert_eq!(jump_frame(400.0), 2);
+    }
 }
 
 //## Devices
@@ -615,35 +810,6 @@ pub fn spawn_network_icon(
             0.2,
         )),
     ));
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crouching_hides_the_laptop_and_tints_the_body_purple() {
-        let (color, laptop_shows) = player_colours(true, false);
-        assert!(
-            !laptop_shows,
-            "PlayerGraphics.res hides the laptop while crouching"
-        );
-        assert_eq!(color, Color::srgb(0.267, 0.333, 0.6));
-    }
-
-    #[test]
-    fn sprinting_darkens_the_body_and_keeps_the_laptop() {
-        let (color, laptop_shows) = player_colours(false, true);
-        assert!(laptop_shows);
-        assert_eq!(color, Color::srgb(0.133, 0.267, 0.533));
-    }
-
-    #[test]
-    fn idle_is_the_base_body_colour_with_the_laptop_showing() {
-        let (color, laptop_shows) = player_colours(false, false);
-        assert!(laptop_shows);
-        assert_eq!(color, Color::srgb(0.2, 0.4, 0.8));
-    }
 }
 
 #[cfg(test)]

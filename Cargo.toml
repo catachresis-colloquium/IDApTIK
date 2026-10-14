@@ -46,8 +46,18 @@ futures-util = "0.3"
 # Debug builds of the Bevy dependency tree carry gigabytes of DWARF; linking that
 # into idaptik-bevy thrashes a ~4 GiB WSL2 VM for hours without finishing. Keep
 # full debug info for IDApTIK's own crates, drop it for third-party ones.
+#
+# Optimise the dependencies too. Unoptimised Bevy costs several CPU cores to
+# draw a 2D cross-section; built once at opt-level 3 it is cheap to run, and
+# incremental builds of our own crates stay quick. Our crates get opt-level 1
+# so dev runs are smooth without slowing the edit-compile loop much. Float
+# semantics are unchanged at any opt-level (no fast-math), so determinism holds.
+[profile.dev]
+opt-level = 1
+
 [profile.dev.package."*"]
 debug = false
+opt-level = 3
 
 [patch.crates-io]
 bevy_winit = { path = "vendor/bevy_winit" }

@@ -55,6 +55,31 @@ single-floor asymmetric infiltration:
   detects). The constants are dual-homed — `pub const` source of truth projected
   into the definition, with a `json_roundtrip` test asserting fidelity.
 
+### The played opening: from the roof
+
+`crates/idaptik-core/src/scenario/rooftop.rs` builds the floor the windowed
+game plays (`ghost_lobby_rooftop`): the wired Ghost Lobby with an optional
+`ExteriorDef` attached. The infiltrator starts on the **roof**, with two ways in:
+
+- the **rope** tied off at the roof's front edge: abseil down the facade to the
+  street, then through the **front door** (`D0`, on the kitchen's street wall).
+  It is locked: the infiltrator picks it from the street (`PICK_TIME`, with a
+  little noise), or the hacker opens it like any other door;
+- the **hatch** over the laundry: quiet to reach, but it drops you in at the
+  far end of the floor, and the landing is heard.
+
+Outside (roof, rope or street) no camera sees the infiltrator, Billy cannot
+see or grab them through the outer wall, and support is the exterior's own
+(the van is in plain sight). Billy's arrival clock waits until they are inside.
+The body's place (`Floor` / `Roof` / `Rope`) and a picked lock are serialised
+only when set, and `exterior` only when present, so the canonical floor's
+golden data and every replay are unchanged.
+
+The frontend frames each seat by the **space** its character is in, not by the
+level or the character: a room close (three screen pixels per art pixel), the
+outside — street, facade, roof — wide (two), the inside of the van closest
+(five).
+
 ## Multi-floor: the Exchange House building runtime
 
 `crates/idaptik-core/src/scenario/building/` generalises a scenario into *one floor
@@ -191,6 +216,7 @@ these validated load points.
 | Session relay (Elixir, relay-only lockstep) | **Live** |
 | Moletaire companion | Landed module — **seam, not yet wired into the sim** |
 | UMS content load (`load_building` / `load_actor_pack`) | **Live** load points; generator is UMS-side |
+| Signal network (ADR-0012) | **Live** in the sim (opt-in floor), Bevy wiring overlay; netplay pending burble |
 | gossamer host + burble transport (ADR-0006) | **Design-accepted, deferred** |
 
 ## See also

@@ -22,6 +22,7 @@ fn headless_app() -> App {
     app.add_plugins(SimDriverPlugin {
         cfg: RunConfig::standard(),
         seed: SEED,
+        wired: false,
     });
     app
 }

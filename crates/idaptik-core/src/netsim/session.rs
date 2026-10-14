@@ -93,6 +93,12 @@ impl AgentSession {
         *self.stack.last().unwrap_or(&self.vantage.entry_ip)
     }
 
+    /// Whether the agent has pivoted onto `ip` and still stands on it — the
+    /// host's sense of "this terminal is compromised".
+    pub fn stands_on(&self, ip: Ipv4Addr) -> bool {
+        self.stack.contains(&ip)
+    }
+
     /// How deep the agent has reached: the number of pivots they stand on.
     pub fn hops(&self) -> u32 {
         self.stack.len() as u32

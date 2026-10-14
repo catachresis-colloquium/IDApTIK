@@ -32,8 +32,17 @@ pub struct SimState {
 impl SimState {
     /// Build a fresh run and ingest its startup events.
     pub fn new(cfg: RunConfig, seed: u32) -> Result<Self, String> {
-        let mut sim = GhostLobbySim::new(ghost_lobby(), cfg, seed)
-            .map_err(|e| format!("invalid scenario: {e:?}"))?;
+        Self::with_definition(ghost_lobby(), cfg, seed)
+    }
+
+    /// Build a fresh run of an explicit floor (the wired Ghost Lobby, say).
+    pub fn with_definition(
+        def: idaptik_core::scenario::ScenarioDefinition,
+        cfg: RunConfig,
+        seed: u32,
+    ) -> Result<Self, String> {
+        let mut sim =
+            GhostLobbySim::new(def, cfg, seed).map_err(|e| format!("invalid scenario: {e:?}"))?;
         let startup = sim.drain_events();
         let mut state = Self {
             sim,
@@ -168,11 +177,21 @@ impl CommandQueue {
 pub struct SimDriverPlugin {
     pub cfg: RunConfig,
     pub seed: u32,
+    /// Play the played floor: the Ghost Lobby with its signal network
+    /// attached (ADR-0012), started from the roof (`scenario::rooftop`).
+    /// Off for the parity tests, which replay the canonical unwired floor.
+    pub wired: bool,
 }
 
 impl Plugin for SimDriverPlugin {
     fn build(&self, app: &mut App) {
-        let state = SimState::new(self.cfg, self.seed)
+        // The played floor starts on the roof (see `scenario::rooftop`).
+        let def = if self.wired {
+            idaptik_core::scenario::ghost_lobby_rooftop()
+        } else {
+            ghost_lobby()
+        };
+        let state = SimState::with_definition(def, self.cfg, self.seed)
             .expect("the canonical Ghost Lobby definition is valid");
         let visual = VisualBuffers::primed(&state.sim);
         app.insert_resource(state)

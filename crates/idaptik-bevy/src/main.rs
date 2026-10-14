@@ -72,6 +72,10 @@ struct Cli {
     /// Reduce motion effects
     #[arg(long)]
     reduced_motion: bool,
+
+    /// Play the canonical Ghost Lobby without its signal network
+    #[arg(long)]
+    unwired: bool,
 }
 
 fn main() -> AppExit {
@@ -96,14 +100,34 @@ fn main() -> AppExit {
     };
 
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins.set(window_plugin));
+    // No audio yet: Bevy's audio plugin opens the default output device at
+    // startup even when nothing plays, which grabs it from the desktop's
+    // sound server. Add it back when the game has sound.
+    app.add_plugins(
+        DefaultPlugins
+            .set(window_plugin)
+            .disable::<bevy::audio::AudioPlugin>(),
+    );
 
     if let Some(netplay_cfg) = netplay_config {
         // Multiplayer mode
         app.add_plugins(idaptik_bevy::netplay::NetplayPlugin::new(netplay_cfg));
     } else {
         // Local mode
-        app.add_plugins(SimDriverPlugin { cfg, seed });
+        app.add_plugins(SimDriverPlugin {
+            cfg,
+            seed,
+            wired: !cli.unwired,
+        });
+        // In the background, redraw ten times a second, not sixty: the sim's
+        // fixed timestep catches up, so play is unaffected, but the game stops
+        // competing with whatever you switched to.
+        app.insert_resource(bevy::winit::WinitSettings {
+            focused_mode: bevy::winit::UpdateMode::Continuous,
+            unfocused_mode: bevy::winit::UpdateMode::reactive_low_power(
+                std::time::Duration::from_millis(100),
+            ),
+        });
         app.add_plugins(FrontendPlugin);
     }
 

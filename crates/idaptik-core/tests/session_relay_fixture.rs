@@ -77,6 +77,7 @@ fn command_fixture_covers_the_whole_alphabet() {
         "Unpivot",
         "NetSsh",
         "NetHack",
+        "Signal",
         "ForceCrisis",
         "ForceExtract",
         "ForceFail",

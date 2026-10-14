@@ -328,7 +328,8 @@ pub fn door_opens_of(state: &RuntimeState) -> [f64; MAX_DOORS] {
     );
     let mut out = [0.0; MAX_DOORS];
     for (slot, door) in state.doors.iter().take(MAX_DOORS).enumerate() {
-        out[slot] = door.open;
+        // A picked lock leaves its door standing open.
+        out[slot] = if door.unlocked { 1.0 } else { door.open };
     }
     out
 }

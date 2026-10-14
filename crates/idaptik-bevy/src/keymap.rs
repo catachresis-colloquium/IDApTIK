@@ -23,6 +23,13 @@ const JUMP: &[KeyCode] = &[KeyCode::KeyW, KeyCode::ArrowUp, KeyCode::Space];
 /// Decode this frame's keyboard state into queued commands. Returns `true` if
 /// the user asked to quit (Escape).
 pub fn decode(keys: &ButtonInput<KeyCode>, queue: &mut CommandQueue) -> bool {
+    decode_infiltrator(keys, queue);
+    decode_hacker(keys, queue);
+    decode_session(keys, queue)
+}
+
+/// The infiltrator's body: movement, interact, jump, throw.
+pub fn decode_infiltrator(keys: &ButtonInput<KeyCode>, queue: &mut CommandQueue) {
     // Held movement buttons.
     sync_hold(keys, queue, LEFT, Button::Left);
     sync_hold(keys, queue, RIGHT, Button::Right);
@@ -40,7 +47,10 @@ pub fn decode(keys: &ButtonInput<KeyCode>, queue: &mut CommandQueue) -> bool {
     if keys.just_pressed(KeyCode::KeyQ) {
         queue.push(Command::ThrowUsb);
     }
+}
 
+/// The hacker's verbs: the four uplinks and the pivots.
+pub fn decode_hacker(keys: &ButtonInput<KeyCode>, queue: &mut CommandQueue) {
     // Uplink actions.
     for (code, kind) in [
         (KeyCode::Digit1, ActionKind::Camera),
@@ -70,7 +80,10 @@ pub fn decode(keys: &ButtonInput<KeyCode>, queue: &mut CommandQueue) -> bool {
     if keys.just_pressed(KeyCode::KeyX) {
         queue.push(Command::Unpivot);
     }
+}
 
+/// Pause, restart and quit. Returns `true` if the user asked to quit.
+pub fn decode_session(keys: &ButtonInput<KeyCode>, queue: &mut CommandQueue) -> bool {
     // Session: Tab pause (pause moved off `p` to make room for the pivots),
     // R restart, Escape quit.
     if keys.just_pressed(KeyCode::Tab) {
@@ -107,12 +120,21 @@ fn sync_hold(
 /// The windowed input system: decode the keyboard into the command queue,
 /// and toggle Net View on `N` (a screen switch, not a gameplay `Command`, so
 /// it bypasses `CommandQueue` entirely).
+///
+/// With both seats on screen the keyboard is the infiltrator's and the mouse
+/// the hacker's (see `seats`). With one, keys follow the seat being played:
+/// the infiltrator's body only moves while you play the infiltrator, and `E`
+/// while playing the hacker is the hacker's own (it opens the van deck — see
+/// `screen`). `Esc` steps out of a screen rather than quitting while one is
+/// open.
 pub fn keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut queue: ResMut<CommandQueue>,
     mut exit: MessageWriter<AppExit>,
     mode: Res<State<AppMode>>,
     mut next_mode: ResMut<NextState<AppMode>>,
+    seats: Option<Res<crate::seats::Seats>>,
+    screen: Option<Res<crate::screen::Screen>>,
 ) {
     if keys.just_pressed(KeyCode::KeyN) {
         next_mode.set(match mode.get() {
@@ -120,7 +142,14 @@ pub fn keyboard_input(
             AppMode::NetView => AppMode::GhostLobby,
         });
     }
-    if decode(&keys, &mut queue) {
+    if crate::seats::keys_drive_infiltrator(seats.as_deref()) {
+        decode_infiltrator(&keys, &mut queue);
+    }
+    decode_hacker(&keys, &mut queue);
+    let quit = decode_session(&keys, &mut queue);
+    let in_screen = screen
+        .is_some_and(|s| s.infiltrator.phase != crate::screen::Phase::Closed || s.hacker.on());
+    if quit && !in_screen {
         exit.write(AppExit::Success);
     }
 }

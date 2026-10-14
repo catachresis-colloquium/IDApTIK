@@ -16,14 +16,29 @@
 //!   (laid out data-driven from the room definitions so a second floor row
 //!   slots in above), door slabs, camera view cones, the player and Billy.
 //! * [`hud`] — status line, meter bars, event log tail and the result overlay.
+//! * [`seats`] — both seats at once: the window split between the
+//!   infiltrator's floor and the hacker's van, one camera each, the hacker's
+//!   deck as a layer over the van.
+//! * [`screen`] / [`deck`] — the consoles' schematics, and the deck's card
+//!   for acting on a selected device.
 
+pub mod art;
+pub mod backdrop;
+pub mod cones;
+pub mod deck;
 pub mod driver;
+pub mod fonts;
 pub mod hud;
 pub mod keymap;
 pub mod net_view;
 pub mod netplay;
+pub mod palette;
+pub mod pixel;
 pub mod scene;
+pub mod screen;
+pub mod seats;
 pub mod sprites;
+pub mod wiring;
 
 use bevy::prelude::*;
 
@@ -37,21 +52,46 @@ pub struct FrontendRenderPlugin;
 impl Plugin for FrontendRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<net_view::AppMode>()
-            .add_systems(Startup, (scene::setup_scene, hud::setup_hud))
+            .add_systems(
+                Startup,
+                (
+                    scene::setup_scene,
+                    fonts::install_ui_font,
+                    backdrop::setup_backdrop,
+                    art::setup_art
+                        .after(scene::setup_scene)
+                        .after(backdrop::setup_backdrop),
+                    cones::setup_cones,
+                    hud::setup_hud,
+                ),
+            )
             .add_systems(
                 Update,
                 (
                     scene::sync_doors,
                     scene::sync_player,
+                    scene::follow_camera.after(scene::sync_player),
                     scene::sync_billy,
                     scene::sync_props,
-                    scene::draw_camera_cones,
+                    cones::draw_cones,
+                    art::animate_art,
+                    art::sync_room_light,
+                    art::animate_hacker,
+                    fonts::crisp_text,
                     hud::update_meters,
                     hud::update_status_text,
                     hud::update_log_text,
                     hud::update_result_text,
                 )
                     .run_if(in_state(net_view::AppMode::GhostLobby)),
+            )
+            // The split runs in every mode: Net View takes the whole window.
+            .add_systems(
+                Update,
+                (
+                    seats::layout_seats.before(scene::follow_camera),
+                    deck::place_in_panes.after(seats::layout_seats),
+                ),
             );
     }
 }
@@ -64,6 +104,45 @@ impl Plugin for FrontendPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(FrontendRenderPlugin)
             .init_resource::<net_view::NetViewDrag>()
+            .init_resource::<wiring::Wiring>()
+            .init_resource::<screen::Screen>()
+            .init_resource::<screen::DeckSelection>()
+            .insert_resource(seats::Seats::new())
+            .add_systems(
+                Startup,
+                (
+                    wiring::setup_wiring,
+                    screen::setup_deck_glass,
+                    deck::setup_deck,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
+                    screen::screen_keys,
+                    wiring::wiring_keys,
+                    wiring::wiring_mouse,
+                    screen::deck_click,
+                    deck::card_press,
+                    wiring::sync_wiring,
+                    wiring::draw_wiring,
+                    screen::screen_text,
+                    screen::draw_screen,
+                )
+                    .chain()
+                    .before(seats::layout_seats)
+                    .before(scene::follow_camera)
+                    .run_if(in_state(net_view::AppMode::GhostLobby)),
+            )
+            // The deck's panel and bezel are UI; its schematic is a camera.
+            // Both must use this frame's layout, or the two halves part
+            // while the divider moves.
+            .add_systems(
+                Update,
+                deck::update_deck
+                    .after(seats::layout_seats)
+                    .run_if(in_state(net_view::AppMode::GhostLobby)),
+            )
             .add_systems(
                 // Decode the keyboard right before the fixed main loop so a
                 // press lands on this frame's tick, not the next frame's.
@@ -84,6 +163,7 @@ impl Plugin for FrontendPlugin {
             .add_systems(
                 OnEnter(net_view::AppMode::NetView),
                 (
+                    scene::centre_camera,
                     net_view::hide_ghost_lobby_ui,
                     net_view::setup_net_view,
                     net_view::setup_net_hud,

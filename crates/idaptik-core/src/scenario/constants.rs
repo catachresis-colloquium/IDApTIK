@@ -410,3 +410,32 @@ pub const OPERATOR_TRACE_THRESHOLD: u32 = 400;
 // expensive existing uplink action (Vacuum).
 pub const NET_HACK_COST: f64 = 25.0;
 pub const NET_HACK_COOLDOWN: f64 = 8.0;
+
+// ---------------------------------------------------------------------------
+// Outside the building (a floor with an `ExteriorDef`).
+// ---------------------------------------------------------------------------
+/// A room's height, floor line to ceiling.
+pub const ROOM_H: f64 = 150.0;
+/// Canvas y of the roof's walking surface: the top of the roof slab above
+/// the ceiling line.
+pub const ROOF_Y: f64 = FLOOR - ROOM_H - 21.0;
+/// The parapet at the roof's far end: its width (it stops the body) and how
+/// far it stands above the roof.
+pub const PARAPET_W: f64 = 8.0;
+pub const PARAPET_H: f64 = 26.0;
+/// How close (body centre) to the rope's top or foot to take hold of it.
+pub const ROPE_REACH: f64 = 20.0;
+/// Abseiling and climbing speed, canvas units a second.
+pub const ROPE_SPEED: f64 = 120.0;
+/// How close (body centre) to a hatch to drop through it.
+pub const HATCH_REACH: f64 = 18.0;
+/// How close to the front door, from the street, to pick its lock.
+pub const PICK_REACH: f64 = 26.0;
+/// Seconds of picking that open the front door.
+pub const PICK_TIME: f64 = 4.0;
+/// The noise lockpicking makes (a scratch, not a bang).
+pub const NOISE_PICK: f64 = 0.3;
+/// The hacker's support outside: the van is in plain sight.
+pub const EXTERIOR_SUPPORT: f64 = 0.9;
+/// The street's far end (body left edge), well beyond the front door.
+pub const STREET_LO: f64 = -230.0;

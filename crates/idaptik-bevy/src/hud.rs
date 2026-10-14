@@ -39,11 +39,11 @@ impl Meter {
 
     fn color(self) -> Color {
         match self {
-            Meter::Support => Color::srgb(0.25, 0.8, 0.4),
-            Meter::Bandwidth => Color::srgb(0.25, 0.75, 0.85),
-            Meter::Alert => Color::srgb(0.9, 0.3, 0.25),
-            Meter::Isolation => Color::srgb(0.8, 0.35, 0.85),
-            Meter::Trace => Color::srgb(0.95, 0.8, 0.25),
+            Meter::Support => crate::palette::PHOSPHOR,
+            Meter::Bandwidth => crate::palette::COBALT,
+            Meter::Alert => crate::palette::ALARM,
+            Meter::Isolation => crate::palette::DUST,
+            Meter::Trace => crate::palette::NEON,
         }
     }
 
@@ -84,6 +84,9 @@ pub struct LogText;
 /// Marker: the end-of-run overlay.
 #[derive(Component)]
 pub struct ResultText;
+/// Marker: the panel behind the end-of-run overlay, shown only once it ends.
+#[derive(Component)]
+pub struct ResultPanel;
 /// Marker: the Ghost Lobby HUD's top-level entities, shown/hidden as a block
 /// alongside `scene::GhostLobbySceneMarker`.
 #[derive(Component)]
@@ -92,7 +95,7 @@ pub struct GhostLobbyHudMarker;
 fn hud_text(size: f32) -> (TextFont, TextColor) {
     (
         TextFont::from_font_size(size),
-        TextColor(Color::srgb(0.8, 0.83, 0.9)),
+        TextColor(crate::palette::BONE),
     )
 }
 
@@ -102,6 +105,7 @@ pub fn setup_hud(mut commands: Commands) {
     commands
         .spawn((
             GhostLobbyHudMarker,
+            crate::deck::InPane::hud(Some(10.0), Some(8.0), None, None),
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(8.0),
@@ -135,7 +139,7 @@ pub fn setup_hud(mut commands: Commands) {
                             height: Val::Px(10.0),
                             ..Default::default()
                         },
-                        BackgroundColor(Color::srgb(0.12, 0.13, 0.16)),
+                        BackgroundColor(crate::palette::SLATE),
                     ))
                     .with_children(|bar| {
                         bar.spawn((
@@ -154,6 +158,7 @@ pub fn setup_hud(mut commands: Commands) {
 
     commands.spawn((
         GhostLobbyHudMarker,
+        crate::deck::InPane::hud(Some(10.0), None, Some(10.0), Some(46.0)),
         Node {
             position_type: PositionType::Absolute,
             bottom: Val::Px(46.0),
@@ -167,6 +172,7 @@ pub fn setup_hud(mut commands: Commands) {
 
     commands.spawn((
         GhostLobbyHudMarker,
+        crate::deck::InPane::hud(Some(10.0), None, Some(10.0), Some(8.0)),
         Node {
             position_type: PositionType::Absolute,
             bottom: Val::Px(8.0),
@@ -175,27 +181,49 @@ pub fn setup_hud(mut commands: Commands) {
         },
         Text::new(
             "A/D move  Shift sprint  W/Space jump  S crouch/hide  E interact  Q throw  \
-             1-4 uplink  p bridge  P isp  g grid  x back  Tab pause  R restart  Esc quit",
+             mouse: the hacker  H deck  B both/floor/van  Tab pause  R restart  Esc quit",
         ),
         TextFont::from_font_size(11.0),
-        TextColor(Color::srgb(0.5, 0.53, 0.6)),
+        TextColor(crate::palette::DUST),
     ));
 
-    commands.spawn((
-        GhostLobbyHudMarker,
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Percent(40.0),
-            width: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            ..Default::default()
-        },
-        Text::new(""),
-        TextFont::from_font_size(22.0),
-        TextColor(Color::srgb(0.95, 0.9, 0.7)),
-        TextLayout::justify(Justify::Center),
-        ResultText,
-    ));
+    // The result sits on its own dark panel, above every other UI node, so
+    // it reads over any scene.
+    commands
+        .spawn((
+            GhostLobbyHudMarker,
+            GlobalZIndex(100),
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Percent(36.0),
+                width: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                ..Default::default()
+            },
+        ))
+        .with_children(|row| {
+            row.spawn((
+                ResultPanel,
+                Node {
+                    display: Display::None,
+                    padding: UiRect::axes(Val::Px(28.0), Val::Px(16.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    max_width: Val::Percent(80.0),
+                    ..Default::default()
+                },
+                BackgroundColor(crate::palette::PITCH.with_alpha(0.96)),
+                BorderColor::all(crate::palette::SLAB),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    Text::new(""),
+                    TextFont::from_font_size(22.0),
+                    TextColor(crate::palette::NEON),
+                    TextLayout::justify(Justify::Center),
+                    ResultText,
+                ));
+            });
+        });
 }
 
 /// Drive the meter fills from sim state.
@@ -255,10 +283,24 @@ pub fn update_log_text(sim: Res<SimState>, mut text: Query<&mut Text, With<LogTe
 }
 
 /// The end-of-run overlay: grade, score and debrief summary once the sim ends.
-pub fn update_result_text(sim: Res<SimState>, mut text: Query<&mut Text, With<ResultText>>) {
+pub fn update_result_text(
+    sim: Res<SimState>,
+    mut text: Query<&mut Text, With<ResultText>>,
+    mut panel: Query<&mut Node, With<ResultPanel>>,
+) {
     let Ok(mut text) = text.single_mut() else {
         return;
     };
+    if let Ok(mut node) = panel.single_mut() {
+        let display = if sim.sim.is_ended() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if node.display != display {
+            node.display = display;
+        }
+    }
     if !sim.sim.is_ended() {
         if !text.0.is_empty() {
             text.0.clear();

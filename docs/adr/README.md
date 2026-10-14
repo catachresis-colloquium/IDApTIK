@@ -16,6 +16,7 @@ asserted in the README and quietly contradicted later.
 | [0009](0009-enaction-kernel-dependency-direction.md) | Enaction kernel dependency direction; IDApTIK publishes `idaptik/esm/v1` | Accepted |
 | [0010](0010-cac-kernel-grown-in-idaptik-core.md) | The CAC kernel is grown in `idaptik-core`, not extracted yet | Accepted |
 | [0011](0011-cognitive-model-documented-in-the-open.md) | Cognitive-model work is documented in the open | Accepted |
+| [0012](0012-signal-network.md) | A signal network for re-wiring the building lives in `idaptik-core` | Proposed |
 
 New ADRs: copy the format of an existing one, take the next number, and add a row
 above.

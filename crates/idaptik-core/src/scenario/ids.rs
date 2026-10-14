@@ -53,6 +53,10 @@ id_newtype!(
 );
 id_newtype!(CircuitId, "Stable id of a building power circuit.");
 id_newtype!(ZoneId, "Stable id of a building network zone.");
+id_newtype!(
+    SignalId,
+    "Stable id of a device in a signal network (door, relay, console, ...)."
+);
 
 /// Resolves content ids to `Vec` indices once, so the simulation can index
 /// directly. Built at [`crate::scenario::GhostLobbySim`] construction and after

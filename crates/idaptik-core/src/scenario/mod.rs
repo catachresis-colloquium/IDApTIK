@@ -23,6 +23,7 @@ pub mod agents;
 pub mod building;
 pub mod command;
 pub mod common;
+pub mod console;
 pub mod constants;
 pub mod definition;
 pub mod event;
@@ -32,6 +33,8 @@ pub mod ids;
 pub mod mathf;
 pub mod outcome;
 pub mod rng;
+pub mod rooftop;
+pub mod signal;
 pub mod sim;
 pub mod snapshot;
 pub mod state;
@@ -77,6 +80,7 @@ pub use ids::{CameraId, DoorId, HideSpotId, IdIndex, ObjectiveId, RoomId};
 pub use mathf::TICK_DT;
 pub use outcome::{Debrief, ScoreBreakdown, Tag, debrief_text, grade_for};
 pub use rng::{InitRoll, Mulberry32, roll_init};
+pub use rooftop::ghost_lobby_rooftop;
 pub use sim::GhostLobbySim;
 pub use snapshot::{
     DebriefExport, DefinitionExport, RuntimeSnapshot, SNAPSHOT_FORMAT, ScenarioExport,

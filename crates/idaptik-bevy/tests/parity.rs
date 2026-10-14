@@ -93,6 +93,7 @@ fn bevy_run() -> (Vec<SimEvent>, RuntimeSnapshot) {
     app.add_plugins(SimDriverPlugin {
         cfg: RunConfig::standard(),
         seed: SEED,
+        wired: false,
     });
     for tick in 0..TICKS {
         app.world_mut()
