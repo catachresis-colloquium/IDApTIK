@@ -34,7 +34,7 @@ libm = "0.2"
 ratatui = "0.30"
 crossterm = "0.29"
 clap = { version = "4", features = ["derive"] }
-bevy = "0.19"
+bevy = "0.20"
 bevy_winit = { version = "0.19.1", default-features = false, features = ["wayland-csd-adwaita-notitle"] }
 # The client-side session transport (ADR-0006 §2): async runtime + WebSocket.
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
