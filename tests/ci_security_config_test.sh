@@ -92,6 +92,14 @@ fail() {
   failures=$((failures + 1))
 }
 
+# The failure text a human needs is on STDERR, and on this repository's runners
+# stderr lands in a log blob that is not always reachable (see the annotation
+# note above). So the evidence -- not just the assertion name -- goes into the
+# annotation too. `%0A`-free: annotate() already folds newlines into " | ".
+capture() { # rest = command; prints its combined output, never fails
+  "$@" 2>&1 || true
+}
+
 # stdout is discarded but STDERR IS NOT. Every extractor below prints its own
 # denominator to stderr, and a printed denominator that nobody can see is worth
 # exactly as much as no denominator at all: the console transcript is the
@@ -108,7 +116,7 @@ expect_pass() { # $1 description, rest = command
     # read as "expected success: /home/runner/work/..." and named nothing.
     # `$desc` is captured before the shift for exactly this reason.
     printf '  FAIL: expected success: %s\n' "$desc" >&2
-    annotate error "ci-security-config: expected success: $desc"
+    annotate error "ci-security-config: expected success: $desc -- $(capture "$@" | tail -c 600)"
     "$@" 2>&1 | sed 's/^/        /' >&2 || true
     failures=$((failures + 1))
   fi
@@ -121,7 +129,7 @@ expect_fail() { # $1 description, $2 expected output, rest = command
     fail "expected failure: $desc (a mutant that no longer mutates reads as a pass)"
   elif ! printf '%s' "$out" | grep -qF "$want"; then
     printf '  FAIL: %s failed for the wrong reason (wanted %s):\n%s\n' "$desc" "$want" "$out" >&2
-    annotate error "ci-security-config: $desc failed for the wrong reason (wanted: $want)"
+    annotate error "ci-security-config: $desc failed for the wrong reason (wanted: $want) -- got: $(printf '%s' "$out" | tail -c 600)"
     failures=$((failures + 1))
   else
     note "$desc"
