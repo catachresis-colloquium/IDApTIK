@@ -75,6 +75,18 @@ jobs:
       - name: Verify actions.lock against every workflow
         run: |
           set -euo pipefail
+          # Named here as well as in the step title. The title is a claim that
+          # this step checks .github/workflows/actions.lock against every
+          # workflow, and scripts/doc_claims_check.sh requires a claim to be
+          # visible in the body rather than resting on the reader's trust in a
+          # helper's internals. The guard below is the honest way to satisfy
+          # that: it names the file the step is about and fails closed if the
+          # lockfile itself is gone, which previously surfaced only as a
+          # confusing error from inside the checker.
+          test -f .github/workflows/actions.lock || {
+            echo "::error::.github/workflows/actions.lock is missing; there is nothing to verify against"
+            exit 1
+          }
           test -x scripts/check-lock-sync.sh || {
             echo "::error::scripts/check-lock-sync.sh is not executable (mode $(stat -c %a scripts/check-lock-sync.sh))"
             echo "This gate is invoked as ./scripts/... on purpose: 'bash script' ignores the"
