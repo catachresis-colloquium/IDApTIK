@@ -56,6 +56,12 @@ L	crates/idaptik-core/src/scenario/building/mod.rs	building simulation
 L	crates/idaptik-core/src/scenario/building/sim.rs	building tick
 L	crates/idaptik-core/src/scenario/building/graph.rs	building adjacency
 L	crates/idaptik-core/src/scenario/building/network.rs	building network overlay
+L	crates/idaptik-core/src/scenario/console.rs	consoles as equipment and the screen view a seat is shown; observed by tests/consoles.rs
+L	crates/idaptik-core/src/scenario/rooftop.rs	the played Ghost Lobby begun from the roof; the start state every run is graded from
+L	crates/idaptik-core/src/scenario/signal/mod.rs	signal-network model (ADR-0012): devices wired output-to-input and re-wired in play
+L	crates/idaptik-core/src/scenario/signal/sim.rs	deterministic signal-network runtime; replay-visible, and observed directly by tests/signal_network.rs
+L	crates/idaptik-core/src/scenario/sim/console.rs	per-tick console interaction inside the Ghost Lobby run
+L	crates/idaptik-core/src/scenario/sim/signal.rs	the seam that hosts the signal network inside the run tick
 L	crates/idaptik-core/src/companion/sim.rs	Moletaire companion simulation
 L	crates/idaptik-core/src/companion/hunger.rs	companion hunger model
 L	crates/idaptik-core/src/companion/music.rs	companion music model
@@ -84,6 +90,7 @@ D	crates/idaptik-core/src/scenario/tuning.rs	tuning tables
 D	crates/idaptik-core/src/scenario/definition.rs	serde ScenarioDefinition
 D	crates/idaptik-core/src/scenario/ghost_lobby.rs	Ghost Lobby content
 D	crates/idaptik-core/src/scenario/building/exchange_house.rs	Exchange House content
+D	crates/idaptik-core/src/scenario/signal/ghost_lobby_wiring.rs	the Ghost Lobby's devices as a signal-network fixture, not authored level design
 D	crates/idaptik-core/src/companion/definition.rs	serde CompanionDefinition
 B	crates/idaptik-ffi/src/lib.rs	the C ABI; modelled in Idris2 (#117), conformance-tested in Zig
 B	crates/idaptik-net/src/envelope.rs	wire envelope encoding
@@ -110,7 +117,12 @@ P	crates/idaptik-tui/src/net/render.rs	TUI net rendering
 P	crates/idaptik-tui/src/render.rs	TUI rendering
 P	crates/idaptik-tui/src/replay.rs	TUI replay driver
 P	crates/idaptik-tui/src/script.rs	TUI scripted input
+P	crates/idaptik-bevy/src/art.rs	Bevy art direction for the playable floor; render-only
+P	crates/idaptik-bevy/src/backdrop.rs	Bevy room dressing built from modular pieces; render-only
+P	crates/idaptik-bevy/src/cones.rs	Bevy vision cones as pixel art; render-only
+P	crates/idaptik-bevy/src/deck.rs	Bevy deck controls and split chrome
 P	crates/idaptik-bevy/src/driver.rs	Bevy driver
+P	crates/idaptik-bevy/src/fonts.rs	Bevy pixel-font wiring shared by every text site
 P	crates/idaptik-bevy/src/hud.rs	Bevy HUD
 P	crates/idaptik-bevy/src/keymap.rs	Bevy keymap
 P	crates/idaptik-bevy/src/lib.rs	Bevy crate root
@@ -121,20 +133,26 @@ P	crates/idaptik-bevy/src/netplay/mod.rs	Bevy netplay re-exports
 P	crates/idaptik-bevy/src/netplay/plugin.rs	Bevy netplay plugin
 P	crates/idaptik-bevy/src/netplay/ui/mod.rs	Bevy netplay UI re-exports
 P	crates/idaptik-bevy/src/netplay/ui/role_select.rs	Bevy role-select UI
+P	crates/idaptik-bevy/src/palette.rs	Bevy master palette; the seat-colour law is audited in one file
+P	crates/idaptik-bevy/src/pixel.rs	Bevy pixel-art primitives: bitmap font, tiles, stepped shapes
 P	crates/idaptik-bevy/src/scene.rs	Bevy scene
+P	crates/idaptik-bevy/src/screen.rs	Bevy screens: using a console and drawing what it shows
+P	crates/idaptik-bevy/src/seats.rs	Bevy two-seat split: the infiltrator's floor and the hacker's van
 P	crates/idaptik-bevy/src/sprites.rs	Bevy sprites
+P	crates/idaptik-bevy/src/wiring.rs	Bevy wiring overlay; draws and re-wires the signal network
 T	crates/idaptik-bevy/src/main.rs	binary entry point
 T	crates/idaptik-tui/src/main.rs	binary entry point
 T	crates/idaptik-net/src/bin/loopback_seat.rs	binary entry point
 T	crates/idaptik-net/src/bin/netplay.rs	binary entry point
-T	crates/idaptik-core/examples/package-runner.rs	example binary
 T	crates/idaptik-core/tests/acceptance_endings.rs	test
 T	crates/idaptik-core/tests/acceptance_misdirect_pickpocket.rs	test
 T	crates/idaptik-core/tests/actor_registry.rs	test
 T	crates/idaptik-core/tests/agent_fusion.rs	test
+T	crates/idaptik-core/tests/arrival_clock.rs	test
 T	crates/idaptik-core/tests/billy_doors.rs	test
 T	crates/idaptik-core/tests/building_runtime.rs	test
 T	crates/idaptik-core/tests/common/mod.rs	test support
+T	crates/idaptik-core/tests/consoles.rs	test
 T	crates/idaptik-core/tests/golden_reset.rs	test
 T	crates/idaptik-core/tests/grounded_slice.rs	test
 T	crates/idaptik-core/tests/interp.rs	test
@@ -147,6 +165,7 @@ T	crates/idaptik-core/tests/replay_determinism.rs	test
 T	crates/idaptik-core/tests/rng_vectors.rs	test
 T	crates/idaptik-core/tests/scoring_grades.rs	test
 T	crates/idaptik-core/tests/session_relay_fixture.rs	test
+T	crates/idaptik-core/tests/signal_network.rs	test
 T	crates/idaptik-core/tests/snapshot_equivalence.rs	test
 T	crates/idaptik-core/tests/supervised_coverage.rs	test
 T	crates/idaptik-core/tests/validate_ghost_lobby.rs	test
