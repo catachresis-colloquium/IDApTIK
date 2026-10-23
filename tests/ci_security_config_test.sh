@@ -710,8 +710,18 @@ check_mergify_conditions() { # $1 mergify config, $2 lock-sync gate workflow
       # Strip YAML quoting. `"#check-failure = 0"` MUST be quoted in YAML,
       # because a leading `#` otherwise starts a comment and the condition
       # silently becomes an empty list item. Matching the unquoted form only
-      -- as the first draft did -- counts zero of them and fails a correct
+      # -- as the first draft did -- counts zero of them and fails a correct
       # policy, which is how a check ends up being "fixed" by deleting it.
+      #
+      # MEASURED 2026-10-23: this line lost its leading `#` and the program
+      # below became a SYNTAX ERROR -- `awk: cmd. line:11: ... -- as the first
+      # draft did ... ^ syntax error`. It nonetheless ran clean in the
+      # development container, which ships mawk 1.3.4 (20200120): that parser
+      # reads `-- as ...` as an expression and carries on. ubuntu-latest does
+      # not, so check_mergify_conditions bailed out of EVERY arm and all eight
+      # mergify assertions failed on the runner while all eight passed locally
+      # at the same commit. A suite green under one awk and red under another
+      # is a coincidence, not a gate. Do not reintroduce a bare `--` line.
       if (c ~ /^".*"$/) { sub(/^"/, "", c); sub(/"$/, "", c) }
       nconds++
       if (c ~ /^author[[:space:]]*=[[:space:]]*dependabot/) nauthor++
