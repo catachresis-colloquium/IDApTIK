@@ -106,7 +106,15 @@ impl GhostLobbySim {
         } else {
             self.preset.player_speed
         };
-        let speed = base * if crouch { c::CROUCH_SPEED } else { 1.0 };
+        // Released water is knee-deep on the floor line (ADR-0013): it slows
+        // the player to a wade wherever it has been let in. The roof never
+        // floods, and a dry floor keeps the speed bit-identical to before.
+        let wade = if self.state.player.place == Place::Floor {
+            self.wade_factor_at(self.state.player.x)
+        } else {
+            1.0
+        };
+        let speed = base * if crouch { c::CROUCH_SPEED } else { 1.0 } * wade;
         let target_vx = dir * speed;
         let accel = if dir != 0.0 {
             c::ACCEL_DRIVE
@@ -200,6 +208,17 @@ impl GhostLobbySim {
                 c::NOISE_WALK_K * movement_noise
             };
             self.state.player.noise = self.state.player.noise.max(n);
+        }
+        // Wading through released water is loud: the same flood that hides a
+        // hack announces the wader to every ear in the room. A floor with no
+        // water contributes nothing here.
+        if self.state.player.place == Place::Floor
+            && self.state.player.vx.abs() > c::NOISE_MOVE_MIN_VX
+        {
+            let wade_noise = self.wade_noise_at(self.state.player.x);
+            if wade_noise > 0.0 {
+                self.state.player.noise = self.state.player.noise.max(wade_noise);
+            }
         }
         self.state.player.noise = (self.state.player.noise - c::NOISE_DECAY * dt).max(0.0);
     }
@@ -921,8 +940,18 @@ impl GhostLobbySim {
         }
         let noise_invest = self.state.player.noise > self.actor.stats.invest_noise
             && dist(self.state.billy.x, self.state.player.x) < self.actor.stats.invest_dist;
-        if sees || noise_invest {
-            self.state.billy.last_known_x = self.state.player.x;
+        // Building awareness (ADR-0013): when the guard neither sees the
+        // player nor hears their footsteps, the strongest unusual noise he
+        // can hear — splashing water, arcing shorts, a sounding alarm, a
+        // mole's decoy — pulls his attention to where *it* was heard, never
+        // to where the player is. His own ears are the only input.
+        let infra_pull = if sees || noise_invest {
+            None
+        } else {
+            self.infra_investigation_target()
+        };
+        if sees || noise_invest || infra_pull.is_some() {
+            self.state.billy.last_known_x = infra_pull.unwrap_or(self.state.player.x);
             self.set_billy_mode(if sees {
                 BillyMode::Pursue
             } else {

@@ -73,6 +73,44 @@ pub enum Event {
     Signal {
         signal: crate::scenario::signal::sim::SignalEvent,
     },
+    /// A water zone released and began to fill. `cause` is the provenance the
+    /// player reads: a valve they opened, or a pump they killed without
+    /// knowing what it held up (ADR-0013).
+    WaterReleased {
+        zone: String,
+        room: RoomId,
+        cause: crate::scenario::infra::ReleaseCause,
+    },
+    /// Rising water shorted a room's electrics: `devices` nodes joined the
+    /// dead set in one failure (ADR-0013).
+    InfraShorted {
+        zone: String,
+        room: RoomId,
+        devices: usize,
+    },
+    /// An alarm started or stopped sounding (ADR-0013).
+    AlarmChanged {
+        alarm: String,
+        room: RoomId,
+        sounding: bool,
+    },
+    /// A guard perceived an infrastructure fact through its own senses — the
+    /// player-visible record that the guard reacts to *observations*, never
+    /// to the hidden actions behind them (ADR-0013). Announce-once per
+    /// episode.
+    GuardObserved {
+        kind: crate::scenario::infra::ObservationKind,
+        room: RoomId,
+    },
+    /// Something the hosted Moletaire companion did, as its own typed event
+    /// (ADR-0013). Rendered selectively; the rest is telemetry.
+    Mole {
+        event: crate::companion::MoleEvent,
+    },
+    /// An order to the hosted companion was refused.
+    MoleDenied {
+        reason: crate::scenario::common::MoleDenyReason,
+    },
     /// A door hold became active.
     DoorHoldActive { door: DoorId, duration: f64 },
     /// The contact note was secured.
@@ -375,6 +413,63 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
             let (text, severity) = signal_line(signal)?;
             line(text, severity, Log)
         }
+        Event::WaterReleased { room, cause, .. } => {
+            let text = match cause {
+                crate::scenario::infra::ReleaseCause::Valve => {
+                    format!("A valve cracks open — water starts into the {room}.")
+                }
+                crate::scenario::infra::ReleaseCause::PumpFailure => {
+                    format!("A pump dies and its valve fails open — water starts into the {room}.")
+                }
+            };
+            line(text, Warn, Log)
+        }
+        Event::InfraShorted { room, devices, .. } => line(
+            format!("Water reaches the {room}'s electrics — {devices} device(s) short out."),
+            Bad,
+            Log,
+        ),
+        Event::AlarmChanged {
+            room, sounding, ..
+        } => line(
+            if *sounding {
+                format!("An alarm sounds in the {room}.")
+            } else {
+                format!("The alarm in the {room} falls silent.")
+            },
+            if *sounding { Bad } else { Info },
+            Log,
+        ),
+        Event::GuardObserved { kind, room } => {
+            use crate::scenario::infra::ObservationKind as K;
+            let text = match kind {
+                K::Darkness => {
+                    format!("Billy: \"Who killed the lights?\" He checks toward the {room}.")
+                }
+                K::UnusualNoise => {
+                    format!("Billy hears something wrong coming from the {room}.")
+                }
+                K::Water => format!("Billy: \"There's water in the {room}.\""),
+                K::EquipmentFailure => {
+                    format!("Billy sees electrics sparking in the {room}.")
+                }
+                K::Alarm => format!("Billy hears the alarm going off in the {room}."),
+            };
+            line(text, Billy, Log)
+        }
+        Event::Mole { event } => {
+            let (text, severity) = mole_line(event)?;
+            line(text, severity, Log)
+        }
+        Event::MoleDenied { reason } => {
+            use crate::scenario::common::MoleDenyReason as M;
+            let why = match reason {
+                M::NotHosted => "this floor has no mole",
+                M::Gone => "the mole is gone",
+                M::Unavailable => "the mole cannot do that right now",
+            };
+            line(format!("Mole order refused — {why}."), Warn, Log)
+        }
         Event::ConsoleUsed { console, on } => line(
             if *on {
                 format!("You sit down at {console}.")
@@ -488,6 +583,40 @@ fn signal_line(e: &crate::scenario::signal::sim::SignalEvent) -> Option<(String,
             (format!("{device} {state}."), Severity::Info)
         }
         S::VacuumRouted { .. } => return None,
+    })
+}
+
+/// The log line for a hosted-companion event, or `None` for pure telemetry
+/// (movement completions, item shuffles and the vibration/scan feeds are the
+/// companion's own surfaces, not floor news).
+fn mole_line(e: &crate::companion::MoleEvent) -> Option<(String, Severity)> {
+    use crate::companion::MoleEvent as M;
+    Some(match e {
+        M::SynthSoundPlayed { sound } => (
+            format!("The mole plays {sound} — a diversion, somewhere ahead."),
+            Severity::Good,
+        ),
+        M::CableSabotaged { cable_id } => (
+            format!("The mole chews through a cable ({cable_id})."),
+            Severity::Good,
+        ),
+        M::TrapTriggered { .. } => (
+            "The mole's trap is dug and waiting.".into(),
+            Severity::Info,
+        ),
+        M::MoleDied { .. } => (
+            "The mole is gone. It does not come back.".into(),
+            Severity::Bad,
+        ),
+        M::HungerResistanceStarted => (
+            "The mole is starving and fighting its orders.".into(),
+            Severity::Warn,
+        ),
+        M::HungerResistanceEnded => (
+            "The mole settles back under control.".into(),
+            Severity::Info,
+        ),
+        _ => return None,
     })
 }
 
