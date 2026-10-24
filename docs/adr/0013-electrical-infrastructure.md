@@ -110,10 +110,16 @@ delivering; one event per feed transition, not per device) → loads (supply, th
 restart policy, then the ladder) → hazards (live by their own rule; one shock per
 contact).
 
-A backup engages against *last* tick's supply, so it can never bootstrap itself.
-Because a `Command` is applied before the tick, a cut cable and the UPS picking up
-the load it serves land in the same tick — a backed-up camera does not blink.
-That is a feature and it is asserted.
+A backup engages against *last* tick's primary supply — never against its own
+output, which would make it oscillate every other tick — and it spends its
+runtime *after* the tick it paid for, so a backup authored for one tick delivers
+one tick rather than none. Because a `Command` is applied before the tick, a cut
+cable and the UPS picking up the load it serves land in the same tick: a
+backed-up camera does not blink. That is a feature and it is asserted.
+
+Power also runs **before** the player's input is chosen, because it is the only
+system that can make the body unable to act on the same tick it acts: a first
+contact with live metal stuns now, not next tick.
 
 ### Restart behaviour is stated per device, never discovered
 
@@ -127,9 +133,16 @@ That is a feature and it is asserted.
   of warm-up (`Restarting { ticks }`) before it runs again.
 - **`Hold`** — the command survives with no warm-up. Lights and instruments.
 
-Two consequences fall out: a momentary or held wire that was live through an
-outage does **not** fire an edge when supply returns (the signal runtime remembers
-the level it saw), and a rewired load starts from rest rather than resuming.
+Three consequences fall out. A wire that was live through an outage does **not**
+fire an edge when supply returns, because the signal runtime remembers the level
+it saw — and a relay's cached edge bits are cleared rather than synchronised,
+since an edge that was never delivered is not one to replay. A pulse interrupted
+mid-flight is **not** cancelled: the mechanism cannot move while it is dark, so
+the countdown and the state to restore both survive, and the door finishes
+travelling when it has current again. And a rewired load starts from rest: the
+rewire drops the old warm-up *and* the claim that supply was already present, so
+the next tick sees a real rise and the authored delay applies again. Without
+that, routing would be a way to skip the restart policy a level states.
 
 ### Physical sabotage and logical rewiring are different commands
 

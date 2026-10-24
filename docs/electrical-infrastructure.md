@@ -93,7 +93,13 @@ Per device, required in the definition:
 - `hold` — no warm-up; it resumes the tick supply returns. Lights and instruments.
 
 Nothing replays an edge. A wire held high through an outage does not fire again
-when supply returns, and a rewired load starts from rest.
+when supply returns: the runtime keeps the level it saw, and a relay's cached
+edge bits are cleared rather than synchronised, because an edge that was never
+delivered is not one to replay. A pulse interrupted mid-flight is not cancelled —
+the mechanism cannot move while it is dark, so the countdown and the state to
+restore both survive it. And a rewired load starts from rest: the rewire drops
+the old warm-up and the claim that supply was already present, so the authored
+delay applies again instead of being bypassed.
 
 ## Supported effects and how to reach them
 
