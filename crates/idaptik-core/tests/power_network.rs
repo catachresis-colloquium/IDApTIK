@@ -5,8 +5,8 @@
 
 use idaptik_core::scenario::ids::{BreakerId, FeedId, HazardId, LoadId};
 use idaptik_core::scenario::power::sim::{
-    Fault, OffReason, PowerAccess, PowerCommand, PowerDenyReason, PowerEvent, PowerIndex, PowerOp,
-    PowerReadout, PowerSim, PowerSnapshot, POWER_SNAPSHOT_FORMAT,
+    Fault, OffReason, POWER_SNAPSHOT_FORMAT, PowerAccess, PowerCommand, PowerDenyReason,
+    PowerEvent, PowerIndex, PowerOp, PowerReadout, PowerSim, PowerSnapshot,
 };
 use idaptik_core::scenario::power::test_floor::{
     BRK_A, BRK_B, CAM_HALL, DOOR_EXIT, FAN_KITCHEN, FEED_A, FEED_B, MAINS_A, MAINS_B,
@@ -70,10 +70,7 @@ fn isolate(sim: &mut PowerSim, by: Seat, id: &str, open: bool) -> Vec<PowerEvent
 
 fn cut(sim: &mut PowerSim, by: Seat, id: &str) -> Vec<PowerEvent> {
     let access = all(sim);
-    let cmd = PowerCommand::CutCable {
-        by,
-        feed: feed(id),
-    };
+    let cmd = PowerCommand::CutCable { by, feed: feed(id) };
     sim.apply(&cmd, &access)
 }
 
@@ -125,8 +122,7 @@ fn the_committed_golden_matches_the_derived_network() {
 #[test]
 fn the_ums_seam_gates_on_the_format_tag() {
     assert!(load_power_network(POWER_TEST_FLOOR_JSON).is_ok());
-    let mut value: serde_json::Value =
-        serde_json::from_str(POWER_TEST_FLOOR_JSON).expect("parses");
+    let mut value: serde_json::Value = serde_json::from_str(POWER_TEST_FLOOR_JSON).expect("parses");
     value["format"] = serde_json::Value::String("idaptik-power/0".into());
     let text = serde_json::to_string(&value).expect("serializes");
     let err = load_power_network(&text).expect_err("the wrong format is refused");
@@ -148,17 +144,22 @@ fn the_floor_has_two_independent_feeds_and_one_backup_powered_device() {
     assert_eq!(spec.mode, BackupMode::Automatic);
     // And it is attached to the floor, not just to the network.
     assert!(powered_ghost_lobby().power.is_some());
-    assert!(idaptik_core::scenario::ghost_lobby::ghost_lobby().power.is_none());
+    assert!(
+        idaptik_core::scenario::ghost_lobby::ghost_lobby()
+            .power
+            .is_none()
+    );
 }
 
 #[test]
 fn an_unprotected_or_circular_network_is_rejected() {
     let mut def = power_test_floor();
     def.breakers.retain(|b| b.id != BreakerId::from(BRK_A));
-    assert!(def
-        .validate()
-        .iter()
-        .any(|e| matches!(e, PowerValidationError::FeedBreakerMissing { .. })));
+    assert!(
+        def.validate()
+            .iter()
+            .any(|e| matches!(e, PowerValidationError::FeedBreakerMissing { .. }))
+    );
 
     let mut def = power_test_floor();
     if let Some(s) = def.sources.get_mut(0) {
@@ -168,10 +169,11 @@ fn an_unprotected_or_circular_network_is_rejected() {
             mode: BackupMode::Manual,
         });
     }
-    assert!(def
-        .validate()
-        .iter()
-        .any(|e| matches!(e, PowerValidationError::BackupDrivesFeed { .. })));
+    assert!(
+        def.validate()
+            .iter()
+            .any(|e| matches!(e, PowerValidationError::BackupDrivesFeed { .. }))
+    );
 }
 
 // --- the ladder ---------------------------------------------------------------
@@ -296,7 +298,10 @@ fn losing_one_feed_does_not_touch_the_other() {
     cut(&mut sim, Seat::Infiltrator, FEED_A);
     run(&mut sim, 2);
     // The plant and lighting are down…
-    assert!(!operating(&sim, LAUNDRY_LIGHT), "lighting is on the dead feed");
+    assert!(
+        !operating(&sim, LAUNDRY_LIGHT),
+        "lighting is on the dead feed"
+    );
     assert!(!operating(&sim, FAN_KITCHEN), "so is the extract fan");
     // …and security is not.
     assert!(operating(&sim, OFFICE_CAM));
@@ -423,9 +428,7 @@ fn an_overload_trips_the_protection_and_only_a_clear_fault_resets_it() {
     run(&mut sim, 1);
     let reset = isolate(&mut sim, Seat::Infiltrator, BRK_B, false);
     assert!(
-        reset
-            .iter()
-            .any(|e| matches!(e, PowerEvent::Reset { .. })),
+        reset.iter().any(|e| matches!(e, PowerEvent::Reset { .. })),
         "{reset:?}"
     );
     run(&mut sim, 130);
@@ -484,18 +487,18 @@ fn exposed_power_is_live_only_where_it_is_authored_and_only_while_fed() {
     let mut outside = PowerReadout::default();
     outside.body("laundry", 850.0);
     let clear = sim.step(&outside);
-    assert!(!clear
-        .iter()
-        .any(|e| matches!(e, PowerEvent::Shocked { .. })));
+    assert!(
+        !clear
+            .iter()
+            .any(|e| matches!(e, PowerEvent::Shocked { .. }))
+    );
 
     // Isolating the feed makes the exposed housing dead.
     isolate(&mut sim, Seat::Infiltrator, BRK_A, true);
     sim.step(&readout);
     let safe = sim.step(&readout);
     assert!(
-        !safe
-            .iter()
-            .any(|e| matches!(e, PowerEvent::Shocked { .. })),
+        !safe.iter().any(|e| matches!(e, PowerEvent::Shocked { .. })),
         "{safe:?}"
     );
 }
@@ -514,11 +517,7 @@ fn a_cable_cut_is_hand_work_and_rewiring_is_not() {
     );
 
     // A cut costs hands and noise; a rewire costs bandwidth, and vice versa.
-    let infiltrator_cut = sim
-        .definition()
-        .tuning
-        .infiltrator
-        .cut_busy_ticks;
+    let infiltrator_cut = sim.definition().tuning.infiltrator.cut_busy_ticks;
     let hacker_route = sim.definition().tuning.hacker.route_bandwidth;
     assert!(infiltrator_cut > 0 && hacker_route > 0);
     let cut_events = cut(&mut sim, Seat::Infiltrator, FEED_A);
@@ -565,9 +564,11 @@ fn a_local_board_is_not_a_remote_board() {
         open: true,
     };
     let events = sim.apply(&cmd, &access);
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, PowerEvent::Isolated { .. })));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, PowerEvent::Isolated { .. }))
+    );
 }
 
 #[test]
@@ -617,10 +618,7 @@ fn the_wire_form_names_one_namespace_per_verb() {
     let json = serde_json::to_string(&op).expect("serializes");
     let back: PowerOp = serde_json::from_str(&json).expect("parses");
     assert_eq!(back, op);
-    assert!(matches!(
-        op.resolve(&def),
-        Ok(PowerCommand::Route { .. })
-    ));
+    assert!(matches!(op.resolve(&def), Ok(PowerCommand::Route { .. })));
     assert_eq!(
         PowerOp::Route {
             by: Seat::Infiltrator,

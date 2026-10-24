@@ -69,14 +69,8 @@ id_newtype!(
     LoadId,
     "Stable id of a load: a device that draws from a feed."
 );
-id_newtype!(
-    BreakerId,
-    "Stable id of a protective breaker on a feed."
-);
-id_newtype!(
-    HazardId,
-    "Stable id of an authored exposed-power hazard."
-);
+id_newtype!(BreakerId, "Stable id of a protective breaker on a feed.");
+id_newtype!(HazardId, "Stable id of an authored exposed-power hazard.");
 
 /// Resolves content ids to `Vec` indices once, so the simulation can index
 /// directly. Built at [`crate::scenario::GhostLobbySim`] construction and after

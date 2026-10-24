@@ -375,10 +375,15 @@ pub enum PowerEvent {
         trip_ticks: u32,
     },
     /// A feed lost supply, taking `loads` devices with it.
-    FeedLost { feed: FeedId, loads: usize },
+    FeedLost {
+        feed: FeedId,
+        loads: usize,
+    },
     /// A feed has supply again. What each device does about it is its own
     /// restart policy's business.
-    FeedRestored { feed: FeedId },
+    FeedRestored {
+        feed: FeedId,
+    },
     /// A source was thrown.
     Switched {
         source: PowerSourceId,
@@ -393,7 +398,9 @@ pub enum PowerEvent {
         runtime_ticks: u32,
     },
     /// A backup has run out. It is spent for the run.
-    BackupSpent { source: PowerSourceId },
+    BackupSpent {
+        source: PowerSourceId,
+    },
     /// A load was switched. `on` is the *command*, not the outcome.
     Commanded {
         load: LoadId,
@@ -422,7 +429,10 @@ pub enum PowerEvent {
         /// every other variant pays for it in an enum this hot loop copies.
         report: Box<LoadReport>,
     },
-    Denied { by: Seat, reason: PowerDenyReason },
+    Denied {
+        by: Seat,
+        reason: PowerDenyReason,
+    },
 }
 
 impl PowerEvent {
@@ -669,9 +679,7 @@ impl PowerState {
     /// Whether some backup is currently carrying `load`.
     fn backup_delivering(&self, def: &PowerNetworkDef, load: &LoadId) -> bool {
         def.sources.iter().enumerate().any(|(i, s)| {
-            s.backup
-                .as_ref()
-                .is_some_and(|b| b.serves.contains(load))
+            s.backup.as_ref().is_some_and(|b| b.serves.contains(load))
                 && self.sources.get(i).is_some_and(|st| st.output)
         })
     }
@@ -1311,9 +1319,9 @@ impl PowerState {
                     .map(|f| f.cut)
                     .unwrap_or(false),
             };
-            let touching = readout.body.is_some_and(|b| {
-                b.room == hdef.room && b.x >= hdef.x.0 && b.x <= hdef.x.1
-            });
+            let touching = readout
+                .body
+                .is_some_and(|b| b.room == hdef.room && b.x >= hdef.x.0 && b.x <= hdef.x.1);
             let shock = live && touching;
             let Some(h) = self.hazards.get_mut(i) else {
                 continue;
@@ -1563,25 +1571,26 @@ impl PowerOp {
                 .ok_or(PowerDenyReason::NoSuchElement { index: i.0 })
         };
         Ok(match *self {
-            PowerOp::CutCable { by, feed: f } => PowerCommand::CutCable {
+            PowerOp::CutCable { by, feed: f } => PowerCommand::CutCable { by, feed: feed(f)? },
+            PowerOp::Route {
                 by,
-                feed: feed(f)?,
-            },
-            PowerOp::Route { by, load: l, feed: f } => PowerCommand::Route {
+                load: l,
+                feed: f,
+            } => PowerCommand::Route {
                 by,
                 load: load(l)?,
                 feed: feed(f)?,
             },
-            PowerOp::Isolate { by, breaker: b, open } => PowerCommand::Isolate {
+            PowerOp::Isolate {
+                by,
+                breaker: b,
+                open,
+            } => PowerCommand::Isolate {
                 by,
                 breaker: breaker(b)?,
                 open,
             },
-            PowerOp::SwitchSource {
-                by,
-                source: s,
-                on,
-            } => PowerCommand::SwitchSource {
+            PowerOp::SwitchSource { by, source: s, on } => PowerCommand::SwitchSource {
                 by,
                 source: source(s)?,
                 on,
@@ -1591,10 +1600,7 @@ impl PowerOp {
                 load: load(l)?,
                 on,
             },
-            PowerOp::Inspect { by, load: l } => PowerCommand::Inspect {
-                by,
-                load: load(l)?,
-            },
+            PowerOp::Inspect { by, load: l } => PowerCommand::Inspect { by, load: load(l)? },
         })
     }
 }

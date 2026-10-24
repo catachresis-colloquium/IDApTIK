@@ -535,8 +535,7 @@ impl PowerNetworkDef {
 
     /// The breaker protecting `feed`, by index.
     pub fn breaker_of(&self, feed: &FeedId) -> Option<usize> {
-        self.feed(feed)
-            .and_then(|f| self.breaker_index(&f.breaker))
+        self.feed(feed).and_then(|f| self.breaker_index(&f.breaker))
     }
 
     /// The closed-book connected draw of `feed` under the runtime assignment:
@@ -847,10 +846,13 @@ mod tests {
             }),
         ));
         net.feeds[0].source = "ups".into();
-        assert!(net.validate().contains(&PowerValidationError::BackupDrivesFeed {
-            source: "ups".into(),
-            feed: "feed-a".into(),
-        }));
+        assert!(
+            net.validate()
+                .contains(&PowerValidationError::BackupDrivesFeed {
+                    source: "ups".into(),
+                    feed: "feed-a".into(),
+                })
+        );
     }
 
     #[test]

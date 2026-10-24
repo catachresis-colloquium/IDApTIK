@@ -108,7 +108,14 @@ fn feed(
     }
 }
 
-fn breaker(id: &str, label: &str, feed: &str, room: &str, node: Option<&str>, remote: bool) -> BreakerDef {
+fn breaker(
+    id: &str,
+    label: &str,
+    feed: &str,
+    room: &str,
+    node: Option<&str>,
+    remote: bool,
+) -> BreakerDef {
     BreakerDef {
         id: id.into(),
         label: label.to_owned(),
@@ -168,11 +175,51 @@ fn signal_load(
 pub fn power_test_floor() -> PowerNetworkDef {
     use LoadKind::*;
     let loads = vec![
-        signal_load("light-kitchen", "Kitchen lighting", Light, FEED_A, 2, "kitchen", Restart::Hold),
-        signal_load("light-hall", "Hallway lighting", Light, FEED_A, 2, "hall", Restart::Hold),
-        signal_load("light-office", "Office lighting", Light, FEED_A, 2, "office", Restart::Hold),
-        signal_load("light-laundry", "Laundry lighting", Light, FEED_A, 2, "laundry", Restart::Hold),
-        signal_load("light-exit", "Exit lighting", Light, FEED_A, 2, "exit", Restart::Hold),
+        signal_load(
+            "light-kitchen",
+            "Kitchen lighting",
+            Light,
+            FEED_A,
+            2,
+            "kitchen",
+            Restart::Hold,
+        ),
+        signal_load(
+            "light-hall",
+            "Hallway lighting",
+            Light,
+            FEED_A,
+            2,
+            "hall",
+            Restart::Hold,
+        ),
+        signal_load(
+            "light-office",
+            "Office lighting",
+            Light,
+            FEED_A,
+            2,
+            "office",
+            Restart::Hold,
+        ),
+        signal_load(
+            "light-laundry",
+            "Laundry lighting",
+            Light,
+            FEED_A,
+            2,
+            "laundry",
+            Restart::Hold,
+        ),
+        signal_load(
+            "light-exit",
+            "Exit lighting",
+            Light,
+            FEED_A,
+            2,
+            "exit",
+            Restart::Hold,
+        ),
         // Nothing in the signal network owns a fan or a pump: they are power's
         // alone, and a player learns about them from the power model.
         load(
@@ -195,12 +242,44 @@ pub fn power_test_floor() -> PowerNetworkDef {
             Restart::Resume,
             Some(240),
         ),
-        signal_load(CAM_HALL, "Hall camera", Camera, FEED_B, 3, "hall", Restart::Resume),
-        signal_load("cam-1", "Office camera", Camera, FEED_B, 3, "office", Restart::Resume),
-        signal_load("cam-2", "Laundry camera", Camera, FEED_B, 3, "laundry", Restart::Resume),
+        signal_load(
+            CAM_HALL,
+            "Hall camera",
+            Camera,
+            FEED_B,
+            3,
+            "hall",
+            Restart::Resume,
+        ),
+        signal_load(
+            "cam-1",
+            "Office camera",
+            Camera,
+            FEED_B,
+            3,
+            "office",
+            Restart::Resume,
+        ),
+        signal_load(
+            "cam-2",
+            "Laundry camera",
+            Camera,
+            FEED_B,
+            3,
+            "laundry",
+            Restart::Resume,
+        ),
         // A door that re-opens by itself when the lights come back is a gift to
         // the infiltrator: the exit is fail-safe.
-        signal_load(DOOR_EXIT, "Service exit mechanism", Door, FEED_B, 4, "exit", Restart::FailSafe),
+        signal_load(
+            DOOR_EXIT,
+            "Service exit mechanism",
+            Door,
+            FEED_B,
+            4,
+            "exit",
+            Restart::FailSafe,
+        ),
     ];
     // Validation wants the exit's own node id, which is the scenario door's node,
     // and that is the load's id here: `door_node_id(d4) == "door-d4"`.
@@ -209,7 +288,15 @@ pub fn power_test_floor() -> PowerNetworkDef {
         DOOR_EXIT
     );
     let mut sources = vec![
-        source(MAINS_A, "Utility supply — plant", SourceKind::Mains, 0, Some("kitchen"), None, false),
+        source(
+            MAINS_A,
+            "Utility supply — plant",
+            SourceKind::Mains,
+            0,
+            Some("kitchen"),
+            None,
+            false,
+        ),
         source(
             MAINS_B,
             "Utility supply — security",
@@ -219,7 +306,15 @@ pub fn power_test_floor() -> PowerNetworkDef {
             Some(BRIDGE_NODE),
             true,
         ),
-        source(UPS_HALL, "Hall UPS", SourceKind::Battery, 0, Some("hall"), None, false),
+        source(
+            UPS_HALL,
+            "Hall UPS",
+            SourceKind::Battery,
+            0,
+            Some("hall"),
+            None,
+            false,
+        ),
     ];
     if let Some(ups) = sources.get_mut(2) {
         // Fifteen seconds of a camera that will not blink.
@@ -258,7 +353,14 @@ pub fn power_test_floor() -> PowerNetworkDef {
         loads,
         breakers: vec![
             breaker(BRK_A, "Plant board main", FEED_A, "kitchen", None, false),
-            breaker(BRK_B, "Security board main", FEED_B, "hall", Some(BRIDGE_NODE), true),
+            breaker(
+                BRK_B,
+                "Security board main",
+                FEED_B,
+                "hall",
+                Some(BRIDGE_NODE),
+                true,
+            ),
         ],
         interlocks: vec![InterlockDef {
             id: "il-pump".to_owned(),

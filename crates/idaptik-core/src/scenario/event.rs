@@ -546,17 +546,10 @@ fn power_line(e: &crate::scenario::power::sim::PowerEvent) -> Option<(String, Se
             fault: f,
             ..
         } => (
-            format!(
-                "{} opened {breaker} on {feed} ({}).",
-                who(by),
-                fault(f)
-            ),
+            format!("{} opened {breaker} on {feed} ({}).", who(by), fault(f)),
             Severity::Warn,
         ),
-        P::Reset { breaker, by, .. } => (
-            format!("{} reset {breaker}.", who(by)),
-            Severity::Hacker,
-        ),
+        P::Reset { breaker, by, .. } => (format!("{} reset {breaker}.", who(by)), Severity::Hacker),
         P::Tripped {
             breaker,
             feed,
@@ -581,10 +574,7 @@ fn power_line(e: &crate::scenario::power::sim::PowerEvent) -> Option<(String, Se
             format!("GRID: {feed} down — {loads} device(s) off supply."),
             Severity::Warn,
         ),
-        P::FeedRestored { feed } => (
-            format!("GRID: {feed} has supply again."),
-            Severity::Info,
-        ),
+        P::FeedRestored { feed } => (format!("GRID: {feed} has supply again."), Severity::Info),
         P::Switched { source, on, by, .. } => (
             format!(
                 "{} switched {source} {}.",
@@ -604,10 +594,7 @@ fn power_line(e: &crate::scenario::power::sim::PowerEvent) -> Option<(String, Se
             ),
             Severity::Info,
         ),
-        P::BackupSpent { source } => (
-            format!("BACKUP: {source} is spent."),
-            Severity::Warn,
-        ),
+        P::BackupSpent { source } => (format!("BACKUP: {source} is spent."), Severity::Warn),
         P::Commanded { load, on, by, .. } => (
             format!(
                 "{} switched {load} {}.",

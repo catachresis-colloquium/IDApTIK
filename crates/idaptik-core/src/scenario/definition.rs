@@ -609,7 +609,6 @@ impl ScenarioDefinition {
             );
         }
 
-
         // --- power network (only when the floor has one) ---------------------
         if let Some(net) = &self.power {
             let errors = net.validate();
@@ -658,9 +657,8 @@ impl ScenarioDefinition {
                 "Every power element stands in a room on this floor",
                 missing_room.is_none(),
                 format!("missing={missing_room:?}"),
-                missing_room.map(|(element, room)| {
-                    ValidationError::PowerRoomMissing { element, room }
-                }),
+                missing_room
+                    .map(|(element, room)| ValidationError::PowerRoomMissing { element, room }),
             );
 
             // Every load that is a device names a device this floor carries.

@@ -21,7 +21,7 @@
 use super::GhostLobbySim;
 use crate::netsim::access::can_reach;
 use crate::scenario::event::Event;
-use crate::scenario::floor_graph::{camera_node_id, door_node_id, light_node_id, VACUUM_NODE_ID};
+use crate::scenario::floor_graph::{VACUUM_NODE_ID, camera_node_id, door_node_id, light_node_id};
 use crate::scenario::ids::{LoadId, RoomId};
 use crate::scenario::mathf::TICK_DT;
 use crate::scenario::power::LoadKind;
@@ -172,8 +172,7 @@ impl GhostLobbySim {
         let events = st.apply(net, &cmd, &access);
         for e in events {
             if let Some(cost) = e.cost() {
-                self.state.bandwidth =
-                    (self.state.bandwidth - f64::from(cost.bandwidth)).max(0.0);
+                self.state.bandwidth = (self.state.bandwidth - f64::from(cost.bandwidth)).max(0.0);
                 self.state.power_busy += f64::from(cost.busy_ticks) * TICK_DT;
                 self.state.player.noise = self.state.player.noise.max(cost.noise);
                 if by == Seat::Hacker {
@@ -296,7 +295,12 @@ mod tests {
     /// Stand the body in the middle of a room, so the infiltrator can reach the
     /// boards that live there.
     fn stand(sim: &mut GhostLobbySim, room: &str) {
-        let Some(r) = sim.definition().rooms.iter().find(|r| r.id.as_str() == room) else {
+        let Some(r) = sim
+            .definition()
+            .rooms
+            .iter()
+            .find(|r| r.id.as_str() == room)
+        else {
             return;
         };
         sim.state.player.x = r.x + r.w / 2.0;
@@ -560,7 +564,10 @@ mod tests {
         if let Some(report) = sim.power_report("cam-2") {
             assert!(report.operating || report.why.is_some());
             let said = report.explain();
-            assert!(said.contains("cam-2") || said.contains("Office camera"), "{said}");
+            assert!(
+                said.contains("cam-2") || said.contains("Office camera"),
+                "{said}"
+            );
         }
     }
 }
