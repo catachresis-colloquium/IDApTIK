@@ -3,6 +3,7 @@
 //! restart policy, protective trips and resets, exposed power, and the distinct
 //! permissions and costs of a physical cut versus logical rewiring.
 
+use idaptik_core::scenario::definition::ValidationError;
 use idaptik_core::scenario::ids::{BreakerId, FeedId, HazardId, LoadId};
 use idaptik_core::scenario::power::sim::{
     Fault, OffReason, POWER_SNAPSHOT_FORMAT, PowerAccess, PowerCommand, PowerDenyReason,
@@ -12,7 +13,6 @@ use idaptik_core::scenario::power::test_floor::{
     BRK_A, BRK_B, CAM_HALL, DOOR_EXIT, FAN_KITCHEN, FEED_A, FEED_B, MAINS_A, MAINS_B,
     POWER_TEST_FLOOR_JSON, PUMP_LAUNDRY, UPS_HALL, power_test_floor, powered_ghost_lobby,
 };
-use idaptik_core::scenario::definition::ValidationError;
 use idaptik_core::scenario::power::{
     BackupMode, BackupSpec, Condition, InterlockDef, InterlockWhen, LoadKind, POWER_FORMAT,
     PowerNetworkDef, PowerTuning, PowerValidationError, Restart, SourceKind, load_power_network,
@@ -787,8 +787,7 @@ fn a_dumb_load_cannot_be_switched_by_the_hacker() {
         })
     );
     assert!(
-        sim.report(&load(PUMP_LAUNDRY))
-            .is_some_and(|r| r.commanded),
+        sim.report(&load(PUMP_LAUNDRY)).is_some_and(|r| r.commanded),
         "and the order did not land"
     );
 }
@@ -916,15 +915,16 @@ fn a_second_breaker_on_a_feed_is_a_definition_error() {
     // Supply follows the feed's own breaker. A second one would "isolate" a
     // feed that keeps running — a panel that reports protection it cannot give.
     let mut def = power_test_floor();
-    def.breakers.push(idaptik_core::scenario::power::BreakerDef {
-        id: BreakerId::from("brk-a-spare"),
-        label: "Spare".into(),
-        feed: feed(FEED_A),
-        start_open: false,
-        remote: false,
-        room: None,
-        node: None,
-    });
+    def.breakers
+        .push(idaptik_core::scenario::power::BreakerDef {
+            id: BreakerId::from("brk-a-spare"),
+            label: "Spare".into(),
+            feed: feed(FEED_A),
+            start_open: false,
+            remote: false,
+            room: None,
+            node: None,
+        });
     assert!(
         def.validate()
             .iter()

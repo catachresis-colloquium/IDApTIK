@@ -600,10 +600,7 @@ impl GhostLobbySim {
         // told to stop: the request lives in `active` and this is the gate that
         // decides whether it can be carried out. Deleting the request would mean
         // a `Restart::Resume` device that comes back warm could never move again.
-        if !self.state.vacuum.active
-            || self.state.vacuum.fallen
-            || self.power_holds_vacuum()
-        {
+        if !self.state.vacuum.active || self.state.vacuum.fallen || self.power_holds_vacuum() {
             return;
         }
         if self.state.vacuum.x > c::VAC_LAG_X {

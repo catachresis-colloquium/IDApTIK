@@ -141,8 +141,6 @@ impl GhostLobbySim {
             || self.signal_room_dark(cam.room.as_str())
     }
 
-
-
     /// Whether a wire has locked the door on grounded node `node`.
     pub fn signal_door_locked(&self, node: &str) -> bool {
         let (Some(net), Some(st)) = (&self.def.signal, &self.state.signal) else {
@@ -170,8 +168,7 @@ impl GhostLobbySim {
             return false;
         };
         net.devices.iter().zip(&st.devices).any(|(d, s)| {
-            d.node.as_deref() == Some(node)
-                && (!s.active || self.power_holds_signal_device(&d.id))
+            d.node.as_deref() == Some(node) && (!s.active || self.power_holds_signal_device(&d.id))
         })
     }
 

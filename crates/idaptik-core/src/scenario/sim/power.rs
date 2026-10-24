@@ -24,10 +24,10 @@ use crate::scenario::event::Event;
 use crate::scenario::floor_graph::{VACUUM_NODE_ID, camera_node_id, door_node_id, light_node_id};
 use crate::scenario::ids::{LoadId, RoomId, SignalId};
 use crate::scenario::mathf::TICK_DT;
-use crate::scenario::power::{LoadDef, LoadKind};
 use crate::scenario::power::sim::{
     BodyAt, LoadReport, PowerAccess, PowerDenyReason, PowerEvent, PowerOp, PowerReadout,
 };
+use crate::scenario::power::{LoadDef, LoadKind};
 use crate::scenario::signal::sim::Seat;
 use crate::scenario::state::Place;
 
@@ -270,13 +270,7 @@ impl GhostLobbySim {
     /// correctly off and the camera would correctly keep looking.
     fn driven_node<'a>(&'a self, l: &'a LoadDef) -> Option<&'a str> {
         match &l.signal {
-            Some(signal) => self
-                .def
-                .signal
-                .as_ref()?
-                .device(signal)?
-                .node
-                .as_deref(),
+            Some(signal) => self.def.signal.as_ref()?.device(signal)?.node.as_deref(),
             None => Some(l.id.as_str()),
         }
     }
@@ -689,7 +683,10 @@ mod tests {
         let mut held = Buttons::default();
         held.set(Button::Right, true);
         let _ = step(&mut sim, &[]);
-        assert!(sim.state().power_busy > 0.0, "the floor is holding the body");
+        assert!(
+            sim.state().power_busy > 0.0,
+            "the floor is holding the body"
+        );
 
         let before = sim.state.player.x;
         let input = TickInput {

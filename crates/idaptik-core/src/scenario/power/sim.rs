@@ -1014,9 +1014,11 @@ impl PowerState {
                 element: load.0.clone(),
             });
         }
-        let li = def.load_index(load).ok_or_else(|| PowerDenyReason::NoAccess {
-            element: load.0.clone(),
-        })?;
+        let li = def
+            .load_index(load)
+            .ok_or_else(|| PowerDenyReason::NoAccess {
+                element: load.0.clone(),
+            })?;
         if by == Seat::Hacker && def.loads.get(li).is_none_or(|l| l.node.is_none()) {
             return Err(PowerDenyReason::RemotePanel {
                 element: load.0.clone(),
