@@ -251,12 +251,19 @@ impl BuildingDefinition {
                 }
             };
             let reach = reachable_rooms(self, &self.entry, cut);
-            if let Some(r) = objectives.iter().find(|r| !reach.contains(r)) {
+            if let Some(r) = objectives
+                .iter()
+                .find(|r| reachable.contains(r) && !reach.contains(r))
+            {
                 strands_objective = Some((circuit.id.clone(), r.clone()));
                 break;
             }
             if strands_room.is_none() {
-                if let Some(r) = self.all_rooms().iter().find(|r| !reach.contains(r)) {
+                if let Some(r) = self
+                    .all_rooms()
+                    .iter()
+                    .find(|r| reachable.contains(r) && !reach.contains(r))
+                {
                     strands_room = Some((circuit.id.clone(), r.clone()));
                 }
             }
