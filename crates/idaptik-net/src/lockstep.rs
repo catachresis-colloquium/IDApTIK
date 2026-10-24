@@ -180,6 +180,20 @@ impl LockstepCore {
         self.step
     }
 
+    /// The peer's committed watermark: the first tick the peer has not
+    /// committed through. Read-only observability for the adversarial test
+    /// adapter (ADR-0013), which must target the exact post-loss frontier
+    /// when proving obsolete frames are rejected. Production drivers derive
+    /// the same value implicitly through [`Self::blocked_on_peer`].
+    pub fn peer_watermark(&self) -> u64 {
+        self.peer_next
+    }
+
+    /// The run's step budget, exposed read-only for bounded test accounting.
+    pub fn max_steps(&self) -> u64 {
+        self.max_steps
+    }
+
     pub fn sim(&self) -> &GhostLobbySim {
         &self.sim
     }
