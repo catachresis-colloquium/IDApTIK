@@ -137,7 +137,7 @@ pub struct CompartmentDef {
     pub name: String,
     pub room: Option<RoomRef>,      // spatial anchor; None only when `exterior`
     pub air_l: u32,                 // free volume, litres
-    pub floor_cm2: u32,             // depth_mm = water_ml / (floor_cm2 / 100)
+    pub floor_cm2: u32,             // depth_mm = water_ml * 10 / floor_cm2
     pub elevation: i8,              // -3..+3, used only for density ordering
     pub open_to_exterior: bool,     // a sealed room is a lethal room; author it
     pub exterior: bool,             // a sink (outside, sewer); holds no depth
@@ -268,7 +268,8 @@ pub struct GasDef {
     pub ufl_permille: u16,
     pub ignition_classes: Vec<IgnitionClass>, // sources that can light THIS gas
     pub oxygen_min_permille: u16,
-    pub oxygen_per_litre_permille: u16,       // O2 consumed per litre burned
+    pub oxygen_per_litre_permille: u16,       // ml of O2 consumed per ml of gas burned;
+                                              // 2100 = 2.1 L O2 per L gas
     pub irritant_permille: u16,       // cue threshold
     pub incapacitate_permille: u16,   // actor dose threshold
     pub water: GasWaterRule,          // None | DisplacedOnly | Dissolves { coefficient_permille }
@@ -493,8 +494,8 @@ ruleset change is a typed refusal, not a reinterpretation (§12).
 
 | Quantity | Unit | Notes |
 |---|---|---|
-| water | millilitres (`u64`) | depth derived: `water_ml / (floor_cm2 / 100)` mm |
-| gas | ml (amount) and ‰ (concentration) | `permille = gas_ml * 1000 / air_l` |
+| water | millilitres (`u64`) | depth derived: `water_ml * 10 / floor_cm2` mm (1 ml = 1 cm³) |
+| gas | ml (amount) and ‰ (concentration) | `permille = gas_ml / air_l` (the ml/L ratio *is* the permille) |
 | wetness | ‰ of saturation, 0..1000 | |
 | integrity | ‰, 0..1000 | 0 = destroyed |
 | fire | ‰ intensity, 0..1000 | |
@@ -691,7 +692,27 @@ the committed state is identical.
    opposing flows therefore cancel exactly, and a chain `a→b→c` cannot
    "double-spend" water within one tick, because `b`'s balance is computed from
    its pre-tick volume.
-5. Derived values are recomputed in the fixed order of §3.3, after the commit,
+5. **Sibling flows are allocated, not summed.** The snapshot alone does *not*
+   prevent two outgoing transfers from overdrawing one source: if a compartment
+   holds 100 ml and two links each stage 100 ml, summing and clamping leaves the
+   source at 0 while crediting 200 ml to the destinations — 100 ml invented.
+   S3 therefore allocates before S4 credits. For each `(subject, medium)` with
+   total requested outflow `R` and available `A`:
+
+   ```
+   if R <= A:            allocated_i = request_i
+   else:                 allocated_i = floor(request_i * A / R)
+                         r = A - Σ allocated_i
+                         give 1 ml each to the first r intents in total order
+   ```
+
+   The destination is credited with `allocated_i`, never with `request_i`, and
+   the scaled effect is what S4 commits. Hamilton largest-remainder with the
+   total order as tie-break: deterministic, order-independent, and
+   **conservative to the millilitre**. The same routine allocates gas species,
+   which is why a fan and a leak competing for one compartment cannot both take
+   the whole amount.
+6. Derived values are recomputed in the fixed order of §3.3, after the commit,
    from committed quantities only.
 
 **Consequences.** Entity iteration order is an authoring detail, not a
@@ -702,6 +723,7 @@ results"), extended to numeric state.
 **Tests.** `permuted_intents_yield_identical_committed_state`,
 `opposing_flows_cancel_regardless_of_order`,
 `clamp_applies_once_after_the_sum`,
+`concurrent_outflows_from_one_source_conserve_the_source`,
 `definition_order_permutation_preserves_outcomes` (§15).
 
 ---
@@ -1142,7 +1164,7 @@ minute of play.
 
 | Group | Tests |
 |---|---|
-| determinism | `replay_determinism_with_infrastructure`, `permuted_intents_yield_identical_committed_state`, `opposing_flows_cancel_regardless_of_order`, `clamp_applies_once_after_the_sum`, `definition_order_permutation_preserves_outcomes`, `snapshot_restore_mid_cascade_is_exact`, `ruleset_mismatch_is_refused` |
+| determinism | `replay_determinism_with_infrastructure`, `permuted_intents_yield_identical_committed_state`, `opposing_flows_cancel_regardless_of_order`, `clamp_applies_once_after_the_sum`, `concurrent_outflows_from_one_source_conserve_the_source`, `definition_order_permutation_preserves_outcomes`, `snapshot_restore_mid_cascade_is_exact`, `ruleset_mismatch_is_refused` |
 | cascade | `every_produced_intent_is_accounted_for`, `cascade_deferral_emits_one_event`, `deferred_intent_keeps_its_cause`, `deferral_changes_timing_not_outcome`, `self_scheduling_is_a_load_error` |
 | water/electric | `water_on_dry_equipment_does_not_arc`, `a_puddle_below_contact_depth_is_not_lethal`, `damaged_wet_energised_equipment_arcs_on_cadence`, `isolation_prevents_remote_start`, `drying_requires_de_energisation`, `running_a_wet_motor_destroys_it`, `restoring_power_to_wet_equipment_arcs_after_delay_not_instantly` |
 | electricity/gas | `unpowered_fan_stops_extraction_and_gas_accumulates`, `a_light_switch_does_not_ignite_gas`, `a_pump_start_ignites_gas_in_band`, `ignition_requires_the_authored_class`, `ignition_requires_dwell_not_a_single_tick`, `fire_consumes_the_species_and_spreads_by_combustibility` |

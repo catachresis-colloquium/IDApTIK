@@ -290,16 +290,28 @@ No alarm, no evidence except the fan hum, no irreversible tags.
 
 ## 6. Spoofing: the deception is real, the physics is not
 
-The hacker forges `gd-1`'s reported value to 0 ‰ at t = 120 s, while cutting
-nothing.
+The hacker forges `gd-1`'s reported value to 0 ‰ at **t = 30 s** — before the
+detector's 20 ‰ trip at t = 60 s, and that timing is the whole point. Spoof after
+the trip and the controller has already started `fan-f1` (§7); spoof before it
+and the automation never begins, because `ctl-vent` reads the forged value and
+sees a clean room while the gas keeps arriving at 400 ml/s.
 
-| Reader | Reads | Value | Consequence |
+| t (s) | Truth in the riser | Reported | What happens |
+|---|---|---|---|
+| 0 | 10 ‰ | 10 ‰ | `GasReek`; the panel agrees with the player's nose |
+| 30 | 15 ‰ (36 L) | **0 ‰** | spoof applied; `ctl-vent` sees a clean room |
+| 60 | 20 ‰ (48 L) | 0 ‰ | the detector *would* trip; `alarm-a1` stays silent |
+| 120 | 30 ‰ (72 L) | 0 ‰ | the hacker's panel says empty; the infiltrator is choking |
+| 180 | 40 ‰ (96 L) = **LFL** | 0 ‰ | `EG-3` is one door-motor arc away |
+| 195 | 42 ‰ | 0 ‰ | `Inductive` start in the riser now ignites |
+
+| Reader | Reads | Value at t = 120 s | Consequence |
 |---|---|---|---|
 | `ctl-vent` controller | reported | 0 ‰ | never starts the fan |
 | hacker's plant panel | reported | 0 ‰ | "room is clean" |
 | `alarm-a1` | reported | 0 ‰ | silent |
-| infiltrator's HUD + nose | truth | 25 ‰ | `GasReek`, HUD tint |
-| `EG-3` ignition rule | truth | 25 ‰ and rising | fires when a source arcs in band |
+| infiltrator's HUD + nose | truth | 30 ‰ | `GasReek`, HUD tint, haze at floor level |
+| `EG-3` ignition rule | truth | 30 ‰ and rising | fires when a source arcs in band |
 
 The two seats now hold **different, both-honest** pictures, and the only way to
 resolve it is for one to tell the other. When the door motor arcs at 40 ‰, the
@@ -308,6 +320,18 @@ ignition rule has never heard of the spoof.
 `CP-5`'s interlock (an authored "no inductive start above 20 ‰" law) reads the
 same reported value and is defeated by the same spoof. That is deliberate: an
 interlock is only as good as its sensor.
+
+Two constraints keep this reproducible rather than hand-waved:
+
+- the spoof is a `spoofs: BTreeMap<SignalId, u32>` entry in `InfraInput`
+  (design §10.2), so it is part of the command stream and replays exactly;
+- `l2_spoof_misleads_controller_not_physics` asserts the t = 30 s starting
+  state explicitly — reported 0, truth 15 ‰ — so a later change to the source
+  rate cannot quietly move the scenario.
+
+Spoofing *after* extraction has started is a different, weaker move: it hides a
+clean room from everyone and changes nothing physical. The level teaches the
+version that matters.
 
 ## 7. The feedback loop
 

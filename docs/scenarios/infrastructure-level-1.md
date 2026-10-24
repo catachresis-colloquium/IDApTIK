@@ -77,18 +77,34 @@ one.
 
 | Id | Kind (presentational) | Compartment | Material | Capabilities | Initial |
 |---|---|---|---|---|---|
-| `iso-m` | isolator | plant | `steel` | `LockOut { series: M }`, `Sounds` | closed |
+| `iso-m` | isolator | plant | `steel` | `LockOut { series: pump-p1 }`, `Sounds` | closed |
 | `pump-p1` | pump | plant | `steel` | `Powered { M, 6 }`, `Moves { Water, 6 000 ml/s, check_valve: false, return_ml: 20 000 }`, `Ignites { Inductive }`, `Sounds { PumpHum, 700 }` | off, `integrity 620`, plinth 150 mm |
 | `valve-v1` | valve | plant | `steel` | `Gates { pipe-spr }` | open |
 | `pipe-spr` | pipe | plant | `copper` | `Carries { Water, pressurised, leak 800 ml/s }` | live |
 | `grate-d1` | floor drain | plant | `steel` | `Stores { Water, 900 000 ml, accepts 10 000 ml/s, outlet: sewer }` | **blocked by debris** (its position gates `grate-d1`) |
-| `socket-l2` | wall socket | lobby | `pvc` | `Powered { M, 1 }`, `Ignites { Arc }` | live, `integrity 700`, plinth 25 mm |
+| `socket-l2` | wall socket | lobby | `copper` | `Powered { M, 1 }`, `Ignites { Arc }` | live, `integrity 700`, plinth 25 mm |
 | `rel-d5` | door release | riser | `steel` | `Breaks { Portal(door-d5), Wrench, 2 }` | unused |
 | `terminal-svc` | terminal | lobby | `pvc` | — | — |
 
 The pump's `integrity 620` is authored damage (a prior incident). It is the
 reason the pump is not simply "safe when wet": **damaged** plus **wet** plus
 **energised** is the arc condition (`WE-2`). A pristine pump would merely be wet.
+
+Two authored choices in that table are load-bearing and easy to get wrong:
+
+- **`iso-m` locks out `pump-p1`, not circuit `M`.** A circuit-targeted lockout
+  would de-energise the door, the lift and the socket as well, and A4 requires
+  exactly the opposite — protection *without* losing the rest of the floor. The
+  isolator is a local disconnect on the pump's own branch. `WE-4` supports both
+  scopes; this level uses the entity one, and A5 is what a *circuit* lockout
+  looks like (the hacker's cut), which is why the two routes teach different
+  things.
+- **`socket-l2`'s material is `copper`, not `pvc`.** An entity's `material` is
+  the thing that arcs, and `pvc` has `water_film_conductive: false` in the
+  catalogue — a wet plastic housing cannot satisfy `WE-2`. What arcs is the
+  fitting's contacts behind the damaged faceplate (`integrity 700`). Authoring
+  the housing material there would have produced a socket that never arcs,
+  silently deleting A6's hazard.
 
 ### 2.2 Portals, circuits, objectives
 
@@ -419,7 +435,7 @@ Abridged; the full definition is the level's own payload.
       { "id": "iso-m", "kind": "isolator", "compartment": "plant",
         "material": "steel",
         "caps": [
-          { "lockout": { "series": { "circuit": "M" } } },
+          { "lockout": { "series": { "entity": "pump-p1" } } },
           { "sounds": { "cue": "breaker-clunk", "level": 600, "radius_links": 1 } }
         ],
         "init": { "position": "closed" } },
@@ -451,7 +467,7 @@ Abridged; the full definition is the level's own payload.
                                "outlet": "sewer" } }],
         "init": { "position": "blocked" } },
       { "id": "socket-l2", "kind": "socket", "compartment": "lobby",
-        "material": "pvc",
+        "material": "copper",
         "caps": [
           { "powered": { "circuit": "M", "load": 1 } },
           { "ignites": { "class": "arc" } }

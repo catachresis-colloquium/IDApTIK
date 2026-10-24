@@ -96,7 +96,7 @@ That is why toggling it is not an explosion trigger, in this ruleset, for
 | `lfl` / `ufl` | 40 / 130 ‰ | 55 / 160 ‰ |
 | ignition classes | `Inductive`, `Arc`, `HotSurface` | `Arc`, `HotSurface` |
 | `oxygen_min` | 170 ‰ | 150 ‰ |
-| `oxygen_per_litre` | 2 ‰ per litre burned | 1 ‰ per litre |
+| `oxygen_per_litre` | 2 100 ‰ = 2.1 L O₂ per L burned | 1 000 ‰ = 1.0 L O₂ per L |
 | `irritant` | 8 ‰ | 20 ‰ |
 | `incapacitate` | 120 ‰ | 180 ‰ |
 | `water` | `DisplacedOnly` | `Dissolves { coefficient_permille: 250 }` |
@@ -214,7 +214,7 @@ the layer model is written for gases that pool.
 
 | Field | Specification |
 |---|---|
-| **Preconditions & scope** | Entity has `LockOut { series }`; actor at it. Scope: the target circuit or entity. |
+| **Preconditions & scope** | Entity has `LockOut { series }`; actor at it. Scope: the target circuit **or** a single entity. A circuit-targeted lockout de-energises every load on it (rank R0); an entity-targeted lockout removes only that device's supply and leaves the rest of the circuit live. Level 1 authors a single pump and keeps the floor running, so its isolator is entity-targeted — that difference is the whole distinction between protective isolation (A4) and cutting the feed (A5). |
 | **Access & actor** | `access: Local(entity)`, `actor: [Hands]`. Remote operation **cannot** throw or lift it, ever. |
 | **Consumed / transformed** | 30 ticks of the actor's time; no water, no power (throwing a breaker interrupts load). |
 | **Delay & duration** | 30 ticks to throw, 30 to restore; latched indefinitely. |
@@ -322,7 +322,7 @@ the layer model is written for gases that pool.
 |---|---|
 | **Preconditions & scope** | In **one compartment**: species `g` present with `gas_permille ∈ [lfl, ufl]` continuously for `IGNITION_DWELL`; `oxygen ≥ g.oxygen_min`; and an ignition event whose class is in `g.ignition_classes`. Scope: that compartment only (no explosion through a wall; spread is `EG-4`). |
 | **Access & actor** | Environment. The ignition *event* may come from a player action (starting a pump, cutting a cable). |
-| **Consumed / transformed** | 10 % of the compartment's gas is consumed at ignition; the rest at `FIRE_BURN_ML_PER_S`; `oxygen −= 2 ‰ per litre burned`. |
+| **Consumed / transformed** | 10 % of the compartment's gas is consumed at ignition; the rest at `FIRE_BURN_ML_PER_S`; `oxygen −= gas burned × oxygen_per_litre_permille` (for `sable-2`, 2.1 L O₂ per L burned). |
 | **Delay & duration** | Dwell 6 ticks (conditions must hold); then ignition is immediate. |
 | **Physical outcome** | `SetFire`, `HazardRaised{Fire}`, and the source entity takes `−200 ‰` integrity. Gas below LFL or above UFL does not ignite — a rich mixture is as safe as an empty one, which is a real and legible property. |
 | **Device / sensor readout** | Detector trips (if it survived); circuit load spikes then falls. |
@@ -339,7 +339,7 @@ the layer model is written for gases that pool.
 |---|---|
 | **Preconditions & scope** | A fire exists in a compartment. Scope: the compartment; spread to adjacent compartments through links. |
 | **Access & actor** | Environment. |
-| **Consumed / transformed** | Gas at 40 L/s; oxygen at 2 ‰/L; combustible entities lose integrity at 10 ‰/s; `StructuralChar` after 30 ticks. |
+| **Consumed / transformed** | Gas at 40 L/s; oxygen at `oxygen_per_litre_permille` of the gas burned (2.1 L O₂ per L for `sable-2`, so burning the riser's 96 L would take 202 L of its 504 L); combustible entities lose integrity at 10 ‰/s; `StructuralChar` after 30 ticks. |
 | **Delay & duration** | Spread checked every 30 ticks; fire persists while gas > LFL **or** a combustible material is burning. |
 | **Physical outcome** | Fire intensity 400 ‰, rising 20 ‰/s while fuel remains. Spread requires a link with `aperture ≥ 200 cm²` and a destination with `combustible > 0`. A sealed door stops it. Oxygen depletion (below 170 ‰) starves it. |
 | **Device / sensor readout** | Detectors trip then die; circuits in the compartment fail at `StructuralChar`. |
