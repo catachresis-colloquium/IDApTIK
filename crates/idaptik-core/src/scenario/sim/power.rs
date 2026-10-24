@@ -205,9 +205,13 @@ impl GhostLobbySim {
             st.step(net, &readout)
         };
         for e in events {
-            // Live metal holds the body still for as long as the hazard says.
+            // Live metal holds the body still for as long as the hazard says —
+            // but never *less* still than something already holding it. Two
+            // hazards met on the same tick, or a shock landing mid-way through
+            // a cut, must not cut the sentence short: the strictest outstanding
+            // cost wins, which is the same rule every other busy timer follows.
             if let PowerEvent::Shocked { ticks, .. } = &e {
-                self.state.power_busy = f64::from(*ticks) * TICK_DT;
+                self.state.power_busy = self.state.power_busy.max(f64::from(*ticks) * TICK_DT);
             }
             self.events.push(Event::Power { power: e });
         }
@@ -314,11 +318,12 @@ mod tests {
     use crate::scenario::command::{Command, PivotTarget, RunConfig, TickInput, fold};
     use crate::scenario::event::Event;
     use crate::scenario::floor_graph::door_node_id;
-    use crate::scenario::ids::{FeedId, LoadId, SignalId};
-    use crate::scenario::power::LoadKind;
+    use crate::scenario::ids::{FeedId, LoadId, RoomId, SignalId};
+    use crate::scenario::power::{HazardDef, HazardId, HazardLive, LoadKind};
     use crate::scenario::power::sim::{
         OffReason, PowerDenyReason, PowerEvent, PowerIndex, PowerOp,
     };
+    use crate::scenario::mathf::TICK_DT;
     use crate::scenario::power::test_floor::{
         BRK_A, BRK_B, DOOR_EXIT, FEED_A, FEED_B, PUMP_LAUNDRY, powered_ghost_lobby,
     };
@@ -695,6 +700,33 @@ mod tests {
         };
         sim.tick(&input);
         assert_eq!(sim.state.player.x, before, "no walking while stunned");
+    }
+
+    #[test]
+    fn a_second_hazard_cannot_shorten_a_stun() {
+        // Two live hazards can be met on the same tick. The body is held for the
+        // longer sentence, not for whichever the loop happened to visit last —
+        // the same "the strictest outstanding cost wins" rule as `hands_busy`.
+        let mut def = powered_ghost_lobby();
+        let net = def.power.as_mut().expect("powered");
+        net.hazards.push(HazardDef {
+            id: HazardId::from("haz-near"),
+            label: "Bared terminal, nearer the door".into(),
+            feed: FeedId::from(FEED_A),
+            room: RoomId::from("laundry"),
+            x: (920.0, 1000.0),
+            live: HazardLive::FeedEnergized,
+            shock_ticks: 20,
+        });
+        let mut sim = GhostLobbySim::new(def, RunConfig::standard(), 123456).expect("valid");
+        stand(&mut sim, "laundry");
+        sim.state.player.x = 960.0;
+        let _ = step(&mut sim, &[]);
+        assert!(
+            (sim.state().power_busy - 90.0 * TICK_DT).abs() < 1e-9,
+            "the longer stun stands: {}",
+            sim.state().power_busy
+        );
     }
 
     #[test]
