@@ -175,10 +175,11 @@ expect_fail "missing jq fails watch" "jq is required" \
 printf 'watch fixtures:\n'
 
 # Clean: today's reality — no released version above the vendored one drops
-# the forced titled CSD (0.20.0-rc.1 still forces it).
+# the forced titled CSD (0.20.1 is a stand-in for the next patch release,
+# which upstream will cut from the same forced-CSD manifest).
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.20.0-rc.1" "$FORCED_WAYLAND" '' false
+  index_line "0.20.1" "$FORCED_WAYLAND" '' false
 } > "$FIXTURE/index-no-split.jsonl"
 expect_pass "forced CSD upstream keeps the patch required" \
   env IDAPTIK_BEVY_WINIT_INDEX="$FIXTURE/index-no-split.jsonl" "$CHECKER" watch
@@ -186,7 +187,7 @@ expect_pass "forced CSD upstream keeps the patch required" \
 # Firing: a newer release ships a title-free CSD feature.
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.20.0" "$FORCED_WAYLAND" \
+  index_line "0.20.1" "$FORCED_WAYLAND" \
     ',"wayland-csd-notitle":["wayland","winit/wayland-csd-adwaita-notitle"]' false
 } > "$FIXTURE/index-notitle.jsonl"
 expect_fail "a notitle feature upstream triggers retirement" "RETIREMENT CONDITION MET" \
@@ -195,7 +196,7 @@ expect_fail "a notitle feature upstream triggers retirement" "RETIREMENT CONDITI
 # Firing: a newer release stops forcing the titled CSD.
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.19.2" '["winit/wayland"]' '' false
+  index_line "0.20.1" '["winit/wayland"]' '' false
 } > "$FIXTURE/index-unforced.jsonl"
 expect_fail "an unforced wayland upstream triggers retirement" "RETIREMENT CONDITION MET" \
   env IDAPTIK_BEVY_WINIT_INDEX="$FIXTURE/index-unforced.jsonl" "$CHECKER" watch
@@ -203,7 +204,7 @@ expect_fail "an unforced wayland upstream triggers retirement" "RETIREMENT CONDI
 # Clean: a yanked release with the split does not count.
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.20.0" "$FORCED_WAYLAND" \
+  index_line "0.20.1" "$FORCED_WAYLAND" \
     ',"wayland-csd-notitle":["wayland","winit/wayland-csd-adwaita-notitle"]' true
 } > "$FIXTURE/index-yanked.jsonl"
 expect_pass "yanked split releases are ignored" \
@@ -225,7 +226,7 @@ expect_fail "missing cargo fails graph" "cargo is required" \
 # spelling, which is what broke the graph check in the first place.
 make_metadata() {
   local winit_features="$1"
-  local bw_id="${2:-path+file:///w/vendor/bevy_winit#0.19.1}"
+  local bw_id="${2:-path+file:///w/vendor/bevy_winit#0.20.0}"
   local w_id="${3:-registry+https://github.com/rust-lang/crates.io-index#winit@0.31.0}"
   cat <<JSON
 { "packages": [
@@ -268,7 +269,7 @@ expect_fail "absent CSD feature is rejected" "native Wayland CSD is not wired" \
 # gate reports. Written with a package whose id matches no resolve node.
 make_metadata '["wayland","wayland-csd-adwaita-notitle"]' > "$FIXTURE/meta-nonode.json"
 sed -i 's|"resolve": { "nodes": \[|"resolve": { "nodes": [{"id":"unrelated#0.0.0","features":[]},|' "$FIXTURE/meta-nonode.json"
-sed -i '0,/{"name":"bevy_winit","id":"[^"]*"}/s||{"name":"bevy_winit","id":"path+file:///w/absent#0.19.1"}|' "$FIXTURE/meta-nonode.json"
+sed -i '0,/{"name":"bevy_winit","id":"[^"]*"}/s||{"name":"bevy_winit","id":"path+file:///w/absent#0.20.0"}|' "$FIXTURE/meta-nonode.json"
 expect_fail "a bevy_winit with no resolved node is rejected" "expected exactly one resolved bevy_winit node" \
   env IDAPTIK_BEVY_WINIT_METADATA="$FIXTURE/meta-nonode.json" "$CHECKER" graph
 

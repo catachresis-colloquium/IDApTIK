@@ -596,7 +596,11 @@ impl GhostLobbySim {
     // 5. VACUUM ------------------------------------------------------------
     pub(super) fn system_vacuum(&mut self) {
         let dt = TICK_DT;
-        if !self.state.vacuum.active || self.state.vacuum.fallen {
+        // A vacuum with no working supply has no motor, but it has not been
+        // told to stop: the request lives in `active` and this is the gate that
+        // decides whether it can be carried out. Deleting the request would mean
+        // a `Restart::Resume` device that comes back warm could never move again.
+        if !self.state.vacuum.active || self.state.vacuum.fallen || self.power_holds_vacuum() {
             return;
         }
         if self.state.vacuum.x > c::VAC_LAG_X {

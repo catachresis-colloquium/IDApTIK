@@ -33,6 +33,7 @@ pub mod ids;
 pub mod infrastructure;
 pub mod mathf;
 pub mod outcome;
+pub mod power;
 pub mod rng;
 pub mod rooftop;
 pub mod signal;

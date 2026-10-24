@@ -600,6 +600,9 @@ pub fn ghost_lobby() -> ScenarioDefinition {
         arrival_clock: crate::scenario::definition::ArrivalClock::RunStart,
         consoles: Vec::new(),
         exterior: None,
+        // The canonical floor has no power network: every device is simply as
+        // alive as the signal graph says, exactly as before ADR-0013.
+        power: None,
     }
 }
 

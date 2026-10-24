@@ -1,6 +1,6 @@
 # Vendored dependencies
 
-`bevy_winit` is copied from the published Bevy 0.19.1 crate. Its source is
+`bevy_winit` is copied from the published Bevy 0.20.0 crate. Its source is
 unchanged; only its Cargo feature definitions differ:
 
 - `wayland` enables the native Wayland backend without choosing a decoration
@@ -31,8 +31,10 @@ The obligations below are executable, not aspirational (issue #105):
 - `just vendor-winit-test` keeps the gate itself honest with clean and firing
   fixtures.
 
-Verified 2026-09-20: the latest stable Bevy is v0.19.1 (this copy), and both
-`v0.20.0-rc.1` and `main` still define
+Verified 2026-09-20 at v0.19.1, and re-verified 2026-10-25 at v0.20.0: the
+published v0.20.0 manifest still defines
 `wayland = ["winit/wayland", "winit/wayland-csd-adwaita"]` — the split has not
-landed upstream, so the patch remains required.
+landed upstream, so the patch remains required. (The 2026-10-16 Bevy 0.20.0
+bump landed without the re-vendor; this re-vendor is what keeps the
+font-parser-free graph assertion true again.)
 

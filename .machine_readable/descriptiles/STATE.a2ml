@@ -5,10 +5,11 @@
 project = "IDApTIK"
 version = "0.1.0"
 type = "game"
-last-updated = "2026-09-20"
+last-updated = "2026-10-24"
 branch = "main"
 build-status = "Envelope vertical slice implemented; player-facing GUI incomplete"
 test-status = "Rust core/TUI/FFI/net, Bevy frontend, Nickel contracts, and the Burble-backed two-seat loopback are CI-gated; the cross-repository UMS round trip is not currently CI-gated"
+evil-weevil-status = "present: crates/idaptik-evil-weevil — sans-IO deterministic adversarial corpus (ADR-0013) over the real lockstep/envelope/sim validators, with a read-only fault-vs-hostility observer and local-only enforcement; gated offline by just evil-weevil-check and against a throwaway local burble by just evil-weevil-relay-check"
 
 [project-context]
 description = "Asymmetric two-player infiltration game. One player infiltrates a physical space; the other hacks a grounded network simulation."

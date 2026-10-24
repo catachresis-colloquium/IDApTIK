@@ -193,11 +193,27 @@ replay FILE:
 test:
     cargo test --workspace
 
-# The Ghost Lobby scenario gate: core + tui + ffi + net (does not build Bevy).
+# The Ghost Lobby scenario gate: core + tui + ffi + net + evil-weevil
+# (does not build Bevy).
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets -- -D warnings
+    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil
+    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil --all-targets -- -D warnings
     cargo fmt --all -- --check
+
+# The Evil Weevil adversarial-testing gate (ADR-0013): offline, sans-IO
+# corpus over the real production validators — stale/duplicate messages,
+# invalid targets, epoch conflicts, reconnect/obsolete frames, and
+# delayed/withheld observations with fault-vs-hostility classification.
+# Hard-fails when cargo is missing; needs no Elixir and opens no sockets.
+evil-weevil-check:
+    bash scripts/evil_weevil_check.sh
+
+# The optional real-relay leg: the same relay rules confirmed against a
+# throwaway local burble (needs mix + a sibling burble checkout, like the
+# loopback gate). Not part of test-ghost: it exercises cross-repository
+# behaviour and has its own hard toolchain failure.
+evil-weevil-relay-check:
+    bash scripts/evil_weevil_relay_check.sh
 
 # The ADR-0006 §4 loopback gate: throwaway burble server + seat processes; asserts
 # byte-identical artifacts (vs each other AND the headless reference) for the
