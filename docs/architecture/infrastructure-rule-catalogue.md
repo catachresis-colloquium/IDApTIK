@@ -153,6 +153,15 @@ the layer model is written for gases that pool.
 `Hands` (always), `Wrench`, `Cutter`, `InsulatedGloves`, `Respirator`,
 `Flashlight`, `RepairKit`.
 
+### 2.6 Material conditions
+
+The closed `Condition` vocabulary in design §2.4 includes
+`MaterialWaterFilmConductive(entity)`, encoded as
+`{"kind":"material_water_film_conductive","entity":"self"}`. It resolves
+the subject's `material` and is true exactly when
+`MaterialDef.water_film_conductive` is true (the "Wet film conducts" column
+in §2.1). It does not infer conductivity from the entity's kind or wetness.
+
 ---
 
 ## 3. WATER + ELECTRICITY
@@ -392,7 +401,7 @@ the layer model is written for gases that pool.
 
 | Field | Specification |
 |---|---|
-| **Preconditions & scope** | A link whose mouth is submerged: the depth on its low side exceeds `sill_mm`. Scope: one link. |
+| **Preconditions & scope** | A link with `fluid_block: AboveSill` whose mouth is submerged: the depth on its low side exceeds `sill_mm`. Scope: one link. Gate blocking applies independently (design §2.1). |
 | **Access & actor** | Environment. |
 | **Consumed / transformed** | Effective aperture becomes **0 for gas**. The water itself is not consumed, and **liquid flow is unchanged** — a submerged opening still weirs water, bounded by `capacity_ml_per_s`. Closing a duct to air must not turn it into a valve for water, or a flooded crawl would stop flooding. |
 | **Delay & duration** | Immediate on crossing; persists until the depth falls. |
@@ -443,7 +452,7 @@ the layer model is written for gases that pool.
 
 | Field | Specification |
 |---|---|
-| **Preconditions & scope** | A `Moves{Gas}` entity is running, its discharge gate is open, and its intake link is not blocked (`WA-1`). Scope: its compartment and the discharge destination. |
+| **Preconditions & scope** | A `Moves{Gas}` entity is running and every link in its bound `path` passes gas: gates open, no submersion block (`WA-1`) or debris block. Scope: its `intake` and `discharge` compartments (design §2.2). |
 | **Access & actor** | Whoever controls the fan: local, wired, or remote. |
 | **Consumed / transformed** | Moves up to `rate_ml_per_s` of the species it draws — an inline transfer fan moves 1.5 L/s of gas, not 1.5 L/s of air. It cannot separate species; if two share a compartment, both move in proportion. |
 | **Delay & duration** | Continuous while running. |
@@ -824,8 +833,12 @@ the layer model is written for gases that pool.
 ## 10. Authoring shape
 
 One rule instance, to show what a level author (or UMS) actually writes. This is
-`WE-2` as a level cites it, in the wire form of design doc §2.4a — note that it
-names **no entity**: the subjects come from the capability query at load time.
+the damaged-equipment branch of `WE-2`, in the wire form of design doc §2.4a —
+note that it names **no entity**: the subjects come from the capability query
+at load time. Integrity is integral permille, so `le 799` encodes strictly
+below 800. The exposed-equipment branch uses `Tag(self, Exposed)` in place of
+the integrity condition; both branches require the conductive-material
+condition. The catalogue's full `WE-2` precondition remains the authority.
 
 ```json
 {
@@ -837,7 +850,8 @@ names **no entity**: the subjects come from the capability query at load time.
   "when": [
     { "kind": "energised", "circuit": "self" },
     { "kind": "wetness", "entity": "self", "op": "ge", "permille": 350 },
-    { "kind": "integrity", "entity": "self", "op": "le", "permille": 800 }
+    { "kind": "integrity", "entity": "self", "op": "le", "permille": 799 },
+    { "kind": "material_water_film_conductive", "entity": "self" }
   ],
   "access": "none",
   "actor": [],

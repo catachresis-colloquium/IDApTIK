@@ -37,12 +37,16 @@ second question: *can you tell what a single breaker does before you throw it?*
 
 | Link | Between | Aperture (cm²) | Sill (mm) | Clearance (mm) | Gate | Fluid block |
 |---|---|---|---|---|---|---|
-| `vent-stack` | riser → outside | 800 (cap 5 000) | 1 500 | 0 | `dmp-x1` (motorised) | `WhenGateShut` |
+| `vent-stack` | riser → outside | 800 (cap 5 000) | 1 500 | 0 | `dmp-x1` (motorised) | `Never` (gate still blocks) |
 | `pen-1` | riser ↔ plant | 400 (cap 2 000) | 220 | 0 | `dmp-p1` (manual), inline `fan-f2` | `AboveSill` |
-| `duct-low` | plant ↔ lobby | 600 (cap **50**) | 60 | 0 | `dmp-l1` (motorised) | `AboveSill` + `WhenGateShut` |
-| `duct-high` | riser ↔ lobby | 250 (cap 1 200) | 1 200 | 0 | `dmp-h1` (manual) | `WhenGateShut` |
+| `duct-low` | plant ↔ lobby | 600 (cap **50**) | 60 | 0 | `dmp-l1` (motorised) | `AboveSill` |
+| `duct-high` | riser ↔ lobby | 250 (cap 1 200) | 1 200 | 0 | `dmp-h1` (manual) | `Never` (gate still blocks) |
 | `wall-pl` | plant ↔ lobby | 0 → 900 after breach (cap 4 000) | 900 | 0 → 900 | — | never (until breached) |
 | `crawl-c1`, `grate-d1`, `door-d5`, `ladder-l1` | as level 1 | | | | | |
+
+The Gate and Fluid block columns apply independently: both `pen-1` and
+`duct-low` stop gas when submerged **or** when their damper is shut. Their
+JSON encodes a `gate` reference alongside `fluid_block: above_sill`.
 
 Four notes on the model, all from the design document:
 
@@ -69,9 +73,9 @@ Four notes on the model, all from the design document:
 
 | Id | Compartment | Capabilities | Initial | Why it exists |
 |---|---|---|---|---|
-| `fan-f1` | riser | `Powered { N, 4 }`, `Moves { Gas, 4 000 ml/s }`, `Ignites { Inductive }`, `Sounds { VentHum, 500 }` | off | extraction to outside |
+| `fan-f1` | riser | `Powered { N, 4 }`, `Moves { Gas, intake: riser, discharge: outside, path: [vent-stack], 4 000 ml/s }`, `Ignites { Inductive }`, `Sounds { VentHum, 500 }` | off | extraction to outside |
 | `dmp-x1` | riser | `Powered { N, 1 }`, `Gates { vent-stack }`, opened by `fan-f1`'s run state (`ctl-stack`) | shut | stack shutter |
-| `fan-f2` | riser | `Powered { N, 2 }`, `Moves { Gas, 1 500 ml/s, reversible }`, `Sounds { VentHum, 400 }` | off | transfer between riser and plant — the only fast way to move gas between compartments |
+| `fan-f2` | riser | `Powered { N, 2 }`, `Moves { Gas, intake: riser, discharge: plant, path: [pen-1], 1 500 ml/s, reversible }`, `Sounds { VentHum, 400 }` | off | transfer between riser and plant — the only fast way to move gas between compartments |
 | `dmp-p1` | riser | `Gates { pen-1 }` | open | manual damper; closing it traps whatever is in the plant |
 | `dmp-l1` | plant | `Powered { N, 1 }`, `Gates { duct-low }` | open | motorised damper |
 | `dmp-h1` | riser | `Gates { duct-high }` | shut | manual damper |
@@ -152,15 +156,16 @@ reviewer.
 
 1. Keep `N` live. Start `fan-f1` from the panel (`sig-vent`; local `Hands` or
    hacker remote at R4) at t ≈ 10 s, *before* `gd-1` trips at 20 ‰.
-2. The riser reaches 0 ‰ in ~6 s; the detector never trips; no alarm; no guard
-   response.
+2. The riser clears in ~8 s (28 L at a net 3.6 L/s); the detector never trips
+   and no alarm sounds. The fan hum can still prompt a guard response.
 3. Enter the riser and close the cylinder regulator: `Local` + `Wrench`,
    60 ticks. Source → 0.
 4. Leave. Stop the fan or leave it; with the source sealed, it has nothing to do.
 
-Cost: a fan hum (`level 500`, one link → 310 at the stair — below the guard's
-250 threshold only if the stair door is shut). Destroyed: nothing. Irreversible:
-nothing. **The clean run.** It requires knowing the fan can be started *before*
+Cost: a fan hum (`level 500`, one link → 310 at the stair, exceeding the guard's
+250 threshold; the guard hears it and may investigate). Destroyed: nothing.
+Irreversible: nothing. **The clean run, with audible evidence.** It requires
+knowing the fan can be started *before*
 the detector demands it — which the reek is there to teach.
 
 ### B2 · Move the problem into the plant (non-destructive, costs you the plant)
@@ -168,23 +173,34 @@ the detector demands it — which the reek is there to teach.
 1. Check `dmp-p1` is open and `duct-low` is shut (it is: the plant's 110 mm is
    over its 60 mm sill, so `WA-1` has already closed it to gas — the lobby is
    safe by construction, not by luck).
-2. Run `fan-f2` **towards the plant**. It moves 1 500 ml/s of *species*, not of
-   mixture (design §3.1a), so 96 L of sable-2 takes **64 s** to arrive, and the
-   riser ends at 0 ‰ while the plant reaches `96 / 3 800 L = 25 ‰` — above
-   irritant, below LFL.
-3. Close `dmp-p1` behind it. The riser and the lobby are breathable; the plant is
-   a hazard room with the gas still in the building.
+2. Start `fan-f2` **towards the plant at tick 600** (10 s). Keep `fan-f1` off;
+   `dmp-x1`, `dmp-h1` and `door-d5` stay shut. By then the 0.4 L/s source has
+   added 4 L to the initial 24 L. Passive flow through `pen-1` is
+   `400 × 0.05 = 20 ml/s`, so about 27.8 L is in the riser and 0.2 L in the
+   plant. The fan moves 1 500 ml/s of *species*, not mixture (design §3.1a),
+   after its 6-tick pull-in.
+3. While it runs, close `cyl-s2`'s regulator: `Local` + `Wrench` from tick 1140
+   to 1200 (19–20 s). The source continues until tick 1200, adding another
+   4 L after the fan request. With no extraction, **32 L** must end in the
+   plant. Passive flow may aid or oppose the fan by up to 0.02 L/s. The
+   transfer therefore takes `(32 − 0.202) / (1.5 ± 0.02)`, about
+   **20.92–21.49 s** at rate, or **21.02–21.59 s** after the request including
+   pull-in: the riser clears by about tick **1896**. Allow tick rounding.
+4. Keep the fan running until `dmp-p1` is closed at tick 1920, then stop it.
+   Only after the source is isolated and the riser has cleared is the riser
+   breathable. The lobby stays breathable; the plant holds
+   `32 / 3 800 × 1000 ≈ 8.4 ‰` — above irritant, below LFL.
 
 Cost: the plant is unusable — no valve, no grate, no pump, no crawl — and the
 gas is still there. Destroyed: nothing. Irreversible: nothing, but the debrief
-records a gas-filled compartment, and `WE-2` now has a room it can never safely
-enter: any later arc in there is inside 25 ‰, not 2 ‰. This is the honest
+records a gas-filled compartment. At 8.4 ‰ it is an irritant room; an arc there
+does not satisfy sable-2's 40 ‰ LFL. This is the honest
 "not my problem" solution and the level's second-best outcome.
 
 The transfer fan is also the answer to a question the level wants asked: **the
 gas is moved, never destroyed.** `fan-f2` does not filter, scrub or burn
-anything; it relocates the species at a rate, and the moment it stops, `WA-6`
-starts slowly putting it back through the same 400 cm² of duct.
+anything; it relocates the species at a rate. If `dmp-p1` is left open after
+the fan stops, `WA-6` slowly puts it back through the same 400 cm² of duct.
 
 ### B3 · Kill the alarm and pump it (the trap)
 
@@ -203,14 +219,18 @@ the door was not, and both are "electrical".
 
 ### B4 · Water moves the gas; it does not remove it (demonstration, caution)
 
-Run B2, then reopen `dmp-p1`, **restore the supply** (`valve-v1` open) and let
-the leak come. As the plant's depth rises from 110 mm to the 180 mm weir over
-140 s, 112 L of water takes 112 L of the plant's air, which carries
-`112 × 25 ‰ = 2.8 L` of sable-2 back up the transfer duct.
+Run B2, then at tick 6000 (100 s) reopen `dmp-p1`, **restore the supply**
+(`valve-v1` open) and let the leak come. Keep `cyl-s2` sealed and both fans off.
+The 50 ml/s seep through `duct-low` has left about 171 L (107 mm) in the plant.
+Net inflow is now `800 − 50 = 750 ml/s`, so reaching the 288 L / 180 mm crawl
+sill takes about **156 s**. The added 117 L displaces mixture carrying at most
+`117 × (32 / 3 800) ≈ 0.99 L` of sable-2 via `WA-3`. Passive return through `pen-1`
+(`WA-6`) is separate, at most another 3.12 L over that interval.
 
-That is 1.2 ‰ in the riser: a measurable tick on the panel, not a disaster. The
-**perceptible** part is the haze layer climbing the plant wall and the reek
-returning through the duct. Leave the supply open past the weir and level 1's clock resumes: `crawl-c1`
+Together that is at most about 1.7 ‰ in the riser: measurable on the panel,
+below the 8 ‰ reek threshold. The **perceptible** part is the haze layer
+climbing the plant wall; this route does not promise a returning `GasReek`.
+Leave the supply open past the weir and level 1's clock resumes: `crawl-c1`
 spills into the lobby and the socket's 25 mm fuse restarts. The demonstration is
 bounded by the same hydraulics, not by a scripted stop.
 
@@ -219,13 +239,16 @@ disposal site.** Conservation is asserted by the test, not drama by the fiction 
 a 3 % flood can only move 3 % of the gas, and pretending otherwise would be a
 special effect, not a rule.
 
-### B5 · Breach the wall (TU-6: safe because the utilities were controlled first)
+### B5 · Breach the wall (dry wall breach)
 
 1. `iso-m` thrown (`WE-4`), `valve-v1` closed. `M` stays live for the lift, the
-   pump is protected, no water is moving.
+   pump is protected and the supply leak is stopped.
 2. Cut `cut-m` (lobby side of the plant wall): `Local` + `Cutter`, hardness 4
-   with a rating-6 cutter → 20 ticks. The wall carries no live utility, so no
-   arc; but if you skipped step 1 and the wall does carry one, it does.
+   with a rating-6 cutter → 20 ticks. No utility is authored behind `wall-pl`,
+   so the cut produces no arc even if `iso-m` was not thrown. `iso-m` still
+   protects only the pump branch; leaving circuit `M` live does not put a
+   cable in this wall. This route exercises `TU-2`; `TU-6` needs an authored
+   utility to demonstrate isolation preventing a cutting arc.
 3. `TU-2` opens `wall-pl`: the hole's sill is authored at 900 mm, so it is above
    the 110 mm flood and below the ceiling. Both `clearance_mm` and `aperture_cm2`
    rise, which is the point — a breach is an actor path *and* an air path, and
@@ -233,8 +256,8 @@ special effect, not a rule.
 
 Cost: `StructuralBreach` (permanent) and sustained `CutterGrating`
 (`level 800`, two links → 350 at the stair: the guard hears it). Destroyed: the
-wall. Irreversible: yes, and it is *supposed* to be — the point is that the
-irreversible act is safe **because** the reversible utility work came first.
+wall. Irreversible: yes. The high sill keeps the opening above the flood;
+the cut's lack of an arc follows from the absence of an authored utility.
 
 ---
 
@@ -263,15 +286,20 @@ t=12200 [act ] Traverse(stair-s1) → TraversalDenied{OnFire}           cause 73
 
 ```
 t=600   [act ] fan-f2 start, direction riser → plant                   cause 80
-t=4440  [phy ] transfer complete: riser 0 ‰, plant 96 L = 25 ‰         cause 81
-t=4500  [act ] dmp-p1 closed                                            cause 82
-t=6000  [act ] B4 begins: valve-v1 reopened, leak 800 ml/s              cause 83
-t=14400 [phy ] plant reaches 180 mm (the crawl sill) → WA-3             cause 84 parent 83
-t=14401 [phy ] 2.8 L of sable-2 moved plant → riser (conserved)         cause 85 parent 84
-t=14401 [obs ] haze layer height rises in the plant; GasReek returns    cause 86
+t=606   [phy ] fan-f2 at rate; source still adds 400 ml/s               cause 81 parent 80
+t=1140  [act ] Local + Wrench at cyl-s2 (60 ticks)                     cause 82
+t=1200  [phy ] regulator shut; source 400 → 0 ml/s                     cause 83 parent 82
+t=1896  [phy ] transfer cleared by now: riser ≈0, plant 32 L ≈8.4 ‰    cause 84 parent 80
+t=1920  [act ] dmp-p1 closed, then fan-f2 stopped                      cause 85
+t=6000  [act ] B4: dmp-p1 reopened, valve-v1 opened, leak 800 ml/s      cause 86
+t=15360 [phy ] plant ≈180 mm; WA-3 has displaced ≤0.99 L to riser      cause 87 parent 86
+t=15360 [obs ] haze layer rises; riser below GasReek threshold         cause 88 parent 87
 ```
 
-Total species across compartments is invariant: `Σ gas_ml` before = after.
+The source adds 8 L before it is sealed at tick 1200. Thereafter total species
+across compartments is invariant: `Σ gas_ml = 32 000` (tick rounding aside).
+The B4 displacement bound excludes passive transfer, which is counted
+separately; neither process destroys gas.
 
 ### 5.3 γ — B1 in full
 
@@ -280,7 +308,7 @@ t=600   [act ] start fan-f1 (local panel)                             cause 90
 t=606   [phy ] dmp-x1 opens, fan runs, 4 L/s                          cause 91 parent 90
 t=960   [act ] regulator closed (60 ticks, Wrench)                    cause 93
 t=1020  [phy ] source 400 → 0 ml/s                                    cause 94 parent 93
-t=1026  [phy ] riser 24 L → 0; concentration 0 ‰                      cause 95
+t=1080  [phy ] riser cleared; concentration ≈0 ‰                     cause 95
 t=1140  [phy ] detector never tripped; alarm never sounded            cause 96
 ```
 
@@ -383,11 +411,11 @@ at a time, which is long enough to cross the riser without being heard over it.
 | `l2_door_motor_ignites_in_band` | B3: ignition within 6 ticks of the door request |
 | `l2_pump_in_plant_does_not_ignite_riser_gas` | spatial scope: no ignition from a plant arc at 2 ‰ |
 | `l2_light_switch_is_not_an_ignition_source` | same atmosphere, `Ignites: None` → nothing |
-| `l2_transfer_moves_the_species_downhill` | B2: riser 0, plant 25 ‰, 64 s |
-| `l2_water_displacement_conserves_species` | B4: `Σ gas_ml` invariant, `Δriser = V × c` |
+| `l2_transfer_moves_the_species_downhill` | B2: source sealed at tick 1200; riser ≈0, plant 32 L ≈8.4 ‰ by tick 1896; damper closed at 1920 |
+| `l2_water_displacement_conserves_species` | B4: `Σ gas_ml` invariant; WA-3 contribution `Δriser = Σ(V × c)` with passive transfer accounted separately |
 | `l2_flood_blocks_duct_low` | the lobby duct is closed **to gas** at 110 mm, and reopens only when the plant is drained below its 60 mm sill |
-| `l2_breach_is_safe_after_isolation` | B5: no arc, no water event during the cut |
-| `l2_breach_without_isolation_arcs` | the same cut with `M` live emits `Arc` |
+| `l2_breach_is_safe_after_isolation` | B5: no arc, no new water path through the high breach |
+| `l2_breach_without_isolation_has_no_arc` | the same cut with `M` live and no lockout emits no `Arc`: no utility is authored behind `wall-pl` |
 | `l2_spoof_misleads_controller_not_physics` | §6 table, both seats |
 | `l2_controller_loop_period_is_2030_ticks` | exact period, twice |
 | `l2_signal_hops_are_one_per_tick` | physical change → fan actuation is 3 ticks (2 hops + 1 readout lag) |
@@ -433,10 +461,10 @@ Illustrative, not a loaded fixture; nothing here is validated by a gate.
         "aperture_cm2": 800, "capacity_ml_per_s": 5000,
         "sill_mm": 1500, "clearance_mm": 0,
         "actor": "blocked", "gate": { "entity": "dmp-x1" },
-        "fluid_block": "when_gate_shut" },
+        "fluid_block": "never" },
       { "id": "pen-1", "a": "riser", "b": "plant", "reach": "duct",
         "aperture_cm2": 400, "capacity_ml_per_s": 2000,
-        "sill_mm": 260, "clearance_mm": 0,
+        "sill_mm": 220, "clearance_mm": 0,
         "actor": "blocked", "gate": { "entity": "dmp-p1" },
         "fluid_block": "above_sill" },
       { "id": "duct-low", "a": "plant", "b": "lobby", "reach": "duct",
@@ -448,7 +476,7 @@ Illustrative, not a loaded fixture; nothing here is validated by a gate.
         "aperture_cm2": 250, "capacity_ml_per_s": 1200,
         "sill_mm": 1200, "clearance_mm": 0,
         "actor": "blocked", "gate": { "entity": "dmp-h1" },
-        "fluid_block": "when_gate_shut" },
+        "fluid_block": "never" },
       { "id": "wall-pl", "a": "lobby", "b": "plant", "reach": "opening",
         "aperture_cm2": 0, "capacity_ml_per_s": 4000,
         "sill_mm": 900, "clearance_mm": 0,
@@ -459,7 +487,9 @@ Illustrative, not a loaded fixture; nothing here is validated by a gate.
         "material": "steel", "node": "fan-f1",
         "caps": [
           { "powered": { "circuit": "N", "load": 4 } },
-          { "moves": { "medium": "gas", "rate_ml_per_s": 4000 } },
+          { "moves": { "medium": "gas", "rate_ml_per_s": 4000,
+                       "intake": "riser", "discharge": "outside",
+                       "path": ["vent-stack"] } },
           { "ignites": { "class": "inductive" } },
           { "sounds": { "cue": "vent-hum", "level": 500, "radius_links": 2 } }
         ],
@@ -477,6 +507,7 @@ Illustrative, not a loaded fixture; nothing here is validated by a gate.
         "caps": [
           { "powered": { "circuit": "N", "load": 2 } },
           { "moves": { "medium": "gas", "rate_ml_per_s": 1500,
+                       "intake": "riser", "discharge": "plant", "path": ["pen-1"],
                        "reversible": true } },
           { "sounds": { "cue": "vent-hum", "level": 400, "radius_links": 2 } }
         ],

@@ -160,7 +160,7 @@ pub struct FluidLinkDef {
     pub clearance_mm: u32,       // ACTOR clearance; 0 = actors never pass
     pub actor: ActorPassage,     // Passable | Blocked | NeedsGate
     pub gate: Option<GateRef>,   // Portal(PortalId) | Entity(EntityId)
-    pub fluid_block: FluidBlock, // Never | AboveSill | WhenGateShut | WhenDebris
+    pub fluid_block: FluidBlock, // Never | AboveSill | WhenDebris; additional to gate
     pub noise_permille: u16,     // attenuation for cues/evidence crossing it
 }
 ```
@@ -194,9 +194,18 @@ traversal" rule. They are separate numbers on the same link, and the rules that
 read them are separate rules (`WA-1` reads the aperture; `WA-2` reads
 `clearance_mm`). Nothing infers one from the other.
 
-Where a link mirrors a building portal, `gate: Portal(id)`: opening the door
-opens the fluid path, and the door's own state is the only truth. The plant
-never keeps a second copy.
+Gate blocking is independent of `fluid_block`: any `gate: Some(…)` blocks both
+water and gas while shut. `AboveSill` additionally blocks gas when submerged
+(`WA-1`), without blocking water; `WhenDebris` blocks both media while debris
+remains. `Never` adds no obstruction, but does not bypass a shut gate.
+
+Both conditions are encoded on the same link: for example,
+`"gate": {"entity":"dmp-l1"}, "fluid_block":"above_sill"` means gas can pass
+only while the damper is open **and** the mouth is not submerged. No
+`WhenGateShut` variant is needed. A gate-only link uses `fluid_block: Never`.
+Where a link mirrors a building portal, `gate: Portal(id)` reads the door's
+own state; the plant never keeps a second copy. Opening it removes only the
+gate obstruction.
 
 ### 2.2 Layer B — entities and typed capabilities
 
@@ -224,7 +233,7 @@ The closed capability set (v1):
 | Capability | Parameters | What it means mechanically |
 |---|---|---|
 | `Powered` | `circuit`, `load` | runs only while the circuit is energised |
-| `Moves` | `medium`, `rate_ml_per_s`, `check_valve`, `return_ml`, `reversible` | transports a medium while running |
+| `Moves` | `medium`, `intake: VolumeId`, `discharge: VolumeId`, `path: Vec<LinkId>`, `rate_ml_per_s`, `check_valve`, `return_ml`, `reversible` | transports the medium between its typed endpoints along its authored path while running |
 | `Gates` | `flow: Entity \| Link`, `positions` | position gates another entity's flow or a link's aperture |
 | `Stores` | `medium`, `capacity_ml`, `accepts_ml_per_s`, `outlet` | holds a medium; accepts at a rate; may discharge to an outlet |
 | `Carries` | `medium`, `pressurised`, `leak_ml_per_s` | a conduit; leaks at an authored rate |
@@ -235,6 +244,18 @@ The closed capability set (v1):
 | `Breaks` | `target: Entity \| Link \| Portal`, `tool`, `hardness` | excavation or forced release: expose or sever a specific authored thing |
 | `Alarms` | `cue`, `evidence` | raises an alarm and emits evidence |
 | `Heats` | `delta_mk_per_s` | raises fire intensity / air temperature (fire only) |
+
+Every mover declares its intake and discharge compartments (including exterior
+sinks). `path` lists intervening links in intake-to-discharge order; an empty
+path is a dedicated mover conduit, with no passive-link gate to inherit.
+Non-empty paths must connect the endpoints and obey each link's gates,
+medium-specific blocking and capacity. Reversing swaps intake and discharge
+and reverses the path. The entity's location alone never selects its route.
+
+Thus `pump-p1` has Water endpoints `plant → sewer`, `path: []`: its dedicated
+discharge works while the separate `grate-d1` drain remains blocked. `fan-f1`
+has Gas endpoints `riser → outside`, `path: [vent-stack]`; `fan-f2` has Gas
+endpoints `riser → plant`, `path: [pen-1]` (reversible).
 
 `Senses.quantity` is closed: `WaterDepth`, `Wetness`, `GasConcentration(GasId)`,
 `Pressure`, `Flow`, `GatePosition`, `Integrity`.
@@ -365,6 +386,7 @@ Conditions v1:
 Energised(circuit) | NotEnergised(circuit)
 GatePosition(entity, Position)
 WaterDepth(volume, Ge(n)) | Wetness(entity, Ge(n)) | Integrity(entity, Le(n))
+MaterialWaterFilmConductive(entity) // true iff the entity's material conducts a wet film
 GasIn(volume, gas, Ge(n) | Lt(n) | Between(lo, hi))
 ActorIn(volume) | ActorTouching(entity) | ActorHas(capability)
 FireIn(volume, Ge(n)) | LinkBlocked(link) | PortalOpen(portal)
@@ -409,6 +431,7 @@ or a circuit is expected. Comparison operators are one field `op` with
 | `WaterDepth(v, Ge)` | `{"kind":"water_depth","volume":"plant","op":"ge","mm":180}` |
 | `Wetness(e, Ge)` | `{"kind":"wetness","entity":"pump-p1","op":"ge","permille":350}` |
 | `Integrity(e, Le)` | `{"kind":"integrity","entity":"pump-p1","op":"le","permille":800}` |
+| `MaterialWaterFilmConductive(e)` | `{"kind":"material_water_film_conductive","entity":"self"}` |
 | `GasIn(v, g, cmp)` | `{"kind":"gas","volume":"riser","gas":"sable-2","op":"ge","permille":40}` |
 | `ActorIn(v)` | `{"kind":"actor_in","volume":"plant"}` |
 | `ActorTouching(e)` | `{"kind":"actor_touching","entity":"valve-v1"}` |
@@ -703,7 +726,9 @@ the committed state is identical.
    if R <= A:            allocated_i = request_i
    else:                 allocated_i = floor(request_i * A / R)
                          r = A - Σ allocated_i
-                         give 1 ml each to the first r intents in total order
+                         remainder_i = (request_i * A) % R
+                         sort by remainder_i descending, then total order for ties
+                         give 1 ml each to the first r intents in that order
    ```
 
    The destination is credited with `allocated_i`, never with `request_i`, and
@@ -1122,6 +1147,7 @@ report, not a mystery.
 | `links.actor_and_aperture` | `actor: Passable` with `clearance_mm: 0` |
 | `entities.resolve` | entity in a missing compartment, or a missing material |
 | `entities.capability_targets` | `Gates`/`Breaks` naming a missing target |
+| `entities.mover_routes` | `Moves` naming a missing endpoint/link, a disconnected or misordered path, or a medium the route cannot carry |
 | `entities.signal_role` | a sensor bound to `PlantActuator` or vice versa |
 | `entities.node_resolves` | a `node` the grounded graph lacks |
 | `entities.plinth_within_volume` | a plinth above the compartment's flood capacity |

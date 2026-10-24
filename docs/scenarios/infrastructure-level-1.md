@@ -61,8 +61,8 @@ water and air).
 | Id | Between | Aperture (cm²) | Sill (mm) | Clearance (mm) | Gate | Fluid block |
 |---|---|---|---|---|---|---|
 | `crawl-c1` | plant ↔ lobby | 2 000 (cap 4 000) | 180 | 180 | — | `AboveSill` |
-| `grate-d1` | plant → sewer | 1 200 (cap 10 000) | 0 | 0 | entity `grate-d1` | `WhenGateShut` |
-| `door-d5` | riser ↔ lobby | 0 shut, 400 open (cap 2 000) | 30 | 2 000 | portal `door-d5` | `WhenGateShut` |
+| `grate-d1` | plant → sewer | 1 200 (cap 10 000) | 0 | 0 | entity `grate-d1` | `Never` (gate still blocks) |
+| `door-d5` | riser ↔ lobby | 0 shut, 400 open (cap 2 000) | 30 | 2 000 | portal `door-d5` | `Never` (gate still blocks) |
 | `ladder-l1` | riser ↔ plant | 0 (cap 0) | — | 900 | — | never (a ladder is not a duct) |
 
 `door-d5` carries fluid *and* actors. That single authored fact is why closing
@@ -78,7 +78,7 @@ one.
 | Id | Kind (presentational) | Compartment | Material | Capabilities | Initial |
 |---|---|---|---|---|---|
 | `iso-m` | isolator | plant | `steel` | `LockOut { series: pump-p1 }`, `Sounds` | closed |
-| `pump-p1` | pump | plant | `steel` | `Powered { M, 6 }`, `Moves { Water, 6 000 ml/s, check_valve: false, return_ml: 20 000 }`, `Ignites { Inductive }`, `Sounds { PumpHum, 700 }` | off, `integrity 620`, plinth 150 mm |
+| `pump-p1` | pump | plant | `steel` | `Powered { M, 6 }`, `Moves { Water, intake: plant, discharge: sewer, path: [], 6 000 ml/s, check_valve: false, return_ml: 20 000 }`, `Ignites { Inductive }`, `Sounds { PumpHum, 700 }` | off, `integrity 620`, plinth 150 mm |
 | `valve-v1` | valve | plant | `steel` | `Gates { pipe-spr }` | open |
 | `pipe-spr` | pipe | plant | `copper` | `Carries { Water, pressurised, leak 800 ml/s }` | live |
 | `grate-d1` | floor drain | plant | `steel` | `Stores { Water, 900 000 ml, accepts 10 000 ml/s, outlet: sewer }` | **blocked by debris** (its position gates `grate-d1`) |
@@ -330,11 +330,11 @@ it after the fact in the debrief.
 
 ```
 t=600   [act ] Traverse(stair-s1) → Entered(riser)                  cause 50
-t=780   [act ] Local + Wrench at valve-v1 (90 ticks)                cause 51
-t=870   [phy ] Gates(pipe-spr) open → closed                        cause 52 parent 51
-t=870   [phy ] leak 800 → 0 ml/s                                    cause 53 parent 52
-t=871   [obs ] Evidence WetFloor at svc/plant                       cause 54
-t=900   [act ] Traverse(ladder-l1) → Entered(plant)                 cause 55
+t=780   [act ] Traverse(ladder-l1) → Entered(plant)                 cause 51
+t=876   [act ] Local + Wrench at valve-v1 (90 ticks)                cause 52
+t=966   [phy ] Gates(pipe-spr) open → closed                        cause 53 parent 52
+t=966   [phy ] leak 800 → 0 ml/s                                    cause 54 parent 53
+t=967   [obs ] Evidence WetFloor at svc/plant                       cause 55
 t=1320  [act ] Traverse(crawl-c1) → Entered(lobby)                  cause 56
 ```
 
@@ -420,12 +420,12 @@ Abridged; the full definition is the level's own payload.
         "aperture_cm2": 1200, "capacity_ml_per_s": 10000,
         "sill_mm": 0, "clearance_mm": 0,
         "actor": "blocked", "gate": { "entity": "grate-d1" },
-        "fluid_block": "when_gate_shut" },
+        "fluid_block": "never" },
       { "id": "door-d5", "a": "riser", "b": "lobby", "reach": "opening",
         "aperture_cm2": 400, "capacity_ml_per_s": 2000,
         "sill_mm": 30, "clearance_mm": 2000,
         "actor": "needs_gate", "gate": { "portal": "door-d5" },
-        "fluid_block": "when_gate_shut" },
+        "fluid_block": "never" },
       { "id": "ladder-l1", "a": "riser", "b": "plant", "reach": "opening",
         "aperture_cm2": 0, "capacity_ml_per_s": 0,
         "sill_mm": 0, "clearance_mm": 900, "noise_permille": 700,
@@ -444,6 +444,7 @@ Abridged; the full definition is the level's own payload.
         "caps": [
           { "powered": { "circuit": "M", "load": 6 } },
           { "moves": { "medium": "water", "rate_ml_per_s": 6000,
+                       "intake": "plant", "discharge": "sewer", "path": [],
                        "check_valve": false, "return_ml": 20000 } },
           { "ignites": { "class": "inductive" } },
           { "sounds": { "cue": "pump-hum", "level": 700, "radius_links": 2 } }
