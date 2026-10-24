@@ -99,6 +99,26 @@ fn rejected(mutate: impl FnOnce(&mut InfrastructureDefinition)) -> InfraValidati
         .expect("a refusal carries at least one typed error")
 }
 
+/// Mutate the engine's rule catalogue and return the first typed error.
+///
+/// Rule bodies live in the engine, not in the level (loader §5), so a
+/// rule-body check can only be exercised by validating against a supplied
+/// catalogue. That is what `validate_with_rules` is for, and why these tests
+/// mutate rules rather than `infra.rules`.
+fn rejected_rule(mutate: impl FnOnce(&mut Vec<RuleDef>)) -> InfraValidationError {
+    let mut rules = idaptik_core::scenario::infrastructure::catalogue::rule_catalogue();
+    mutate(&mut rules);
+    sump()
+        .infra
+        .expect("the fixture ships an infra block")
+        .validate_with_rules(&rules)
+        .ok()
+        .expect_err("the mutation must be refused")
+        .into_iter()
+        .next()
+        .expect("a refusal carries at least one typed error")
+}
+
 /// The names of the checks that failed, in report order.
 fn failed_checks(infra: &InfrastructureDefinition) -> Vec<&'static str> {
     infra
@@ -467,14 +487,11 @@ fn a_level_citing_an_unknown_rule_is_refused() {
 
 #[test]
 fn a_condition_naming_a_missing_subject_is_refused() {
-    // A rule body is only reachable through the catalogue, so the mutation is
-    // applied to the embedded rule, not to the citation list.
-    let err = rejected(|infra| {
-        let rule = infra
-            .embedded_rules
+    let err = rejected_rule(|rules| {
+        let rule = rules
             .iter_mut()
             .find(|r| r.id.as_str() == "wet-arc")
-            .expect("wet-arc is embedded in level 1");
+            .expect("wet-arc is in the catalogue");
         rule.when[0] = Condition::Wetness {
             entity: "no-such-thing".into(),
             op: Compare::Ge,
@@ -486,9 +503,8 @@ fn a_condition_naming_a_missing_subject_is_refused() {
 
 #[test]
 fn a_rule_may_not_schedule_itself() {
-    let err = rejected(|infra| {
-        let rule = infra
-            .embedded_rules
+    let err = rejected_rule(|rules| {
+        let rule = rules
             .iter_mut()
             .find(|r| r.id.as_str() == "wet-arc")
             .expect("wet-arc");
@@ -500,9 +516,8 @@ fn a_rule_may_not_schedule_itself() {
 
 #[test]
 fn a_rule_without_a_test_id_is_refused() {
-    let err = rejected(|infra| {
-        infra
-            .embedded_rules
+    let err = rejected_rule(|rules| {
+        rules
             .iter_mut()
             .find(|r| r.id.as_str() == "wet-arc")
             .expect("wet-arc")
@@ -514,9 +529,8 @@ fn a_rule_without_a_test_id_is_refused() {
 
 #[test]
 fn an_irreversible_effect_needs_a_recovery_path() {
-    let err = rejected(|infra| {
-        let rule = infra
-            .embedded_rules
+    let err = rejected_rule(|rules| {
+        let rule = rules
             .iter_mut()
             .find(|r| r.id.as_str() == "wet-arc")
             .expect("wet-arc");
@@ -534,11 +548,12 @@ fn an_irreversible_effect_needs_a_recovery_path() {
 - `rejected(...)` takes the **first** error. The validator's report order is
   itself a test (below), so "first" is a stable claim and not an accident of
   `HashMap` iteration.
-- Where a mutation needs the *rule body*, the test mutates
-  `embedded_rules`. That is a real design consequence, not a convenience: the
-  catalogue is data, so a level carries resolved rule bodies, and validation can
-  check them. §2 of the M0 loader document explains what `embedded_rules` is and
-  why it is not a `rules` list of ids.
+- Where a mutation needs the *rule body*, the test goes through
+  `validate_with_rules`. That is a real design consequence, not a convenience:
+  rule bodies live in the engine (`catalogue.rs`), levels cite ids, and a
+  level file therefore cannot break a rule-body check — so the only way to prove
+  those checks fire is to hand validation a mutated catalogue. Loader §5 explains
+  why the bodies are not embedded in the level.
 - `a_buoyant_species_is_refused_in_v1` and the two controller tests use the
   Sable fixture because they need a gas and a controller, which level 1 does not
   have.

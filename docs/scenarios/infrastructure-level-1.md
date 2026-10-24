@@ -391,11 +391,9 @@ Abridged; the full definition is the level's own payload.
 ```json
 {
   "format": "idaptik-scenario/1",
-  "building_id": "exchange-house",
-  "entry": { "floor": "service", "room": "riser" },
-  "circuits": [
-    { "id": "M", "name": "service mains", "source": "feed-m", "zone": "svc" }
-  ],
+  "scenario_id": "sump",
+  "name": "Sump",
+  "floor_id": 1,
   "infra": {
     "format": "idaptik-infrastructure/1",
     "ruleset_version": 1,
@@ -495,7 +493,12 @@ Abridged; the full definition is the level's own payload.
 ```
 
 This is an excerpt: the compartment, link and entity lists are abridged where
-the tables above are the authority, and the signal block of §2.3 is omitted.
+the tables above are the authority, the floors/rooms/world block that every
+scenario carries is omitted, and the signal block of §2.3 is omitted.
+
+`circuits` is a **building** field, not a scenario one: circuit `M` is declared
+by Exchange House and referenced here by id (`"circuit": "M"`). The plant never
+redeclares a circuit, a portal or a zone.
 
 The `rules` array is the level's ruleset selection, in `rule_rank` order and
 complete (catalogue §10.1). Validation refuses a selection naming a rule the

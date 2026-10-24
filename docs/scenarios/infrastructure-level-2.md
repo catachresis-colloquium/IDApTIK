@@ -426,6 +426,10 @@ at a time, which is long enough to cross the riser without being heard over it.
 
 Illustrative, not a loaded fixture; nothing here is validated by a gate.
 
+`signal` and `infra` are **sibling** optional blocks on `ScenarioDefinition` —
+the same seam ADR-0012 created for `signal` alone. `circuits` stay on the
+building.
+
 ```json
 {
   "signal": {

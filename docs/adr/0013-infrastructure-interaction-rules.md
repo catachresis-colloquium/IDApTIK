@@ -42,9 +42,11 @@ layer** — as a deterministic rule engine over **typed capabilities**, not over
 object names.
 
 1. **Data, not code.** An `InfrastructureDefinition` is attached to
-   `BuildingDefinition` as `infra: Option<…>`, `skip_serializing_if = "Option::
-   is_none"`, exactly as `signal` is attached to `ScenarioDefinition`. Absent
-   means absent: existing goldens and replays stay byte-identical.
+   **`ScenarioDefinition`** as `infra: Option<…>`, `skip_serializing_if =
+   "Option::is_none"`, exactly as `signal` already is — the same struct, the
+   same seam. (An earlier draft of this ADR said `BuildingDefinition`; that
+   type has no `signal` field, and the code is the authority.) Absent means
+   absent: existing goldens and replays stay byte-identical.
 
 2. **Entities declare capabilities; rules match capabilities.** A pump is not
    "a pump" to the rules. It `Moves { medium: Water, rate_ml_per_s, check_valve, return_ml }`;

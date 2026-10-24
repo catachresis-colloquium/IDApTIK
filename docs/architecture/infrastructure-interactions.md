@@ -939,19 +939,28 @@ link with enough `noise_permille`. The engine never hands the guard truth.
 ### 10.1 Definition
 
 ```rust
-pub struct BuildingDefinition {
+pub struct ScenarioDefinition {
     // … unchanged fields …
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signal: Option<SignalNetworkDef>,     // optional, as ADR-0012 anticipated
+    pub signal: Option<SignalNetworkDef>,     // ADR-0012; already in the tree
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub infra: Option<InfrastructureDefinition>,
 }
 ```
 
+`infra` hangs off the **scenario**, beside `signal`, because that is where the
+precedent actually is: `BuildingDefinition` has no `signal` field, and
+`scenario/definition.rs` is where ADR-0012 put it. A level is a scenario
+payload, so its plant travels with it; the building keeps owning `circuits`,
+`portals` and `zones`, which the plant references by id and never redeclares.
+
 Both are skipped when absent, so `exchange_house.json`, the ghost-lobby goldens
-and every recorded replay serialise byte-identically. This is the precedent
-`ScenarioDefinition.signal` set and the reason the canonical floor's golden did
-not move when ADR-0012 landed.
+and every recorded replay serialise byte-identically — the same reason the
+canonical floor's golden did not move when ADR-0012 landed.
+
+The loader slice that establishes this is
+[`infrastructure-m0-loader.md`](infrastructure-m0-loader.md), written against
+[`infrastructure-m0-acceptance-tests.md`](infrastructure-m0-acceptance-tests.md).
 
 ### 10.2 Host contract
 
@@ -1159,12 +1168,12 @@ report, not a mystery.
 | `controllers.law_matches_reading` | a threshold law on a quantity the sensor does not report |
 | `rules.unique_ids` | duplicate `RuleId` |
 | `rules.resolve` | a level citing an id the build's catalogue does not carry |
-| `rules.cited_if_reachable` | a rule whose preconditions can arise in the level but which the level did not cite (§10.1 of the catalogue) |
+| `rules.cited_if_reachable` | **deferred to M1** — requires evaluating preconditions, which needs `InfrastructureSim`; a rule whose preconditions can arise in the level but which the level did not cite (§10.1 of the catalogue) |
 | `rules.conditions_resolve` | a condition naming a missing subject |
 | `rules.no_self_schedule` | a rule scheduling itself in the same tick |
 | `rules.tests_present` | a rule with an empty `tests` list (the brief requires a regression test per interaction, and this makes that checkable) |
 | `rules.irreversible_has_recovery` | an irreversible effect with no stated recovery path |
-| `objectives.reachable` | a level with no successful route when every rule is evaluated |
+| `objectives.reachable` | **deferred to M1** — a reachability search over rules, so it needs the evaluator. A level with no successful route when every rule is evaluated |
 
 The last one is a reachability *search over rules*, not a special case: it asks
 whether some command sequence reaches the objective without an irreversible
