@@ -83,7 +83,9 @@ impl GhostLobbySim {
         access
     }
 
-    /// The host-owned outputs for this tick, read from the world.
+    /// The host-owned outputs for this tick, read from the world. Devices the
+    /// power network is holding inert come along in the same readout: a camera
+    /// with no supply cannot trip, however the wiring is set.
     pub fn signal_readout(&self) -> Readout {
         let mut readout = Readout::default();
         let Some(net) = &self.def.signal else {
@@ -118,16 +120,25 @@ impl GhostLobbySim {
                 }
             }
         }
+        if let (Some(power), Some(pst)) = (&self.def.power, &self.state.power) {
+            readout.unpowered = pst.inert_signals(power);
+        }
         readout
     }
 
-    /// Whether a wire has switched camera `i` off, or switched off the lights
-    /// in the room it watches.
+    /// Whether a camera `i` is blind: a wire switched it off, its supply is
+    /// gone, or the lights it needs are out.
+    ///
+    /// The name is historical — callers ask "can this camera see?" and every
+    /// one of those three answers is no. It is the single camera-seam, so the
+    /// power leg belongs here rather than being remembered at each call site.
     pub fn signal_blinds_camera(&self, i: usize) -> bool {
         let Some(cam) = self.def.cameras.get(i) else {
             return false;
         };
-        self.signal_device_off(&camera_node_id(i)) || self.signal_room_dark(cam.room.as_str())
+        self.signal_device_off(&camera_node_id(i))
+            || self.power_blinds_camera(i)
+            || self.signal_room_dark(cam.room.as_str())
     }
 
     /// Whether a wire has locked the door on grounded node `node`.
@@ -143,18 +154,22 @@ impl GhostLobbySim {
 
     /// Whether a wire has switched off `room`'s lights.
     pub fn signal_room_dark(&self, room: &str) -> bool {
-        self.signal_device_off(&light_node_id(room))
+        self.signal_device_off(&light_node_id(room)) || self.power_room_dark(room)
     }
 
-    /// Whether the signal device on `node` exists and is switched off.
+    /// Whether the signal device on `node` is off — switched off by a wire, or
+    /// with no supply to run at all.
+    ///
+    /// One seam, two reasons. A device the power model is holding inert is not
+    /// operating whatever the wiring says, so every caller that asks "is this
+    /// device off?" gets the same answer rather than half of it.
     fn signal_device_off(&self, node: &str) -> bool {
         let (Some(net), Some(st)) = (&self.def.signal, &self.state.signal) else {
             return false;
         };
-        net.devices
-            .iter()
-            .zip(&st.devices)
-            .any(|(d, s)| d.node.as_deref() == Some(node) && !s.active)
+        net.devices.iter().zip(&st.devices).any(|(d, s)| {
+            d.node.as_deref() == Some(node) && (!s.active || self.power_holds_signal_device(&d.id))
+        })
     }
 
     /// `Command::Signal` (immediate; self-guards on paused/ended).
@@ -180,7 +195,7 @@ impl GhostLobbySim {
             Seat::Infiltrator => &net.tuning.infiltrator,
             Seat::Hacker => &net.tuning.hacker,
         };
-        if by == Seat::Infiltrator && self.state.signal_busy > 0.0 {
+        if by == Seat::Infiltrator && self.hands_busy() > 0.0 {
             self.events.push(deny(SignalDenyReason::Busy));
             return;
         }
@@ -228,7 +243,7 @@ impl GhostLobbySim {
 
         // Doors: a lock beats every route and badge; a held door stays open.
         for (d, ds) in net.devices.iter().zip(&st.devices) {
-            if d.kind != SignalKind::Door {
+            if d.kind != SignalKind::Door || readout.unpowered.contains(&d.id) {
                 continue;
             }
             let Some(door) = self
