@@ -60,7 +60,7 @@ jobs:
           # report in a couple of annotations instead of ten truncated ones.
           emit_gzip() {
             local title="$1" file="$2" part=0
-            gzip -cn9 "$file" | base64 -w0 | fold -w 3800 > .arena-diagnostics/gz.b64
+            gzip -cn9 "$file" | base64 -w0 | fold -w 3000 > .arena-diagnostics/gz.b64
             while IFS= read -r line; do
               echo "::warning title=${title}-part-${part}::${line}"
               part=$((part + 1))
