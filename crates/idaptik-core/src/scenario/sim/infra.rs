@@ -234,7 +234,7 @@ impl GhostLobbySim {
             matches!(
                 o.kind,
                 ObservationKind::UnusualNoise | ObservationKind::Alarm
-            )
+            ) && (o.x - self.state.billy.x).abs() >= 15.0
         }) {
             // The hearing gate inside `observations` already applied this
             // actor's threshold and distance; the tie-break is strongest
@@ -323,4 +323,54 @@ fn room_at_or_last(def: &crate::scenario::definition::ScenarioDefinition, x: f64
                 .map(|r| r.id.clone())
                 .unwrap_or_else(|| RoomId::from(""))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scenario::command::RunConfig;
+    use crate::scenario::pump_house::pump_house;
+    use crate::scenario::state::DiversionState;
+
+    #[test]
+    fn heard_sources_inside_the_arrival_distance_do_not_restart_investigation() {
+        for kind in [ObservationKind::UnusualNoise, ObservationKind::Alarm] {
+            let mut sim = GhostLobbySim::new(pump_house(), RunConfig::standard(), 7)
+                .expect("valid pump house");
+            let alarm = sim.def.infra.as_ref().unwrap().alarms[0].clone();
+            let source_x = infra::room_centre(&sim.def, alarm.room.as_str());
+            match kind {
+                ObservationKind::UnusualNoise => {
+                    sim.state.diversion = Some(DiversionState {
+                        x: source_x,
+                        t: 1.0,
+                        intensity: 1.0,
+                    });
+                }
+                ObservationKind::Alarm => {
+                    sim.state
+                        .infra
+                        .as_mut()
+                        .unwrap()
+                        .alarms
+                        .insert(alarm.id, true);
+                }
+                _ => unreachable!(),
+            }
+            for offset in [-16.0_f64, -15.0, -14.0, 0.0, 14.0, 15.0, 16.0] {
+                sim.state.billy.x = source_x + offset;
+                assert!(
+                    sim.actor_observations(sim.state.billy.x)
+                        .iter()
+                        .any(|o| o.kind == kind && o.x == source_x),
+                    "the source must remain observable: {kind:?}, {offset}"
+                );
+                assert_eq!(
+                    sim.infra_investigation_target(),
+                    (offset.abs() >= 15.0).then_some(source_x),
+                    "{kind:?}, {offset}"
+                );
+            }
+        }
+    }
 }

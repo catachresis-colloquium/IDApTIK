@@ -1,7 +1,8 @@
 # TEMPORARY authoring aid (removed before merge): the authoring sandbox can
 # reach api.github.com but not the Azure blob host the Actions log API
-# redirects to, so this job runs the same gates as `just test-ghost` and posts
-# a compact error digest as a PR comment the author can read back.
+# redirects to, so this job runs a subset of `just test-ghost` (formatting and
+# core tests), plus core/TUI/net checks, and posts a compact PR digest. It does
+# not run TUI/FFI/net tests or warnings-denied Clippy.
 name: arena-feedback
 
 on:
@@ -29,39 +30,64 @@ jobs:
       - name: fmt --check
         continue-on-error: true
         run: |
+          output=$(mktemp)
+          status=0
+          cargo fmt --all -- --check > "$output" 2>&1 || status=$?
+          cat "$output"
           {
             echo '## fmt --check'
+            echo "Exit status: $status"
             echo '```diff'
-            cargo fmt --all -- --check 2>&1 | head -c 12000
+            head -c 12000 "$output"
+            echo
             echo '```'
           } >> "$DIGEST"
+          exit "$status"
       - name: check (short messages, all targets)
         continue-on-error: true
         run: |
+          output=$(mktemp)
+          status=0
+          cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets --message-format short > "$output" 2>&1 || status=$?
+          cat "$output"
           {
             echo '## cargo check --all-targets (core/tui/net) — short'
+            echo "Exit status: $status"
             echo '```'
-            cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets --message-format short 2>&1 | grep -E ": (error|warning)" | head -160
+            head -160 "$output"
             echo '```'
           } >> "$DIGEST"
-      - name: check (full context, first errors)
+          exit "$status"
+      - name: check (full context)
         continue-on-error: true
         run: |
+          output=$(mktemp)
+          status=0
+          cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets > "$output" 2>&1 || status=$?
+          cat "$output"
           {
             echo '## cargo check — full context (first 240 lines)'
+            echo "Exit status: $status"
             echo '```'
-            cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets 2>&1 | sed -n '/^error/,/^$/p' | head -240
+            head -240 "$output"
             echo '```'
           } >> "$DIGEST"
+          exit "$status"
       - name: test (core)
         continue-on-error: true
         run: |
+          output=$(mktemp)
+          status=0
+          cargo test -p idaptik-core > "$output" 2>&1 || status=$?
+          cat "$output"
           {
             echo '## cargo test -p idaptik-core'
+            echo "Exit status: $status"
             echo '```'
-            cargo test -p idaptik-core 2>&1 | grep -E "(^error|test result:|FAILED|^---- |panicked at|assertion|left:|right:)" | head -160
+            head -160 "$output"
             echo '```'
           } >> "$DIGEST"
+          exit "$status"
       - name: Post digest as PR comment
         if: always()
         env:

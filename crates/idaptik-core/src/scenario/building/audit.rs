@@ -251,12 +251,19 @@ impl BuildingDefinition {
                 }
             };
             let reach = reachable_rooms(self, &self.entry, cut);
-            if let Some(r) = objectives.iter().find(|r| !reach.contains(r)) {
+            if let Some(r) = objectives
+                .iter()
+                .find(|r| reachable.contains(r) && !reach.contains(r))
+            {
                 strands_objective = Some((circuit.id.clone(), r.clone()));
                 break;
             }
             if strands_room.is_none() {
-                if let Some(r) = self.all_rooms().iter().find(|r| !reach.contains(r)) {
+                if let Some(r) = self
+                    .all_rooms()
+                    .iter()
+                    .find(|r| reachable.contains(r) && !reach.contains(r))
+                {
                     strands_room = Some((circuit.id.clone(), r.clone()));
                 }
             }
@@ -394,6 +401,36 @@ mod tests {
         assert_eq!(cut.severity, AuditSeverity::Error);
         assert!(!report.passed());
         assert!(cut.detail.contains("c-lift"), "{}", cut.detail);
+    }
+
+    #[test]
+    fn a_cut_does_not_get_blame_for_already_unreachable_rooms() {
+        for entry in [
+            RoomRef::new("cellar", "landing"),
+            RoomRef::new("ground", "kitchen"),
+        ] {
+            let mut def = lift_building();
+            def.portals.retain(|p| p.id.as_str() != "lift-1");
+            def.entry = entry;
+            let report = def.audit();
+            let routes = report
+                .checks
+                .iter()
+                .find(|c| c.id == "routes.objectives_reachable")
+                .expect("route check present");
+            assert_eq!(routes.passed, def.entry.floor.as_str() == "ground");
+            for id in [
+                "softlock.cut_strands_objectives",
+                "softlock.destructive_cut",
+            ] {
+                let cut = report
+                    .checks
+                    .iter()
+                    .find(|c| c.id == id)
+                    .expect("cut check present");
+                assert!(cut.passed, "{}: {}", def.entry, cut.detail);
+            }
+        }
     }
 
     #[test]
