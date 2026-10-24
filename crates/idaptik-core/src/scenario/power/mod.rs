@@ -547,6 +547,10 @@ impl PowerNetworkDef {
         self.loads
             .iter()
             .enumerate()
+            // A damaged or disconnected device draws nothing: it is not a
+            // connection, so it cannot load a board. That is also why rewiring
+            // one back in is felt on the feed it lands on.
+            .filter(|(_, l)| l.condition == Condition::Intact)
             .filter(|(i, _)| feeds.get(*i) == Some(feed))
             .map(|(_, l)| l.draw)
             .sum()

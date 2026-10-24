@@ -371,6 +371,9 @@ mod tests {
                 },
             }],
         );
+        // Walk to the office and ask the camera there to come on. The command
+        // is legal, reachable and lands; the supply is what refuses.
+        stand(&mut sim, "office");
         let cam = load_index(&sim, "cam-1");
         let events = step(
             &mut sim,
@@ -546,7 +549,25 @@ mod tests {
     fn inspecting_a_device_explains_which_rule_won() {
         let mut sim = sim();
         step(&mut sim, &[]);
+        // A settled floor: the laundry camera is simply running, and says so.
+        let running = sim.power_report("cam-2").expect("a load");
+        assert!(running.operating);
+        assert!(running.explain().contains("running"), "{}", running.explain());
+
+        // Switch it off from the room, then ask why. The answer names the device,
+        // the rule that won, and the board it sits on.
+        stand(&mut sim, "laundry");
         let load = load_index(&sim, "cam-2");
+        step(
+            &mut sim,
+            &[Command::Power {
+                op: PowerOp::SetCommand {
+                    by: Seat::Infiltrator,
+                    load,
+                    on: false,
+                },
+            }],
+        );
         let events = step(
             &mut sim,
             &[Command::Power {
@@ -556,16 +577,14 @@ mod tests {
                 },
             }],
         );
-        // From the van the hacker cannot reach the office camera's panel, so the
+        // From the van the hacker cannot reach the laundry camera's panel, so the
         // answer is a refusal; reachable or not, the report is what a player reads.
         assert!(!power_events(&events).is_empty());
-        if let Some(report) = sim.power_report("cam-2") {
-            assert!(report.operating || report.why.is_some());
-            let said = report.explain();
-            assert!(
-                said.contains("cam-2") || said.contains("Office camera"),
-                "{said}"
-            );
-        }
+        let report = sim.power_report("cam-2").expect("a load");
+        assert_eq!(report.why, Some(OffReason::NoCommand));
+        let said = report.explain();
+        assert!(said.contains("Laundry camera"), "{said}");
+        assert!(said.contains("no command"), "{said}");
+        assert!(said.contains("feed-b"), "{said}");
     }
 }

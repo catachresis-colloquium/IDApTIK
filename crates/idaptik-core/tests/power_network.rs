@@ -594,13 +594,26 @@ fn a_dumb_load_has_no_remote_panel() {
 #[test]
 fn rewiring_a_disconnected_device_reconnects_it() {
     let mut def = power_test_floor();
+    // The office camera is off the plant board and wired to nothing, and the
+    // security board has the headroom to take it: a *disconnected* device draws
+    // nothing, so neither board is over its rating until the rewire lands.
     if let Some(l) = def.loads.iter_mut().find(|l| l.id == load(OFFICE_CAM)) {
         l.condition = Condition::Disconnected;
+        l.feed = feed(FEED_A);
+    }
+    if let Some(f) = def.feeds.iter_mut().find(|f| f.id == feed(FEED_B)) {
+        f.capacity = 20;
     }
     let mut sim = PowerSim::new(def).expect("valid");
     run(&mut sim, 200);
     assert_eq!(why(&sim, OFFICE_CAM), Some(OffReason::Disconnected));
-    route(&mut sim, Seat::Infiltrator, OFFICE_CAM, FEED_B);
+    let events = route(&mut sim, Seat::Infiltrator, OFFICE_CAM, FEED_B);
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, PowerEvent::Routed { .. })),
+        "{events:?}"
+    );
     run(&mut sim, 130);
     assert!(operating(&sim, OFFICE_CAM), "wired back in and running");
 }

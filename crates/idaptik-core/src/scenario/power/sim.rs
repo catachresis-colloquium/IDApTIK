@@ -547,10 +547,12 @@ pub struct PowerState {
 impl PowerState {
     /// The state a fresh run starts in.
     ///
-    /// Supply is settled here rather than at the first tick: a source that is on
-    /// and quick is already delivering, and a feed with a closed breaker is
-    /// already live. Otherwise an automatic backup would see the whole floor as
-    /// dark on tick one and spend a tick of runtime for nothing.
+    /// Supply *and* the loads hanging off it are settled here rather than
+    /// discovered at the first tick: a source that is on and quick is already
+    /// delivering, a feed with a closed breaker is already live, and a device
+    /// that is served and commanded is simply running. Otherwise an automatic
+    /// backup would see the whole floor as dark on tick one, and every resuming
+    /// device would begin the run in a warm-up nobody asked for.
     pub fn initial(def: &PowerNetworkDef) -> Self {
         let source_up: Vec<bool> = def
             .sources
@@ -592,7 +594,7 @@ impl PowerState {
                 }
             })
             .collect();
-        Self {
+        let mut state = Self {
             tick: 0,
             sources,
             feeds,
@@ -615,9 +617,7 @@ impl PowerState {
                     energized: false,
                     operating: false,
                     restart_left: 0,
-                    why: Some(OffReason::Unpowered {
-                        feed: l.feed.clone(),
-                    }),
+                    why: None,
                 })
                 .collect(),
             hazards: def
@@ -628,6 +628,34 @@ impl PowerState {
                     touching: false,
                 })
                 .collect(),
+        };
+        state.settle(def);
+        state
+    }
+
+    /// Fill in what the tick-0 supply already implies: which devices are
+    /// served, which are running, and why the rest are not.
+    ///
+    /// This is the load half of [`Self::step`], run once on a state whose supply
+    /// is already in place. It exists so a device that is powered and commanded
+    /// from the first frame is simply *on*: a floor that began every device in a
+    /// warm-up it never asked for would be lying about itself, and an automatic
+    /// backup would spend a tick of runtime on an outage that has not happened.
+    fn settle(&mut self, def: &PowerNetworkDef) {
+        for i in 0..self.loads.len() {
+            let energized = self.load_energized(def, i);
+            if let Some(s) = self.loads.get_mut(i) {
+                s.energized = energized;
+            }
+        }
+        let was: Vec<bool> = self.loads.iter().map(|l| l.operating).collect();
+        let readout = PowerReadout::default();
+        for i in 0..self.loads.len() {
+            let why = self.why_off(def, i, &readout, &was);
+            if let Some(s) = self.loads.get_mut(i) {
+                s.operating = why.is_none();
+                s.why = why;
+            }
         }
     }
 
@@ -754,7 +782,9 @@ impl PowerState {
             .and_then(|fi| self.feeds.get(fi))
             .map(|f| f.cut)
             .unwrap_or(false);
-        if cut {
+        // A backup carrying the device *is* supply, however dead the feed is:
+        // the UPS window is exactly the time this rung must not fire.
+        if cut && !self.backup_delivering(def, &ldef.id) {
             return Some(OffReason::Unavailable {
                 feed: s.feed.clone(),
             });
