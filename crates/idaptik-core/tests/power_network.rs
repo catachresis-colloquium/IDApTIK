@@ -275,6 +275,7 @@ fn every_rung_of_the_ladder_can_be_seen() {
 fn a_command_never_beats_a_dead_supply() {
     let mut sim = floor();
     run(&mut sim, 200);
+    switch(&mut sim, Seat::Infiltrator, UPS_HALL, false);
     cut(&mut sim, Seat::Infiltrator, FEED_B);
     run(&mut sim, 2);
     // Ask everything on the dead feed to come on.
@@ -370,8 +371,19 @@ fn the_backup_runs_for_its_stated_runtime_and_then_stops() {
     // in the same tick the cable goes.
     assert!(operating(&sim, CAM_HALL));
     assert!(!operating(&sim, OFFICE_CAM), "the UPS serves one device");
-    run(&mut sim, 898);
-    assert!(operating(&sim, CAM_HALL), "900 ticks of runtime");
+    for tick in 2..=899 {
+        let events = run(&mut sim, 1);
+        assert!(
+            operating(&sim, CAM_HALL),
+            "continuous supply on tick {tick}"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, PowerEvent::BackupEngaged { .. })),
+            "the backup stays engaged: {events:?}"
+        );
+    }
     let spent = run(&mut sim, 3);
     assert!(
         spent
@@ -388,6 +400,46 @@ fn the_backup_runs_for_its_stated_runtime_and_then_stops() {
             source: idaptik_core::scenario::ids::PowerSourceId::from(UPS_HALL)
         })
     );
+}
+
+#[test]
+fn the_backup_carries_a_load_until_its_primary_feed_returns() {
+    for source_off in [false, true] {
+        let mut sim = floor();
+        if source_off {
+            switch(&mut sim, Seat::Infiltrator, MAINS_B, false);
+        } else {
+            isolate(&mut sim, Seat::Infiltrator, BRK_B, true);
+        }
+        for tick in 1..=4 {
+            run(&mut sim, 1);
+            assert!(operating(&sim, CAM_HALL), "backup supply on tick {tick}");
+            assert_eq!(why(&sim, CAM_HALL), None);
+            assert!(matches!(
+                why(&sim, OFFICE_CAM),
+                Some(OffReason::Unpowered { .. } | OffReason::Isolated { .. })
+            ));
+        }
+
+        if source_off {
+            switch(&mut sim, Seat::Infiltrator, MAINS_B, true);
+        } else {
+            isolate(&mut sim, Seat::Infiltrator, BRK_B, false);
+        }
+        // Source changes settle during the sources pass; backup decisions read
+        // the primary supply at the start of the tick.
+        run(&mut sim, 2);
+        let snapshot = sim.snapshot();
+        let ups = sim
+            .definition()
+            .source_index(&UPS_HALL.into())
+            .expect("UPS");
+        assert!(!snapshot.state.sources[ups].engaged);
+        let runtime = snapshot.state.sources[ups].runtime_left;
+        run(&mut sim, 3);
+        assert!(operating(&sim, CAM_HALL));
+        assert_eq!(sim.snapshot().state.sources[ups].runtime_left, runtime);
+    }
 }
 
 // --- protection ---------------------------------------------------------------

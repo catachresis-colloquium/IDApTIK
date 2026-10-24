@@ -513,6 +513,43 @@ mod tests {
     }
 
     #[test]
+    fn a_stale_open_signal_cannot_reopen_an_unpowered_door() {
+        let mut sim = sim();
+        let door = sim
+            .state
+            .doors
+            .iter()
+            .position(|d| door_node_id(d.id.clone()) == DOOR_EXIT)
+            .expect("exit door");
+        let signal = sim
+            .definition()
+            .signal
+            .as_ref()
+            .and_then(|net| net.index_of(&SignalId::from(DOOR_EXIT)))
+            .expect("exit signal");
+        sim.state.signal.as_mut().expect("signal state").devices[signal].open = true;
+        sim.system_signal();
+        assert!(sim.state().doors[door].open > 0.0, "powered door opens");
+
+        stand(&mut sim, "hall");
+        let feed = feed_index(&sim, FEED_B);
+        step(
+            &mut sim,
+            &[Command::Power {
+                op: PowerOp::CutCable {
+                    by: Seat::Infiltrator,
+                    feed,
+                },
+            }],
+        );
+        assert!(sim.state().signal.as_ref().expect("signal state").devices[signal].open);
+        assert!(!sim.power_report(DOOR_EXIT).expect("load").operating);
+        assert_eq!(sim.state().doors[door].open, 0.0);
+        step(&mut sim, &[]);
+        assert_eq!(sim.state().doors[door].open, 0.0);
+    }
+
+    #[test]
     fn the_laundry_lights_interlock_holds_the_pump() {
         let mut sim = sim();
         step(&mut sim, &[]);

@@ -1167,10 +1167,12 @@ impl PowerState {
         let mut events: Vec<PowerEvent> = Vec::new();
         self.tick += 1;
 
-        // Which served loads are off supply at the start of the tick — a backup
+        // Which loads lack primary supply at the start of the tick — a backup
         // engages against this, never against its own effect.
-        let unserved: Vec<bool> = (0..def.loads.len())
-            .map(|i| !self.load_energized(def, i))
+        let unserved: Vec<bool> = self
+            .loads
+            .iter()
+            .map(|s| !self.feed_live(def, &s.feed))
             .collect();
 
         // 1. Sources.

@@ -235,7 +235,7 @@ impl GhostLobbySim {
 
         // Doors: a lock beats every route and badge; a held door stays open.
         for (d, ds) in net.devices.iter().zip(&st.devices) {
-            if d.kind != SignalKind::Door {
+            if d.kind != SignalKind::Door || readout.unpowered.contains(&d.id) {
                 continue;
             }
             let Some(door) = self
