@@ -68,16 +68,21 @@ doctor:
 # retired); tool VERSIONS still come from mise.toml + rust-toolchain.toml. See
 # docs/dev-notes/toolchain-authority.md.
 guix-shell:
-    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed: https://guix.gnu.org/manual/en/html_node/Installation.html" >&2; exit 1; }
-    guix shell -f guix.scm -- just doctor
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed: https://guix.gnu.org/guix-install.sh" >&2; exit 1; }
+    guix shell -D -f guix.scm -- bash scripts/doctor.sh
 
 # The same environment in a rootless container (Podman or Docker).
 guix-container:
     @command -v guix >/dev/null 2>&1 || { echo "guix is not installed" >&2; exit 1; }
-    guix shell -f guix.scm -C --network -- just doctor
+    guix shell -D -f guix.scm -C --network -- bash scripts/doctor.sh
+
+# Provision rustup. Guix has no rustup package, so this is the step that makes
+# rust-toolchain.toml real inside a Guix shell.
+install-rustup:
+    bash scripts/install-rustup.sh
 
 # Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
-# --self-test plants eight defects and requires the check to catch each.
+# --self-test plants ten defects and requires the check to catch each.
 toolchain-parity *ARGS:
     bash scripts/toolchain-parity.sh {{ARGS}}
 
@@ -143,7 +148,7 @@ pages-wellknown-test:
     bash tests/pages_wellknown_test.sh
 
 # Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
-# The self-test plants eight defects and requires the check to catch each.
+# The self-test plants ten defects and requires the check to catch each.
 toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 

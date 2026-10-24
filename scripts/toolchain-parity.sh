@@ -12,12 +12,23 @@
 # nor the container runtime, and provided a bare `rust` that would silently
 # shadow the pinned compiler.
 #
-# The check is structural, not version-exact: it proves that every tool the
-# version files name is either provided by the environment or excused by name
-# with a reason. It deliberately does NOT try to predict which version Guix's
-# package carries — that depends on the Guix revision, and a check that guessed
-# it would be wrong on most machines. A guess presented as a check is the defect
-# docs/DOCUMENTATION-CLAIMS.md exists to prevent.
+# The rule this file enforces is ONE PROVIDER PER TOOL:
+#
+#   guix.scm  provides mise, the C toolchain, system libraries, and podman
+#   mise.toml is the only place a versioned tool gets on PATH
+#   rustup    comes from scripts/install-rustup.sh, because Guix has no rustup
+#
+# The first version of this check said "guix.scm must provide every tool
+# mise.toml pins", and it was wrong twice over: Guix has no `nickel` and no
+# `rustup` package, so the environment it demanded could not be built. It went
+# unnoticed because nothing here ever ran against a Guix daemon. The inverted
+# check — guix.scm must NOT provide anything mise pins — is both truer and
+# cheaper to satisfy, and it catches the shadowing defect directly.
+#
+# The check is structural, not version-exact: it asserts who provides what, not
+# which version Guix's revision carries. That depends on the revision, and a
+# check that guessed it would be wrong on most machines. A guess presented as a
+# check is the defect docs/DOCUMENTATION-CLAIMS.md exists to prevent.
 #
 # Usage:
 #   scripts/toolchain-parity.sh              # check this repository
@@ -89,20 +100,44 @@ check_manifest_present() {
   done
 }
 
-check_guix_offers() {
-  local name
-  for name in rustup nickel just zig elixir erlang podman; do
-    if guix_packages | grep -qx "$name"; then
-      pass "guix.scm provides $name"
-    else
-      fail "guix.scm does not provide $name"
+check_guix_provides_bridge() {
+  # guix.scm's job is to provide the environment mise needs and then stop.
+  # If mise is absent, the version table in mise.toml is decorative.
+  if guix_packages | grep -qx mise; then
+    pass "guix.scm provides mise (the single version-manager bridge)"
+  else
+    fail "guix.scm does not provide mise"
+    note "Without it, mise.toml pins nothing that is actually installed."
+  fi
+}
+
+check_single_provider() {
+  # THE invariant of this file, and the one that was wrong before: a tool must
+  # have ONE provider. If guix.scm also provides a tool that mise.toml pins,
+  # there are two versions on PATH and no rule for which wins -- the same defect
+  # as a bare `rust` shadowing rust-toolchain.toml, just quieter.
+  local tool
+  local doubled=0
+  for tool in $(mise_tools | sort -u); do
+    if guix_packages | grep -qx "$tool"; then
+      fail "guix.scm provides '$tool' AND mise.toml pins it — two versions, no winner"
+      note "Remove '$tool' from guix.scm; mise.toml is the version authority."
+      doubled=$((doubled + 1))
+      continue
     fi
+    if excused "$tool"; then
+      pass "mise pin '$tool' is excused (see note)"
+      continue
+    fi
+    pass "mise pin '$tool' has exactly one provider (mise)"
   done
+  [ "$doubled" -eq 0 ] || fail "$doubled tool(s) have two providers"
 }
 
 check_rust_authority() {
-  # rust-toolchain.toml must be the only place a Rust version is chosen. A bare
-  # `rust` package in the environment would shadow it with Guix's compiler.
+  # rust-toolchain.toml must be the only place a Rust version is chosen. Guix
+  # provides no Rust at all here, so nothing in the environment can shadow the
+  # pin; the check asserts that this stays true.
   local channel
   channel="$(rust_channel)"
   if [ -z "$channel" ]; then
@@ -110,36 +145,38 @@ check_rust_authority() {
   else
     pass "rust-toolchain.toml pins Rust $channel"
   fi
-  if guix_packages | grep -qx rustup; then
-    pass "guix.scm provides rustup (version authority stays in rust-toolchain.toml)"
-  else
-    fail "guix.scm does not provide rustup"
-  fi
   if guix_packages | grep -qx rust; then
     fail "guix.scm provides a bare 'rust' package, which shadows rust-toolchain.toml"
     note "Remove it: rustup is the only correct provider here."
   else
-    pass "guix.scm does not provide a bare 'rust' package"
+    pass "guix.scm provides no bare 'rust' package"
   fi
 }
 
-check_every_pin_is_served() {
-  local tool
-  local missing=0
-  for tool in $(mise_tools | sort -u); do
-    if guix_packages | grep -qx "$tool"; then
-      pass "mise pin '$tool' is provided by the environment"
+check_bootstrap_scripts() {
+  # A tool that neither Guix nor mise provides must have a script that does,
+  # or it is a wish rather than a step. rustup is the newest member: it is not
+  # a Guix package, so it cannot be an input to the environment that would
+  # provide it.
+  local f
+  for f in scripts/install-rustup.sh scripts/install-idris2.sh; do
+    if [ ! -s "$f" ]; then
+      fail "$f is missing or empty"
       continue
     fi
-    if excused "$tool"; then
-      pass "mise pin '$tool' is excused (see note)"
-      continue
+    if head -1 "$f" | grep -q '^#!/usr/bin/env bash'; then
+      pass "$f exists and is a bash script"
+    else
+      fail "$f has no bash shebang"
     fi
-    fail "mise pins '$tool' but guix.scm neither provides nor excuses it"
-    missing=$((missing + 1))
   done
-  if [ "$missing" -eq 0 ]; then
-    pass "every mise pin is served or excused"
+  # The one flag that makes rustup's install reviewable: it must not edit the
+  # user's rc files behind their back.
+  if grep -qs -- '--no-modify-path' scripts/install-rustup.sh; then
+    pass "scripts/install-rustup.sh installs with --no-modify-path"
+  else
+    fail "scripts/install-rustup.sh must pass --no-modify-path to rustup"
+    note "An installer that edits rc files is a second, invisible authority."
   fi
 }
 
@@ -170,23 +207,32 @@ check_podman_supported() {
 }
 
 check_doctor_agrees() {
-  # doctor.sh is where versions are actually asserted at runtime. If it stops
-  # naming a pinned tool, the pin is decorative.
+  # doctor.sh is where versions are actually asserted at runtime. Two directions
+  # matter: a tool doctor checks but mise does not pin is an unpinned tool, and
+  # a tool doctor stops checking is a pin nobody verifies.
   local tool
+  local pinned
+  pinned="$(mise_tools | sort -u)"
   for tool in nickel just zig; do
     if grep -q "mise exec .*${tool}@" scripts/doctor.sh; then
       pass "scripts/doctor.sh asserts $tool's pinned version"
     else
       fail "scripts/doctor.sh does not assert $tool's pinned version"
     fi
+    if printf '%s\n' "$pinned" | grep -qx "$tool"; then
+      pass "mise.toml pins $tool, which doctor.sh checks"
+    else
+      fail "doctor.sh checks $tool but mise.toml does not pin it"
+    fi
   done
 }
 
 check_all() {
   check_manifest_present
-  check_guix_offers
+  check_guix_provides_bridge
+  check_single_provider
   check_rust_authority
-  check_every_pin_is_served
+  check_bootstrap_scripts
   check_podman_supported
   check_doctor_agrees
 }
@@ -203,6 +249,7 @@ self_test() {
 
   # A pristine tree: exactly the files the check reads, nothing else.
   local files=(guix.scm mise.toml rust-toolchain.toml scripts/doctor.sh
+               scripts/install-rustup.sh scripts/install-idris2.sh
                .devcontainer/devcontainer.json .devcontainer/Containerfile)
   seed() { # seed <dir>
     local dir="$1" f
@@ -234,16 +281,18 @@ self_test() {
     fi
   }
 
-  mutant "guix.scm stops providing nickel" guix.scm '/"nickel"/d'
-  mutant "guix.scm stops providing rustup" guix.scm '/"rustup"/d'
-  mutant "guix.scm provides a bare rust" guix.scm 's/^         "rustup"$/         "rustup"\n         "rust"/'
-  mutant "guix.scm stops providing podman" guix.scm '/"podman"/d'
-  mutant "mise.toml gains an unserved tool" mise.toml 's/^just = .*/just = "1.46.0"\nsled = "0.34.7"/'
-  mutant "doctor stops asserting nickel" scripts/doctor.sh '/nickel/d'
-  mutant "the Containerfile empties" .devcontainer/Containerfile '1,$d'
-  mutant "rust-toolchain.toml loses its channel" rust-toolchain.toml '/^channel/d'
+  mutant "guix.scm stops providing mise"            guix.scm '/^         "mise"$/d'
+  mutant "guix.scm also provides nickel"             guix.scm 's/^         "mise"$/         "mise"\n         "nickel"/'
+  mutant "guix.scm provides a bare rust"             guix.scm 's/^         "mise"$/         "mise"\n         "rust"/'
+  mutant "guix.scm stops providing podman"           guix.scm '/^         "podman"$/d'
+  mutant "mise.toml stops pinning nickel"            mise.toml '/aqua:nickel-lang/d'
+  mutant "doctor stops asserting nickel"             scripts/doctor.sh '/nickel/d'
+  mutant "the Containerfile empties"                 .devcontainer/Containerfile '1,$d'
+  mutant "rust-toolchain.toml loses its channel"     rust-toolchain.toml '/^channel/d'
+  mutant "install-rustup.sh empties"                 scripts/install-rustup.sh '1,$d'
+  mutant "install-rustup.sh may modify PATH files"   scripts/install-rustup.sh 's/--no-modify-path/--modify-path/g'
 
-  printf 'toolchain-parity: %s controls, 8 mutants, %s failure(s)\n' \
+  printf 'toolchain-parity: %s controls, 10 mutants, %s failure(s)\n' \
     "$(declare -F | grep -c ' check_')" "$fails"
   if [ "$fails" -eq 0 ]; then
     echo "toolchain-parity: ok"

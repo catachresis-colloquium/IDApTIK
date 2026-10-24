@@ -41,5 +41,5 @@ WORKDIR /home/nonroot
 # target and installs the tracked pre-push hook. It deliberately does not
 # install Bevy's system libraries: those need root, and a dev container should
 # not quietly escalate. Run `just bevy-linux-deps` with sudo inside the
-# container, or (preferred) use `guix shell -f guix.scm` on the host instead.
+# container, or (preferred) use `guix shell -D -f guix.scm` on the host instead.
 CMD ["/bin/bash"]
