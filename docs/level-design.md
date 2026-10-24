@@ -144,6 +144,29 @@ the "wiring/plumbing" a level contains, and most of it is **derived, not authore
 
 This grounded-network fusion is what took the scenario wire format to `v2`.
 
+## The plant: infrastructure as composable rules
+
+`netsim` answers *who can reach what* and the signal network answers *what
+happens when they get there*, both in booleans. Neither says what the building
+does when a pipe bursts. That is the infrastructure layer
+([design](architecture/infrastructure-interactions.md),
+[catalogue](architecture/infrastructure-rule-catalogue.md), ADR-0013): an
+optional `infra` sub-network on the building definition, evaluated as a staged
+deterministic rule layer over typed capabilities and authored materials.
+
+It is **design of record, not implemented** — the documents say so at the top,
+and ADR-0013 carries the slice plan. What it adds to the picture above is the
+third question a level can ask, and it does so without a second access model, a
+second network or a physics engine: the plant reads `netsim` power, binds to
+signal devices by id, and contributes facts to `signal_readout()` one tick
+later, so the signal graph's one-hop-per-tick propagation is unchanged.
+
+Two playable proofs are specified: [`infrastructure-level-1.md`](scenarios/infrastructure-level-1.md)
+(water, power, a pump, a drain and a crawl — six routes, two of which need no
+power and destroy nothing) and [`infrastructure-level-2.md`](scenarios/infrastructure-level-2.md)
+(the same floor with ventilation and `sable-2`, a fictional gas whose ignition
+depends on its authored class, its concentration band and the room it is in).
+
 ## Actors as data ("Billy as data")
 
 `crates/idaptik-core/src/scenario/actor/` ports *enemies as data*
