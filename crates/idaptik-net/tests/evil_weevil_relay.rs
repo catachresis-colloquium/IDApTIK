@@ -48,7 +48,7 @@ async fn client() -> PhoenixClient<PlainWebSocketTransport> {
 
 #[tokio::test]
 #[ignore = "requires the throwaway local burble from scripts/evil_weevil_relay_check.sh"]
-async relay_duplicate_seq_is_dropped_and_role_misrouting_rejected() {
+async fn relay_duplicate_seq_is_dropped_and_role_misrouting_rejected() {
     let mut hacker = client().await;
     hacker
         .join(
@@ -109,7 +109,7 @@ async relay_duplicate_seq_is_dropped_and_role_misrouting_rejected() {
 
 #[tokio::test]
 #[ignore = "requires the throwaway local burble from scripts/evil_weevil_relay_check.sh"]
-async relay_role_table_rejects_misrouted_and_unknown_commands() {
+async fn relay_role_table_rejects_misrouted_and_unknown_commands() {
     let mut infiltrator = client().await;
     infiltrator
         .join(
@@ -154,7 +154,7 @@ async relay_role_table_rejects_misrouted_and_unknown_commands() {
 
 #[tokio::test]
 #[ignore = "requires the throwaway local burble from scripts/evil_weevil_relay_check.sh"]
-async relay_join_rejects_unknown_role_and_game() {
+async fn relay_join_rejects_unknown_role_and_game() {
     let mut seat = client().await;
     let bad_role = seat
         .join(
