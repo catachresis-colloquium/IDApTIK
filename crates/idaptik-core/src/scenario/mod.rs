@@ -30,6 +30,7 @@ pub mod event;
 pub mod floor_graph;
 pub mod ghost_lobby;
 pub mod ids;
+pub mod infrastructure;
 pub mod mathf;
 pub mod outcome;
 pub mod rng;
