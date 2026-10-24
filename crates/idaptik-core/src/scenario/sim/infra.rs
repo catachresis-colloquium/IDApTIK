@@ -234,7 +234,7 @@ impl GhostLobbySim {
             matches!(
                 o.kind,
                 ObservationKind::UnusualNoise | ObservationKind::Alarm
-            )
+            ) && (o.x - self.state.billy.x).abs() >= 15.0
         }) {
             // The hearing gate inside `observations` already applied this
             // actor's threshold and distance; the tie-break is strongest
