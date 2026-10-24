@@ -21,7 +21,7 @@ config = "config/ — Nickel typed, schema-checked game/level/network config."
 
 [related-projects]
 projects = [
-  { name = "bevy", relationship = "rendering-frontend", notes = "Evaluation frontend over idaptik-core (ADR-0003). Pins Rust MSRV 1.95.0." },
+  { name = "bevy", relationship = "rendering-frontend", notes = "Evaluation frontend over idaptik-core (ADR-0003). Pins Rust MSRV 1.97.1 (Bevy 0.20)." },
   { name = "fyrox", relationship = "rendering-frontend", notes = "Alternative evaluation frontend over idaptik-core (ADR-0003); interchangeable with Bevy." },
   { name = "phoenix_channels", relationship = "transport", notes = "Multiplayer/session transport on Bandit, not LiveView (ADR-0002)." },
   { name = "nickel", relationship = "config-language", notes = "Typed configuration for game/level/network; schemas under config/." },

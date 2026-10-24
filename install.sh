@@ -9,7 +9,7 @@
 #
 # Steps, in order:
 #   1. rustup             (user-space, ~/.cargo; downloaded, then run)
-#   2. pinned Rust        (rust-toolchain.toml: 1.95.0 + components + targets)
+#   2. pinned Rust        (rust-toolchain.toml: 1.97.1 + components + targets)
 #   3. mise + zig/just/nickel   (scripts/bootstrap.sh)
 #   4. Bevy system libs   (`just bevy-linux-deps`; the only step needing sudo)
 #   4b. WSL2 only, when WSLg Copy Mode is broken: Windows Rust target + MinGW

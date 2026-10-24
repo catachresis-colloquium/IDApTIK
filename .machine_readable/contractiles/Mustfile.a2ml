@@ -48,8 +48,8 @@ target IDApTIK's real tree, not a generic template.
 - severity: critical
 
 ### rust-toolchain-pinned
-- description: rust-toolchain.toml pins the Rust channel (MSRV for Bevy 0.19)
-- run: test -f rust-toolchain.toml && grep -q 'channel = "1.95.0"' rust-toolchain.toml
+- description: rust-toolchain.toml pins the Rust channel (MSRV for Bevy 0.20)
+- run: test -f rust-toolchain.toml && grep -q 'channel = "1.97.1"' rust-toolchain.toml
 - severity: critical
 
 ### engine-license-agpl

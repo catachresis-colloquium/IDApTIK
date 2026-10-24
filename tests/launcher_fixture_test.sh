@@ -180,7 +180,7 @@ cat > "$STUBS/cargo" <<'EOF'
 #!/usr/bin/env bash
 # stub cargo: reports a version; "build" materializes the stub seat binary.
 if [ "${1:-}" = "--version" ]; then
-  echo "cargo 1.95.0 (stub)"
+  echo "cargo 1.97.1 (stub)"
   exit 0
 fi
 if [ "${1:-}" = "build" ]; then

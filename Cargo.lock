@@ -3,22 +3,6 @@
 version = 4
 
 [[package]]
-name = "ab_glyph"
-version = "0.2.32"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c0457472c38ea5bd1c3b5ada5e368271cb550be7a4ca4a0b4634e9913f6cc2"
-dependencies = [
- "ab_glyph_rasterizer",
- "owned_ttf_parser",
-]
-
-[[package]]
-name = "ab_glyph_rasterizer"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
-
-[[package]]
 name = "accesskit"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1378,7 +1362,7 @@ dependencies = [
  "bevy_ui_widgets",
  "bevy_utils 0.20.0",
  "bevy_window 0.20.0",
- "bevy_winit 0.20.0",
+ "bevy_winit",
  "bevy_world_serialization",
 ]
 
@@ -2305,36 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_winit"
-version = "0.19.1"
-dependencies = [
- "accesskit",
- "accesskit_winit 0.32.2",
- "approx",
- "bevy_a11y 0.19.1",
- "bevy_android 0.19.1",
- "bevy_app 0.19.1",
- "bevy_derive 0.19.1",
- "bevy_ecs 0.19.1",
- "bevy_input 0.19.1",
- "bevy_input_focus 0.19.1",
- "bevy_log 0.19.1",
- "bevy_math 0.19.1",
- "bevy_platform 0.19.1",
- "bevy_reflect 0.19.1",
- "bevy_tasks 0.19.1",
- "bevy_window 0.19.1",
- "js-sys",
- "tracing",
- "wasm-bindgen",
- "web-sys",
- "winit",
-]
-
-[[package]]
-name = "bevy_winit"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ef0a5a55524e793ab13536ef244229fa66a4839fae6564df2aa4b3c13956a82"
 dependencies = [
  "accesskit",
  "accesskit_winit 0.33.2",
@@ -2976,18 +2931,18 @@ dependencies = [
 
 [[package]]
 name = "creusot-std"
-version = "0.14.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b019630da7e585ab18eff475d7ea820474c3fc0cd05a57706facf37f67ab2705"
+checksum = "68cc8f3ec44f553652fecb0b534726b2ca5d4684a54a593f0aedfe766b3e76fd"
 dependencies = [
  "creusot-std-proc",
 ]
 
 [[package]]
 name = "creusot-std-proc"
-version = "0.14.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a21564d3da8f97ce00e03125d0c3f7c9faedfa68e5d182d88beb25c82c12d25"
+checksum = "c9530985d4aff8273851f018c36422944f70717d7aa9e0c724c3deab004bd6db"
 dependencies = [
  "pearlite-syn",
  "proc-macro2",
@@ -4087,7 +4042,7 @@ name = "idaptik-bevy"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "bevy_winit 0.19.1",
+ "bevy_winit",
  "clap",
  "idaptik-core",
  "idaptik-net",
@@ -5408,15 +5363,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "owned_ttf_parser"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
-dependencies = [
- "ttf-parser",
-]
-
-[[package]]
 name = "palette"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6265,9 +6211,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6277f0217056f77f1d8f49f2950ac6c278c0d607c45f5ee99328d792ede24ec"
 dependencies = [
- "ab_glyph",
  "log",
- "memmap2",
  "smithay-client-toolkit",
  "tiny-skia",
 ]
@@ -7093,12 +7037,6 @@ dependencies = [
  "nom 8.0.0",
  "petgraph",
 ]
-
-[[package]]
-name = "ttf-parser"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
 name = "tungstenite"
