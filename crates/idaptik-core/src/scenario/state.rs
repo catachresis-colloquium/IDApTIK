@@ -551,7 +551,10 @@ impl RuntimeState {
                 == crate::scenario::definition::ArrivalClock::LeftSpawnRoom,
             using_console: None,
             intel: crate::scenario::console::Intel::default(),
-            infra: def.infra.as_ref().map(crate::scenario::infra::InfraState::initial),
+            infra: def
+                .infra
+                .as_ref()
+                .map(crate::scenario::infra::InfraState::initial),
             // The live companion is built by the sim constructor (it needs the
             // run's seed, which this projection does not carry) and recorded
             // here from there.

@@ -20,7 +20,12 @@ jobs:
     env:
       DIGEST: /tmp/arena-digest.md
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to an immutable 40-hex commit (actions/checkout v4), matching
+      # abi-conformance.yml and creusot-proof.yml: an unonboarded workflow
+      # with a movable tag ref fails scripts/check-lock-sync.sh, and this
+      # temporary file is removed before merge rather than entered into the
+      # machine-generated actions.lock.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
       - name: Provision pinned Rust toolchain
@@ -38,7 +43,7 @@ jobs:
             echo '## fmt --check'
             echo "Exit status: $status"
             echo '```diff'
-            head -c 12000 "$output"
+            head -c 30000 "$output"
             echo
             echo '```'
           } >> "$DIGEST"
@@ -84,7 +89,9 @@ jobs:
             echo '## cargo test -p idaptik-core'
             echo "Exit status: $status"
             echo '```'
-            head -160 "$output"
+            grep -E "^test result:|^warning: .*generated|panicked" "$output" | head -60
+            echo '--- failure details ---'
+            sed -n '/^failures:$/,$p' "$output" | head -400
             echo '```'
           } >> "$DIGEST"
           exit "$status"

@@ -33,11 +33,11 @@ use idaptik_core::companion::MoleEvent;
 use idaptik_core::scenario::command::{
     Button, Buttons, Command, Edge, MoleOp, NetNodeIndex, PivotTarget, TickInput,
 };
-use idaptik_core::scenario::state::Place;
 use idaptik_core::scenario::definition::ObjectiveKind;
 use idaptik_core::scenario::event::Event;
 use idaptik_core::scenario::floor_graph::{floor_graph, light_node_id, valve_node_id};
 use idaptik_core::scenario::infra::{ObservationKind, ReleaseCause};
+use idaptik_core::scenario::state::Place;
 use idaptik_core::scenario::tuning::ActionKind;
 use idaptik_core::scenario::{GhostLobbySim, HALL_SUMP, RunConfig, pump_house};
 
@@ -117,15 +117,6 @@ impl Run {
         self.sim.state().billy.x
     }
 
-    fn mole_x(&self) -> f64 {
-        self.sim
-            .state()
-            .mole
-            .as_ref()
-            .map(|m| m.state.x)
-            .unwrap_or(f64::NAN)
-    }
-
     fn node(&self, id: &str) -> NetNodeIndex {
         let def = self.sim.definition().clone();
         let index = floor_graph(&def)
@@ -144,7 +135,11 @@ impl Run {
                 self.tick(&TickInput::default());
                 return;
             }
-            let dir = if cx < target { Button::Right } else { Button::Left };
+            let dir = if cx < target {
+                Button::Right
+            } else {
+                Button::Left
+            };
             self.tick(&hold(&[dir]));
         }
         panic!("never reached cx {target} (stuck at {})", self.cx());
@@ -237,14 +232,21 @@ impl Run {
     /// when the guard is close enough to hear a footfall.
     fn extract_via_chute(&mut self, search_input: &TickInput) {
         if !self.sim.state().chute.revealed {
-            self.wait_for(300, search_input, |r| r.sim.state().chute.revealed, "the chute search");
+            self.wait_for(
+                300,
+                search_input,
+                |r| r.sim.state().chute.revealed,
+                "the chute search",
+            );
         }
         self.wait_for(
             90,
             &press_interact(),
-            |r| r.saw(&Event::Extracted {
-                method: idaptik_core::scenario::common::ExtractMethod::LaundryChute,
-            }),
+            |r| {
+                r.saw(&Event::Extracted {
+                    method: idaptik_core::scenario::common::ExtractMethod::LaundryChute,
+                })
+            },
             "the chute ride",
         );
     }
@@ -334,12 +336,22 @@ fn solution_one_physical_access_turns_the_wheel_and_outruns_the_shift() {
     // the dash from here beats the guard to the office from any seed-rolled
     // arrival.
     run.walk_to(505.0, 200);
-    run.wait_for(1800, &TickInput::default(), Run::crisis_began, "the shift to start");
+    run.wait_for(
+        1800,
+        &TickInput::default(),
+        Run::crisis_began,
+        "the shift to start",
+    );
 
     // The dash: sprint east the moment the crisis begins. The guard enters
     // at the far west end and the flood bell pulls him to the control
     // office; the crossing is done before he clears the pump hall.
-    run.wait_for(160, &hold(SPRINT_EAST), |r| r.cx() >= 920.0, "the chute mouth");
+    run.wait_for(
+        160,
+        &hold(SPRINT_EAST),
+        |r| r.cx() >= 920.0,
+        "the chute mouth",
+    );
     assert!(
         run.billy_x() < 520.0,
         "the guard was already east of the pump hall at the crossing: {}",
@@ -413,7 +425,8 @@ fn solution_two_hacker_control_opens_the_valve_and_kills_the_lights() {
         "the release is not attributable to the hack"
     );
     assert_eq!(
-        run.sim.state().player.valve_turn, 0.0,
+        run.sim.state().player.valve_turn,
+        0.0,
         "the wheel turned by hand — this is the remote line"
     );
 
@@ -421,7 +434,12 @@ fn solution_two_hacker_control_opens_the_valve_and_kills_the_lights() {
     // the hall shorts dark, and the guard's shift starts into a building
     // already in alarm.
     run.walk_to(404.0, 300);
-    run.wait_for(120, &hold(CROUCH), |r| r.sim.state().player.hidden, "the recess");
+    run.wait_for(
+        120,
+        &hold(CROUCH),
+        |r| r.sim.state().player.hidden,
+        "the recess",
+    );
     run.wait_for(1800, &hold(CROUCH), Run::crisis_began, "the shift to start");
     run.wait_for(
         1200,
@@ -433,14 +451,24 @@ fn solution_two_hacker_control_opens_the_valve_and_kills_the_lights() {
     // Slip east along the dark pump hall — crouched: the guard is close
     // enough to hear a footfall, but the splash floor is louder than a
     // crouch and his attention is on the bell.
-    run.wait_for(240, &hold(CROUCH_EAST), |r| r.cx() >= 500.0, "the hall's east end");
+    run.wait_for(
+        240,
+        &hold(CROUCH_EAST),
+        |r| r.cx() >= 500.0,
+        "the hall's east end",
+    );
 
     // Kill the office lights over the network, unwind the pivot so support
     // recovers before the exposed crossing, and sprint in the same breath.
     let lights = run.node(&light_node_id("office"));
     run.cmd(&[Command::NetHack { node: lights }, Command::Unpivot]);
     assert!(
-        run.any(|e| matches!(e, Event::UplinkAction { kind: ActionKind::Lights })),
+        run.any(|e| matches!(
+            e,
+            Event::UplinkAction {
+                kind: ActionKind::Lights
+            }
+        )),
         "the lights hack never landed"
     );
     assert!(
@@ -455,7 +483,12 @@ fn solution_two_hacker_control_opens_the_valve_and_kills_the_lights() {
     // The crossing: the flicker blinds and the stun holds the guard still
     // while the body passes; by the time the office lights come back the
     // infiltrator is in the gallery, another room away.
-    run.wait_for(160, &hold(SPRINT_EAST), |r| r.cx() >= 920.0, "the chute mouth");
+    run.wait_for(
+        160,
+        &hold(SPRINT_EAST),
+        |r| r.cx() >= 920.0,
+        "the chute mouth",
+    );
     run.extract_via_chute(&hold(&[Button::Interact]));
     run.assert_clean_finish();
 
@@ -491,7 +524,12 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
 
     // Hide behind the canteen counter; the crisis begins on its own clock.
     run.walk_to(205.0, 300);
-    run.wait_for(120, &hold(CROUCH), |r| r.sim.state().player.hidden, "the counter shadow");
+    run.wait_for(
+        120,
+        &hold(CROUCH),
+        |r| r.sim.state().player.hidden,
+        "the counter shadow",
+    );
     run.wait_for(1800, &hold(CROUCH), Run::crisis_began, "the shift to start");
 
     // The decoy chain. Every leg: order the mole underground to the next
@@ -558,7 +596,11 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
     // threshold even at point-blank range.
     let mut i = 0usize;
     loop {
-        let base = if run.cx() < 790.0 { SPRINT_EAST } else { CROUCH_EAST };
+        let base = if run.cx() < 790.0 {
+            SPRINT_EAST
+        } else {
+            CROUCH_EAST
+        };
         let mut input = hold(base);
         if i % 30 == 0 {
             input.immediates.push(Command::Mole {
@@ -675,12 +717,10 @@ fn solution_four_emergent_cascade_floods_by_consequence_not_by_script() {
     // The emergence claim, checked structurally: the scripted objectives are
     // the canonical note/misdirect/exit — nothing scripts the cascade.
     assert!(
-        def.objectives
-            .iter()
-            .all(|o| matches!(
-                o.kind,
-                ObjectiveKind::Note | ObjectiveKind::Misdirect | ObjectiveKind::Exit
-            )),
+        def.objectives.iter().all(|o| matches!(
+            o.kind,
+            ObjectiveKind::Note | ObjectiveKind::Misdirect | ObjectiveKind::Exit
+        )),
         "the challenge floor grew a scripted infrastructure objective"
     );
     assert!(
@@ -702,7 +742,12 @@ fn solution_four_emergent_cascade_floods_by_consequence_not_by_script() {
     // line and one hack on the substation, unwinding the pivots immediately
     // so the run's support recovers while the cascade lands.
     run.walk_to(885.0, 600);
-    run.wait_for(120, &hold(CROUCH), |r| r.sim.state().player.hidden, "the locker bay");
+    run.wait_for(
+        120,
+        &hold(CROUCH),
+        |r| r.sim.state().player.hidden,
+        "the locker bay",
+    );
     let ops = run.node("isp-ops");
     let jump = run.node("grid-jump");
     let substation = run.node("substation");
@@ -740,7 +785,11 @@ fn solution_four_emergent_cascade_floods_by_consequence_not_by_script() {
     );
     assert_eq!(run.sim.state().player.valve_turn, 0.0);
     assert!(
-        run.sim.state().dead_nodes.iter().any(|n| n.starts_with("pump-")),
+        run.sim
+            .state()
+            .dead_nodes
+            .iter()
+            .any(|n| n.starts_with("pump-")),
         "the pump never lost power"
     );
     assert!(
@@ -764,11 +813,13 @@ fn solution_four_emergent_cascade_floods_by_consequence_not_by_script() {
     run.wait_for(
         600,
         &hold(CROUCH),
-        |r| r.saw(&Event::AlarmChanged {
-            alarm: "flood-alarm".into(),
-            room: "office".into(),
-            sounding: true,
-        }),
+        |r| {
+            r.saw(&Event::AlarmChanged {
+                alarm: "flood-alarm".into(),
+                room: "office".into(),
+                sounding: true,
+            })
+        },
         "the flood bell",
     );
 

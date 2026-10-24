@@ -99,11 +99,7 @@ fn the_infra_free_canonical_floor_audits_exactly_as_before() {
 fn dangling_infrastructure_references_are_refused_not_rendered() {
     // A water zone in a room the floor does not carry.
     let mut def = pump_house();
-    def.infra
-        .as_mut()
-        .expect("infra")
-        .water_zones[0]
-        .room = "nowhere".into();
+    def.infra.as_mut().expect("infra").water_zones[0].room = "nowhere".into();
     assert!(
         !def.validate().passed(),
         "a zone in an unknown room validated"

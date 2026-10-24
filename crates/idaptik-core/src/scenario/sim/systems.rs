@@ -337,11 +337,8 @@ impl GhostLobbySim {
                     self.state.player.vx *= 0.7;
                     if self.state.player.valve_turn >= c::VALVE_TURN_HOLD {
                         self.state.player.valve_turn = 0.0;
-                        let effects = vec![Effect::WaterReleased(valve_node_id(
-                            zone.as_str(),
-                        ))];
-                        let events =
-                            apply_effects(&self.def, &mut self.state, self.cfg, &effects);
+                        let effects = vec![Effect::WaterReleased(valve_node_id(zone.as_str()))];
+                        let events = apply_effects(&self.def, &mut self.state, self.cfg, &effects);
                         self.events.extend(events);
                     }
                 } else {

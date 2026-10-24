@@ -292,10 +292,7 @@ impl GhostLobbySim {
             .find(|z| {
                 Some(z.room.as_str()) == room
                     && (cx - z.valve_x).abs() < c::VALVE_DIST
-                    && !infra
-                        .zones
-                        .get(z.id.as_str())
-                        .is_some_and(|z| z.released)
+                    && !infra.zones.get(z.id.as_str()).is_some_and(|z| z.released)
             })
             .map(|z| z.id.clone())
     }
