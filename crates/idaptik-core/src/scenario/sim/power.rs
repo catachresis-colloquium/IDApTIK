@@ -371,6 +371,12 @@ mod tests {
                 },
             }],
         );
+        // The cut took two seconds of hands: let them come free before asking
+        // for anything else, or the request is refused for being *busy* rather
+        // than for there being no supply — a different sentence, and a real one.
+        for _ in 0..130 {
+            step(&mut sim, &[]);
+        }
         // Walk to the office and ask the camera there to come on. The command
         // is legal, reachable and lands; the supply is what refuses.
         stand(&mut sim, "office");
@@ -389,7 +395,8 @@ mod tests {
             power_events(&events)
                 .iter()
                 .any(|e| matches!(e, PowerEvent::Commanded { on: true, .. })),
-            "the command itself lands"
+            "the command itself lands: {:?}",
+            power_events(&events)
         );
         step(&mut sim, &[]);
         let report = sim.power_report("cam-1").expect("a load");
