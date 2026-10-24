@@ -180,13 +180,19 @@ impl DefensiveObserver {
         }
     }
 
-    /// False positives on a fault-only trace: violations reported where no
-    /// violation exists. Must always be zero.
-    pub fn false_positives_on_faults(report: &DefensiveReport) -> usize {
-        report
-            .classifications
+    /// False positives measured against ground truth: a non-violation event
+    /// (a fault, relay drop, recovery or host-coped denial) labelled as a
+    /// violation. Genuine `ValidatorRejected` evidence is not a false
+    /// positive even though it is counted as a violation elsewhere, so the
+    /// event slice is required alongside the report. Must always be zero.
+    pub fn false_positives_on_faults(
+        events: &[TelemetryEvent],
+        report: &DefensiveReport,
+    ) -> usize {
+        events
             .iter()
-            .filter(|c| c.class == EvidenceClass::Violation)
+            .zip(&report.classifications)
+            .filter(|(event, c)| !event.is_violation() && c.class == EvidenceClass::Violation)
             .count()
     }
 
@@ -231,7 +237,10 @@ mod tests {
         let trace = fault_trace();
         let report = DefensiveObserver::evaluate(&trace);
         assert_eq!(report.counts.violation, 0);
-        assert_eq!(DefensiveObserver::false_positives_on_faults(&report), 0);
+        assert_eq!(
+            DefensiveObserver::false_positives_on_faults(&trace, &report),
+            0
+        );
         assert_eq!(report.faults.len(), 4);
     }
 

@@ -113,7 +113,8 @@ pub fn finalize(
 ) -> ScenarioResult {
     harness.enforce_limits();
     let observer = DefensiveObserver::evaluate(harness.telemetry());
-    let false_positives = DefensiveObserver::false_positives_on_faults(&observer);
+    let false_positives =
+        DefensiveObserver::false_positives_on_faults(harness.telemetry(), &observer);
     if false_positives > 0 {
         harness.check(
             "observer:no-false-positives",

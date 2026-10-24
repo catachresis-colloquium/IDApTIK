@@ -69,8 +69,12 @@ jobs:
             grep -E -A4 "panicked" .arena-diagnostics/test-run.txt
             grep -E "scenario EW|^  - " .arena-diagnostics/test-run.txt
           } | head -120 > .arena-diagnostics/test-errors.txt
-          emit compile-errors .arena-diagnostics/compile-errors.txt
-          emit clippy-errors .arena-diagnostics/clippy-errors.txt
+          # Clean steps emit nothing, keeping the 10-annotation budget for
+          # whatever actually failed (and for the full rustfmt diff).
+          grep -qE "error|warning" .arena-diagnostics/compile-errors.txt \
+            && emit compile-errors .arena-diagnostics/compile-errors.txt || true
+          grep -qE "error|warning" .arena-diagnostics/clippy-errors.txt \
+            && emit clippy-errors .arena-diagnostics/clippy-errors.txt || true
           emit test-errors .arena-diagnostics/test-errors.txt
           emit rustfmt .arena-diagnostics/rustfmt.txt
           exit 0

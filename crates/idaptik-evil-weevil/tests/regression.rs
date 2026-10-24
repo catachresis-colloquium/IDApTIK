@@ -175,7 +175,10 @@ fn faults_are_never_hostile_and_enforcement_has_no_remote_arm() {
     ];
     let report = DefensiveObserver::evaluate(&trace);
     assert_eq!(report.counts.violation, 0);
-    assert_eq!(DefensiveObserver::false_positives_on_faults(&report), 0);
+    assert_eq!(
+        DefensiveObserver::false_positives_on_faults(&trace, &report),
+        0
+    );
 
     let policy = EnforcementPolicy::observe_only();
     for recommendation in [
