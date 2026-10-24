@@ -628,11 +628,17 @@ fn a_relay_that_goes_dark_mid_edge_does_not_pulse_on_power_up() {
     // t1: the coil dies. `Q` is forced low while it is dark.
     let mut dark = on.clone();
     dark.unpower("R");
-    run(&mut s, &dark, 3);
+    let seen_dark = run(&mut s, &dark, 3);
+    let relay = s.device("R").expect("a relay").clone();
+    let light = s.device("L").expect("a light").clone();
     // t2: supply returns with the input still high. No new edge has arrived,
     // so there is nothing to pulse.
     let back = run(&mut s, &on, 20);
-    assert_eq!(toggles(&back), 0, "no phantom pulse on power-up: {back:?}");
+    assert_eq!(
+        toggles(&back),
+        0,
+        "no phantom pulse on power-up.\n  dark={seen_dark:?}\n  relay={relay:?}\n  light={light:?}\n  back={back:?}"
+    );
 }
 
 #[test]
