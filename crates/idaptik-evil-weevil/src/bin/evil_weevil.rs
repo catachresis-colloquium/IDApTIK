@@ -13,7 +13,6 @@
 
 use clap::Parser;
 use idaptik_evil_weevil::report::REPORT_SCHEMA;
-use idaptik_evil_weevil::scenarios::Scenario;
 use idaptik_evil_weevil::{CorpusReport, corpus};
 use std::path::PathBuf;
 use std::process::ExitCode;

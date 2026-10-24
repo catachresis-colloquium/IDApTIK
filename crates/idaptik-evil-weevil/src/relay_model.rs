@@ -168,13 +168,11 @@ impl RelayModel {
         // Mirror note_seq/2: an integer seq at or below the last seen one is
         // stale; no seq or a non-integer seq is treated as fresh.
         if let Some(seq) = map.get("seq").and_then(Value::as_i64) {
-            if let Some(last) = self.last_seq {
-                if seq <= last {
-                    self.dropped_count += 1;
-                    return RelayVerdict::Dropped {
-                        reason: "stale_or_duplicate",
-                    };
-                }
+            if self.last_seq.is_some_and(|last| seq <= last) {
+                self.dropped_count += 1;
+                return RelayVerdict::Dropped {
+                    reason: "stale_or_duplicate",
+                };
             }
             self.last_seq = Some(seq);
         }
@@ -246,7 +244,7 @@ impl RelayModel {
             },
         ];
         for cmd in sample {
-            let value = serde_json::to_value(&cmd).expect("command serialises");
+            let value = serde_json::to_value(cmd).expect("command serialises");
             let tag = value
                 .get("cmd")
                 .and_then(Value::as_str)

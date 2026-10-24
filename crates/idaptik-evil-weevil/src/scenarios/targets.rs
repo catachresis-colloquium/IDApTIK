@@ -157,7 +157,7 @@ impl Scenario for InvalidTargetScenario {
         let x = move_sim.state().player.x;
         harness.check(
             "movement-clamped-inside-the-world",
-            x.is_finite() && x >= 0.0 && x <= WORLD_WIDTH,
+            x.is_finite() && (0.0..=WORLD_WIDTH).contains(&x),
             format!("player x after 30 held-right ticks: {x} (WORLD_WIDTH={WORLD_WIDTH})"),
         );
 

@@ -13,19 +13,14 @@ use crate::policy::{DummyIdentity, Principal, PrincipalKind};
 use serde::{Deserialize, Serialize};
 
 /// How the local host responds to recommendations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EnforcementMode {
     /// Record evidence and recommendations; never act. The default.
+    #[default]
     ObserveOnly,
     /// Permit the bounded local protective actions below. Still no remote
     /// act of any kind.
     LocalProtective,
-}
-
-impl Default for EnforcementMode {
-    fn default() -> Self {
-        EnforcementMode::ObserveOnly
-    }
 }
 
 /// Everything the host can do. Exhaustive on purpose: a request for a new

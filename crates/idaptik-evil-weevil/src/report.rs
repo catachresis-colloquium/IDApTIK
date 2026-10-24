@@ -143,11 +143,9 @@ fn redact_inner(value: &mut Value, info: &mut RedactionInfo) {
                 redact_inner(item, info);
             }
         }
-        Value::String(text) => {
-            if looks_secret_bearing(text) {
-                *text = REDACTED.into();
-                info.redacted_values += 1;
-            }
+        Value::String(text) if looks_secret_bearing(text) => {
+            *text = REDACTED.into();
+            info.redacted_values += 1;
         }
         _ => {}
     }

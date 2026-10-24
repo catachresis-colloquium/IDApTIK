@@ -145,11 +145,11 @@ impl Scenario for ReconnectObsoleteScenario {
             Role::Hacker,
             &script,
             0,
-            None,
-            Some(script.seed.wrapping_add(1)),
-            None,
-            None,
-            Some(false),
+            wire::HelloOverrides {
+                seed: Some(script.seed.wrapping_add(1)),
+                rejoin: Some(false),
+                ..wire::HelloOverrides::default()
+            },
         );
         let old_hello: Hello = serde_json::from_value(old_hello_value).expect("valid hello shape");
         let survivor_epoch = Hello::new(Role::Infiltrator, &script, 0);

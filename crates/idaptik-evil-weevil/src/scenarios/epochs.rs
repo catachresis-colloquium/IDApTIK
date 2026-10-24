@@ -75,11 +75,10 @@ impl Scenario for EpochConflictScenario {
                     Role::Hacker,
                     &script,
                     0,
-                    None,
-                    Some(script.seed.wrapping_add(1)),
-                    None,
-                    None,
-                    None,
+                    wire::HelloOverrides {
+                        seed: Some(script.seed.wrapping_add(1)),
+                        ..wire::HelloOverrides::default()
+                    },
                 ),
             ),
             (
@@ -88,11 +87,10 @@ impl Scenario for EpochConflictScenario {
                     Role::Hacker,
                     &script,
                     0,
-                    None,
-                    None,
-                    Some(script.max_ticks + 1),
-                    None,
-                    None,
+                    wire::HelloOverrides {
+                        max_ticks: Some(script.max_ticks + 1),
+                        ..wire::HelloOverrides::default()
+                    },
                 ),
             ),
             (
@@ -105,11 +103,10 @@ impl Scenario for EpochConflictScenario {
                     Role::Hacker,
                     &script,
                     0,
-                    None,
-                    None,
-                    None,
-                    Some("operator"),
-                    None,
+                    wire::HelloOverrides {
+                        difficulty: Some("operator"),
+                        ..wire::HelloOverrides::default()
+                    },
                 ),
             ),
         ];
@@ -171,7 +168,15 @@ impl Scenario for EpochConflictScenario {
         //    (`idaptik_net::live`) enforces this on the real socket path;
         //    the corpus demonstrates the predicate it keys on.
         let rejoin_value =
-            wire::raw_hello(Role::Hacker, &script, 0, None, None, None, None, Some(true));
+            wire::raw_hello(
+                Role::Hacker,
+                &script,
+                0,
+                wire::HelloOverrides {
+                    rejoin: Some(true),
+                    ..wire::HelloOverrides::default()
+                },
+            );
         let rejoin_hello: Hello = serde_json::from_value(rejoin_value).expect("valid hello");
         // A fresh LockstepCore only exists after a non-rejoin hello, so the
         // driver predicate (`peer.rejoin` on a fresh seat) is unambiguous.

@@ -73,33 +73,44 @@ pub fn with_seq(mut payload: Value, seq: u64) -> Value {
     payload
 }
 
-/// A `net:hello` control frame with per-field overrides. Every argument is
-/// optional; `None` fields take the value the scripted hello would carry, so
-/// a scenario can mutate exactly one epoch field at a time.
+/// Per-field epoch overrides for [`raw_hello`]. Every field is optional; a
+/// `None` field keeps the value the scripted hello would carry, so a scenario
+/// can mutate exactly one epoch field at a time.
+#[derive(Debug, Clone, Default)]
+pub struct HelloOverrides<'a> {
+    /// Override the advertised protocol version.
+    pub proto: Option<u64>,
+    /// Override the run-seed claim.
+    pub seed: Option<u32>,
+    /// Override the advertised run length.
+    pub max_ticks: Option<u64>,
+    /// Override the advertised difficulty label.
+    pub difficulty: Option<&'a str>,
+    /// Claim the rejoin (session-recovery) flag.
+    pub rejoin: Option<bool>,
+}
+
+/// A `net:hello` control frame with per-field overrides.
 pub fn raw_hello(
     role: Role,
     script: &ScriptFile,
     commands: u64,
-    proto: Option<u64>,
-    seed: Option<u32>,
-    max_ticks: Option<u64>,
-    difficulty: Option<&str>,
-    rejoin: Option<bool>,
+    overrides: HelloOverrides<'_>,
 ) -> Value {
     let mut hello = idaptik_net::envelope::Hello::new(role, script, commands);
-    if let Some(proto) = proto {
+    if let Some(proto) = overrides.proto {
         hello.proto = proto;
     }
-    if let Some(seed) = seed {
+    if let Some(seed) = overrides.seed {
         hello.seed = seed;
     }
-    if let Some(max_ticks) = max_ticks {
+    if let Some(max_ticks) = overrides.max_ticks {
         hello.max_ticks = max_ticks;
     }
-    if let Some(difficulty) = difficulty {
+    if let Some(difficulty) = overrides.difficulty {
         hello.difficulty = difficulty.into();
     }
-    if let Some(rejoin) = rejoin {
+    if let Some(rejoin) = overrides.rejoin {
         hello.rejoin = rejoin;
     }
     serde_json::to_value(hello).expect("hello serialises")
@@ -112,11 +123,10 @@ pub fn future_proto_hello(role: Role, script: &ScriptFile, commands: u64) -> Val
         role,
         script,
         commands,
-        Some(NET_PROTO + 1),
-        None,
-        None,
-        None,
-        None,
+        HelloOverrides {
+            proto: Some(NET_PROTO + 1),
+            ..HelloOverrides::default()
+        },
     )
 }
 

@@ -27,7 +27,9 @@ pub const MAX_QUEUE_DEPTH: usize = 64;
 pub const MAX_INTENTS_PER_SCENARIO: usize = 32;
 
 /// A measured resource profile, attached to every scenario result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub struct HarnessMetrics {
     /// Lockstep steps actually executed.
     pub steps: u64,
@@ -37,17 +39,6 @@ pub struct HarnessMetrics {
     pub peak_queue_depth: usize,
     /// Intents the adversarial agent proposed.
     pub intents: usize,
-}
-
-impl Default for HarnessMetrics {
-    fn default() -> Self {
-        Self {
-            steps: 0,
-            wire_messages: 0,
-            peak_queue_depth: 0,
-            intents: 0,
-        }
-    }
 }
 
 impl HarnessMetrics {
