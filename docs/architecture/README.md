@@ -9,6 +9,10 @@ integration boundaries.
 - [IDApTIK cognitive-model working architecture](idaptik-cognitive-model.adoc)
 - [Observer-relative evidence ledger](evidence-ledger-design.adoc)
 - [UMS package contract ownership](ums-package-contract.md)
+- [Infrastructure interactions](infrastructure-interactions.md) — the plant as a
+  staged, deterministic rule layer over typed capabilities (ADR-0013)
+- [Infrastructure rule catalogue](infrastructure-rule-catalogue.md) — the eleven
+  specified properties for every electricity/water/gas/tunnel/control interaction
 - [Repository architecture](../ARCHITECTURE.md)
 
 ## Where cognitive-model work is documented
