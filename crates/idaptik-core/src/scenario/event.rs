@@ -15,6 +15,7 @@ use crate::scenario::common::{
     ObjectiveStatus, Outcome, Phase, ReportedTarget, Severity,
 };
 use crate::scenario::ids::{DoorId, RoomId};
+use crate::scenario::secondary_spaces::SecondaryEvent;
 use crate::scenario::tuning::{ActionKind, DifficultyId};
 use serde::{Deserialize, Serialize};
 
@@ -155,6 +156,9 @@ pub enum Event {
     ContextHint { text: String },
     /// Frontend-only tutorial cue (excluded from the canonical determinism diff).
     TutorialCue { text: String, seconds: f64 },
+    /// Something happened on the floor's secondary spaces (maintenance
+    /// routes). Present when the definition carries a secondary network.
+    Secondary { secondary: SecondaryEvent },
 }
 
 /// A rendered log line — a *view* over an [`Event`].
@@ -410,6 +414,10 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
         ),
         Event::ContextHint { text } => line(text.clone(), Info, Prompt),
         Event::TutorialCue { text, .. } => line(text.clone(), Info, Tutorial),
+
+        Event::Secondary { secondary } => secondary
+            .describe()
+            .map(|(text, severity)| line(text, severity, Log)),
 
         // Structural / telemetry / session — present in the event stream, but
         // not rendered as log lines.

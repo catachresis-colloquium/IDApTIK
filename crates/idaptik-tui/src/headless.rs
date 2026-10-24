@@ -5,7 +5,9 @@ use crate::config;
 use crate::script::{ScriptFile, expand};
 use idaptik_core::Debrief;
 use idaptik_core::scenario::event::Event;
-use idaptik_core::scenario::{GhostLobbySim, RuntimeSnapshot, ghost_lobby};
+use idaptik_core::scenario::{
+    GhostLobbySim, RuntimeSnapshot, ghost_lobby, ghost_lobby_secondary,
+};
 use serde::Serialize;
 use std::path::Path;
 
@@ -29,7 +31,12 @@ pub struct HeadlessOutput {
 pub fn build(script: &ScriptFile) -> Result<GhostLobbySim, String> {
     let diff = config::parse_difficulty(&script.difficulty)?;
     let cfg = config::run_config(diff, script.reduced_motion, script.supervised);
-    GhostLobbySim::new(ghost_lobby(), cfg, script.seed)
+    let def = if script.secondary {
+        ghost_lobby_secondary()
+    } else {
+        ghost_lobby()
+    };
+    GhostLobbySim::new(def, cfg, script.seed)
         .map_err(|e| format!("invalid scenario: {e:?}"))
 }
 

@@ -34,6 +34,7 @@ pub mod mathf;
 pub mod outcome;
 pub mod rng;
 pub mod rooftop;
+pub mod secondary_spaces;
 pub mod signal;
 pub mod sim;
 pub mod snapshot;
@@ -75,12 +76,18 @@ pub use floor_graph::{
     FLOOR_GRAPH_JSON, VACUUM_NODE_ID, camera_node_id, door_node_id, floor_graph, inside_vantage,
     light_node_id, pivot_host, van_vantage,
 };
-pub use ghost_lobby::{GHOST_LOBBY_JSON, ghost_lobby};
+pub use ghost_lobby::{GHOST_LOBBY_JSON, ghost_lobby, ghost_lobby_secondary};
 pub use ids::{CameraId, DoorId, HideSpotId, IdIndex, ObjectiveId, RoomId};
 pub use mathf::TICK_DT;
 pub use outcome::{Debrief, ScoreBreakdown, Tag, debrief_text, grade_for};
 pub use rng::{InitRoll, Mulberry32, roll_init};
 pub use rooftop::ghost_lobby_rooftop;
+pub use secondary_spaces::{
+    AccessPointDebug, ActorClass, ActorClassSet, CableId, CableState, Clearance,
+    EntryRefusalReason, MoleDebug, ObstructionReason, RouteAccess, RouteDebugEntry,
+    RouteDebugView, RouteId, RouteState, SabotageRefusalReason, SecondaryEvent,
+    SecondarySpec, SecondaryState, SpaceId, discovered_routes, resolve_sabotage_cable,
+};
 pub use sim::GhostLobbySim;
 pub use snapshot::{
     DebriefExport, DefinitionExport, RuntimeSnapshot, SNAPSHOT_FORMAT, ScenarioExport,

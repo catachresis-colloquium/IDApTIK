@@ -27,6 +27,10 @@ pub struct ScriptFile {
     /// Optional recorded event log (for `--replay` cross-checking).
     #[serde(default)]
     pub expected_event_log: Option<serde_json::Value>,
+    /// When true, the floor carries secondary spaces (maintenance routes)
+    /// and Moletaire commands are available in this script.
+    #[serde(default)]
+    pub secondary: bool,
 }
 
 fn default_difficulty() -> String {
@@ -126,6 +130,13 @@ pub fn press_command(name: &str) -> Option<Command> {
         // toggle so a script line means the same thing wherever it lands.
         "pause" => Some(Command::Pause { on: true }),
         "resume" => Some(Command::Pause { on: false }),
+        // Moletaire's secondary-space routes (infiltrator seat). Scripted like
+        // any other immediate; the sim refuses them when the floor has no
+        // routes or the mole is not in position.
+        "mole-enter" => Some(Command::MoleEnterRoute),
+        "mole-sabotage" => Some(Command::MoleSabotageCable),
+        "mole-return" => Some(Command::MoleReturnToEntry),
+        "mole-surface" => Some(Command::MoleSurface),
         _ => None,
     }
 }

@@ -9,6 +9,7 @@
 
 use crate::scenario::floor_graph::floor_graph;
 use crate::scenario::ids::{CameraId, DoorId, HideSpotId, ObjectiveId, RoomId, SignalId};
+use crate::scenario::secondary_spaces::SecondarySpec;
 use crate::scenario::signal::{SignalNetworkDef, SignalValidationError};
 use crate::scenario::tuning::{
     ActionKind, ActionSpec, DifficultyId, DifficultyPreset, ScoringDef, TuningConstants,
@@ -234,6 +235,13 @@ pub struct ScenarioDefinition {
     /// inside; a floor with one starts the infiltrator on the roof.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exterior: Option<ExteriorDef>,
+    /// The floor's secondary spaces: ducts, maintenance passages, cable
+    /// conduits and the routes between them. Absent on most floors; when
+    /// present Moletaire can enter maintenance routes from the floor.
+    /// Absent on the canonical Ghost Lobby, so its golden and every replay
+    /// are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary: Option<SecondarySpec>,
 }
 
 /// Outside the building: the roof the infiltrator starts on, two ways in
@@ -584,6 +592,21 @@ impl ScenarioDefinition {
                 missing.is_none(),
                 format!("missing={missing:?}"),
                 missing.map(|(device, node)| ValidationError::SignalNodeMissing { device, node }),
+            );
+        }
+
+        // --- secondary spaces (only when the floor has them) --------------
+        if let Some(net) = &self.secondary {
+            let graph = floor_graph(self);
+            let problems = net.validate(&graph);
+            check(
+                &mut checks,
+                "secondary",
+                "secondary.valid",
+                "The secondary-space network validates",
+                problems.is_empty(),
+                format!("{problems:?}"),
+                None,
             );
         }
 

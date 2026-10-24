@@ -17,6 +17,7 @@ use crate::scenario::floor_graph::floor_graph;
 use crate::scenario::ids::DoorId;
 use crate::scenario::outcome::Debrief;
 use crate::scenario::rng::InitRoll;
+use crate::scenario::secondary_spaces::SecondaryState;
 use crate::scenario::signal::sim::SignalState;
 use crate::scenario::sim::GhostLobbySim;
 use crate::scenario::tuning::{ActionKind, DifficultyPreset};
@@ -297,6 +298,11 @@ pub struct RuntimeState {
     /// they do; interact again steps away.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub using_console: Option<String>,
+    /// The mole's secondary-space state, when the definition carries
+    /// secondary spaces. Skipped when absent, so a floor without routes has
+    /// the same snapshot shape as before this layer existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary: Option<SecondaryState>,
     /// What the building's systems have observed (only on floors with
     /// consoles).
     #[serde(
@@ -472,6 +478,7 @@ impl RuntimeState {
             arrival_held: def.arrival_clock
                 == crate::scenario::definition::ArrivalClock::LeftSpawnRoom,
             using_console: None,
+            secondary: None,
             intel: crate::scenario::console::Intel::default(),
         }
     }

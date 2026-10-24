@@ -35,6 +35,7 @@ use crate::scenario::outcome::{
 };
 use crate::scenario::rng::{Mulberry32, roll_init};
 use crate::scenario::snapshot::{RuntimeSnapshot, SNAPSHOT_FORMAT};
+use crate::scenario::secondary_spaces::SecondaryState;
 use crate::scenario::state::{DoorState, RuntimeState};
 use crate::scenario::tuning::{ActionKind, DifficultyPreset};
 
@@ -126,6 +127,11 @@ impl GhostLobbySim {
             paused: false,
             events: Vec::new(),
         };
+        // Secondary spaces are ticked every frame; build the mole's runtime
+        // state when the definition carries a route network, otherwise None
+        // and nothing in this run changes.
+        sim.state.secondary =
+            SecondaryState::initial(&sim.def.secondary, sim.seed);
         sim.emit_start();
         Ok(sim)
     }
@@ -173,6 +179,8 @@ impl GhostLobbySim {
         let roll = roll_init(&self.def, &mut self.rng, self.cfg.difficulty);
         self.tick = 0;
         self.state = RuntimeState::initial(&self.def, &roll, self.cfg, &self.preset);
+        self.state.secondary =
+            SecondaryState::initial(&self.def.secondary, self.seed);
         self.paused = false;
         self.emit_start();
     }
@@ -390,6 +398,18 @@ impl GhostLobbySim {
                     crate::scenario::command::Command::ForceFail { reason } => {
                         self.fail_mission(*reason);
                     }
+                    crate::scenario::command::Command::MoleEnterRoute => {
+                        self.mole_enter_route();
+                    }
+                    crate::scenario::command::Command::MoleSabotageCable => {
+                        self.mole_sabotage_cable();
+                    }
+                    crate::scenario::command::Command::MoleReturnToEntry => {
+                        self.mole_return_to_entry();
+                    }
+                    crate::scenario::command::Command::MoleSurface => {
+                        self.mole_surface();
+                    }
                     _ => {}
                 }
             }
@@ -433,6 +453,7 @@ impl GhostLobbySim {
             input
         };
         self.system_signal();
+        self.system_secondary();
         self.system_player(input);
 
         //## The network vantage follows the body

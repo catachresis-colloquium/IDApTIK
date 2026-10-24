@@ -152,6 +152,18 @@ pub enum Command {
     Pause { on: bool },
     /// Immediate: restart from the same seed.
     Restart,
+    /// Immediate: Moletaire enters the maintenance route at his current
+    /// position, which must be at an authored access point (secondary spaces).
+    MoleEnterRoute,
+    /// Immediate: Moletaire chews the cable at his position, underground only
+    /// (secondary spaces). Names a real affected cable.
+    MoleSabotageCable,
+    /// Immediate: Moletaire reverses and returns to the route's entry access
+    /// point (secondary spaces).
+    MoleReturnToEntry,
+    /// Immediate: Moletaire surfaces at his position, leaving the route
+    /// (secondary spaces).
+    MoleSurface,
 }
 
 /// One tick's worth of input.
@@ -187,7 +199,11 @@ pub fn fold(cmds: &[Command], held: &mut Buttons) -> TickInput {
             | Command::ForceExtract { .. }
             | Command::ForceFail { .. }
             | Command::Pause { .. }
-            | Command::Restart => immediates.push(*cmd),
+            | Command::Restart
+            | Command::MoleEnterRoute
+            | Command::MoleSabotageCable
+            | Command::MoleReturnToEntry
+            | Command::MoleSurface => immediates.push(*cmd),
         }
     }
     TickInput {

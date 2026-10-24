@@ -68,9 +68,14 @@ pub enum Seat {
 /// function the relay's routing table applies to the Elixir side.
 pub fn seat_for(cmd: &Command) -> Seat {
     match cmd {
-        Command::SetButton { .. } | Command::Jump | Command::Interact | Command::ThrowUsb => {
-            Seat::Infiltrator
-        }
+        Command::SetButton { .. }
+        | Command::Jump
+        | Command::Interact
+        | Command::ThrowUsb
+        | Command::MoleEnterRoute
+        | Command::MoleSabotageCable
+        | Command::MoleReturnToEntry
+        | Command::MoleSurface => Seat::Infiltrator,
         Command::Uplink { .. }
         | Command::Pivot { .. }
         | Command::Unpivot
