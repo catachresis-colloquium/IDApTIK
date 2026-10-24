@@ -632,7 +632,10 @@ fn a_relay_that_goes_dark_mid_edge_remembers_no_edge() {
     run(&mut s, &dark, 3);
 
     let relay = s.device("R").expect("a relay").clone();
-    assert!(!relay.a, "no edge was delivered while inert, so none is kept");
+    assert!(
+        !relay.a,
+        "no edge was delivered while inert, so none is kept"
+    );
     assert!(!relay.b);
     assert_ne!(
         relay.prev_in, 0,
