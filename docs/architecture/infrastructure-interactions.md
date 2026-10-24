@@ -1148,6 +1148,7 @@ report, not a mystery.
 
 | Check | Rejects |
 |---|---|
+| `infra.format` | a payload whose `format` is not `idaptik-infrastructure/1` |
 | `compartments.unique_ids` | duplicate `VolumeId` |
 | `compartments.room_anchor` | a compartment with `room: None` that is not `exterior: true` |
 | `compartments.rooms_disjoint` | two compartments claiming the same room without `sub_volume: true` |

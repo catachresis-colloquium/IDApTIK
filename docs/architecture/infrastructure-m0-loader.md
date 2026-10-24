@@ -213,6 +213,8 @@ pub enum InfraValidationError {
     SignalRoleMismatch { entity: EntityId, expected: SignalRole },
     NodeMissing { entity: EntityId, node: String },
     PlinthAboveCompartment { entity: EntityId, plinth_mm: u32, full_depth_mm: u32 },
+    MoverEndpointMissing { entity: EntityId, end: VolumeId },
+    MoverPathBroken { entity: EntityId, link: LinkId },
     CircuitMissing { entity: EntityId, circuit: CircuitId },
     GasMissing { rule: RuleId, gas: GasId },
     UnsupportedBuoyancy { gas: GasId, density_vs_air_permille: i16 },

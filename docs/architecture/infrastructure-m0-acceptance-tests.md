@@ -270,6 +270,7 @@ deliberately one-to-one so a check that loses its test is obvious.
 | `links.actor_and_aperture` | `a_passable_link_needs_clearance` |
 | `entities.resolve` | `an_entity_in_a_missing_compartment_is_refused` |
 | `entities.capability_targets` | `a_capability_naming_a_missing_target_is_refused` |
+| `entities.mover_routes` | `a_mover_route_naming_a_missing_endpoint_is_refused`, `a_mover_path_must_connect_its_endpoints` |
 | `entities.signal_role` | `a_sensor_bound_to_an_actuator_is_refused` |
 | `entities.node_resolves` | `a_node_the_grounded_graph_lacks_is_refused` |
 | `entities.plinth_within_volume` | `a_plinth_above_the_compartment_is_refused` |
@@ -371,6 +372,56 @@ fn a_capability_naming_a_missing_target_is_refused() {
         })];
     });
     assert!(matches!(err, InfraValidationError::CapabilityTargetMissing { .. }));
+}
+
+#[test]
+fn a_mover_route_naming_a_missing_endpoint_is_refused() {
+    // A mover declares where it draws from and where it puts the medium; the
+    // entity's own location does not select its route, so a missing endpoint is
+    // a load error and not a pump that silently moves nothing.
+    let err = rejected(|infra| {
+        let pump = infra
+            .entities
+            .iter_mut()
+            .find(|e| e.id.as_str() == "pump-p1")
+            .expect("pump-p1");
+        pump.caps = vec![Capability::Moves(MovesCfg {
+            medium: Medium::Water,
+            intake: "plant".into(),
+            discharge: "nowhere".into(),
+            path: vec![],
+            rate_ml_per_s: 6_000,
+            check_valve: false,
+            return_ml: 20_000,
+            reversible: false,
+        })];
+    });
+    assert!(matches!(err, InfraValidationError::MoverEndpointMissing { .. }));
+}
+
+#[test]
+fn a_mover_path_must_connect_its_endpoints() {
+    // `crawl-c1` joins plant and lobby, so it cannot be the path of a mover
+    // going riser → sewer. A route that does not connect is a level that looks
+    // authored and moves nothing.
+    let err = rejected(|infra| {
+        let pump = infra
+            .entities
+            .iter_mut()
+            .find(|e| e.id.as_str() == "pump-p1")
+            .expect("pump-p1");
+        pump.caps = vec![Capability::Moves(MovesCfg {
+            medium: Medium::Water,
+            intake: "riser".into(),
+            discharge: "sewer".into(),
+            path: vec!["crawl-c1".into()],
+            rate_ml_per_s: 6_000,
+            check_valve: false,
+            return_ml: 20_000,
+            reversible: false,
+        })];
+    });
+    assert!(matches!(err, InfraValidationError::MoverPathBroken { .. }));
 }
 
 #[test]
