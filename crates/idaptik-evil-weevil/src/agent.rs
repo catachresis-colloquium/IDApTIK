@@ -185,9 +185,11 @@ mod tests {
     fn phases_follow_the_fixed_transition_table() {
         let mut w = agent();
         assert_eq!(w.phase(), AgentPhase::Grounded);
-        w.propose(IntentKind::MalformedPayload, json!({}), "probe").unwrap();
+        w.propose(IntentKind::MalformedPayload, json!({}), "probe")
+            .unwrap();
         assert_eq!(w.phase(), AgentPhase::Probing);
-        w.propose(IntentKind::StaleReplay, json!({}), "replay").unwrap();
+        w.propose(IntentKind::StaleReplay, json!({}), "replay")
+            .unwrap();
         assert_eq!(w.phase(), AgentPhase::Replaying);
         w.retire();
         assert_eq!(w.phase(), AgentPhase::Retiring);
@@ -196,8 +198,10 @@ mod tests {
     #[test]
     fn the_budget_is_a_hard_stop() {
         let mut w = agent();
-        w.propose(IntentKind::MalformedPayload, json!({}), "one").unwrap();
-        w.propose(IntentKind::MalformedPayload, json!({}), "two").unwrap();
+        w.propose(IntentKind::MalformedPayload, json!({}), "one")
+            .unwrap();
+        w.propose(IntentKind::MalformedPayload, json!({}), "two")
+            .unwrap();
         let err = w.propose(IntentKind::MalformedPayload, json!({}), "three");
         assert!(err.is_err(), "a third proposal must be refused");
         assert_eq!(w.proposals(), 2);

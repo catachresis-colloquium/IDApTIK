@@ -14,7 +14,7 @@
 //! Nothing here sanitises or repairs an invalid condition: the invalidity is
 //! the subject of the test. These helpers exist only inside this crate.
 
-use idaptik_net::envelope::{HELLO_TAG, Role, NET_PROTO};
+use idaptik_net::envelope::{HELLO_TAG, NET_PROTO, Role};
 use idaptik_tui::script::ScriptFile;
 use serde_json::{Value, json};
 
@@ -150,16 +150,12 @@ pub fn unknown_control_event(tag: &str) -> Value {
 
 /// Re-serialize a [`idaptik_net::lockstep::Resync`] so the harness can mutate
 /// individual fields before handing it to the production `adopt_resync`.
-pub fn resync_to_value(
-    resync: &idaptik_net::lockstep::Resync,
-) -> Value {
+pub fn resync_to_value(resync: &idaptik_net::lockstep::Resync) -> Value {
     serde_json::to_value(resync).expect("resync serialises")
 }
 
 /// Parse a mutated resync value back through the production deserializer.
-pub fn value_to_resync(
-    value: Value,
-) -> Result<idaptik_net::lockstep::Resync, serde_json::Error> {
+pub fn value_to_resync(value: Value) -> Result<idaptik_net::lockstep::Resync, serde_json::Error> {
     serde_json::from_value(value)
 }
 

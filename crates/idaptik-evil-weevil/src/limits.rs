@@ -27,9 +27,7 @@ pub const MAX_QUEUE_DEPTH: usize = 64;
 pub const MAX_INTENTS_PER_SCENARIO: usize = 32;
 
 /// A measured resource profile, attached to every scenario result.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HarnessMetrics {
     /// Lockstep steps actually executed.
     pub steps: u64,
@@ -76,13 +74,15 @@ mod tests {
     #[test]
     fn a_clean_profile_is_within_limits() {
         assert!(HarnessMetrics::default().within_limits());
-        assert!(HarnessMetrics {
-            steps: MAX_STEPS,
-            wire_messages: MAX_WIRE_MESSAGES,
-            peak_queue_depth: MAX_QUEUE_DEPTH - 1,
-            intents: MAX_INTENTS_PER_SCENARIO,
-        }
-        .within_limits());
+        assert!(
+            HarnessMetrics {
+                steps: MAX_STEPS,
+                wire_messages: MAX_WIRE_MESSAGES,
+                peak_queue_depth: MAX_QUEUE_DEPTH - 1,
+                intents: MAX_INTENTS_PER_SCENARIO,
+            }
+            .within_limits()
+        );
     }
 
     #[test]

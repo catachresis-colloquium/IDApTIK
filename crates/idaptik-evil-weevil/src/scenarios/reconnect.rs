@@ -28,13 +28,41 @@ const DIE_AT_STEP: u64 = 8;
 
 fn inputs() -> Vec<InputSpec> {
     vec![
-        InputSpec { step: DIE_AT_STEP, intent: "exchange frames until the survivor reaches step 8".into(), expected: "both seats in lockstep".into() },
-        InputSpec { step: DIE_AT_STEP, intent: "dying hacker's orphan command arrives without its commit".into(), expected: "buffered, then pruned by on_peer_lost".into() },
-        InputSpec { step: DIE_AT_STEP, intent: "survivor builds the net:resync hand-off".into(), expected: "your_pending carries no orphan".into() },
-        InputSpec { step: DIE_AT_STEP + 1, intent: "fresh hacker adopts the resync payload".into(), expected: "adopt_resync accepted; run resumes".into() },
-        InputSpec { step: DIE_AT_STEP + 1, intent: "obsolete command below the survivor's watermark".into(), expected: "lockstep rejection: stale after commit".into() },
-        InputSpec { step: DIE_AT_STEP + 1, intent: "old-session hello on a mismatched seed".into(), expected: "epoch incompatibility".into() },
-        InputSpec { step: 60, intent: "drive the recovered run to completion".into(), expected: "both event logs byte-identical to the headless reference".into() },
+        InputSpec {
+            step: DIE_AT_STEP,
+            intent: "exchange frames until the survivor reaches step 8".into(),
+            expected: "both seats in lockstep".into(),
+        },
+        InputSpec {
+            step: DIE_AT_STEP,
+            intent: "dying hacker's orphan command arrives without its commit".into(),
+            expected: "buffered, then pruned by on_peer_lost".into(),
+        },
+        InputSpec {
+            step: DIE_AT_STEP,
+            intent: "survivor builds the net:resync hand-off".into(),
+            expected: "your_pending carries no orphan".into(),
+        },
+        InputSpec {
+            step: DIE_AT_STEP + 1,
+            intent: "fresh hacker adopts the resync payload".into(),
+            expected: "adopt_resync accepted; run resumes".into(),
+        },
+        InputSpec {
+            step: DIE_AT_STEP + 1,
+            intent: "obsolete command below the survivor's watermark".into(),
+            expected: "lockstep rejection: stale after commit".into(),
+        },
+        InputSpec {
+            step: DIE_AT_STEP + 1,
+            intent: "old-session hello on a mismatched seed".into(),
+            expected: "epoch incompatibility".into(),
+        },
+        InputSpec {
+            step: 60,
+            intent: "drive the recovered run to completion".into(),
+            expected: "both event logs byte-identical to the headless reference".into(),
+        },
     ]
 }
 
@@ -70,7 +98,10 @@ impl Scenario for ReconnectObsoleteScenario {
         let mut guard = 0;
         while pair.infiltrator.step() < DIE_AT_STEP {
             guard += 1;
-            assert!(guard <= 100, "death point never reached within the bounded run");
+            assert!(
+                guard <= 100,
+                "death point never reached within the bounded run"
+            );
             harness.exchange_round(&mut pair, &mut queue, 8);
         }
 

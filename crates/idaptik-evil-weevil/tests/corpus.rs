@@ -10,7 +10,11 @@ use idaptik_evil_weevil::scenarios::{EvidenceStatus, TopologyMode};
 #[test]
 fn every_corpus_scenario_passes_and_holds_its_invariant() {
     let results: Vec<_> = corpus().iter().map(|s| s.run()).collect();
-    assert_eq!(results.len(), 5, "the bounded corpus starts with five scenarios");
+    assert_eq!(
+        results.len(),
+        5,
+        "the bounded corpus starts with five scenarios"
+    );
     for result in &results {
         assert!(
             result.passed,
@@ -30,7 +34,12 @@ fn every_corpus_scenario_passes_and_holds_its_invariant() {
         // and every recorded intent reached the artifact exactly once.
         assert!(!result.telemetry.is_empty(), "{}", result.id);
         assert!(!result.effects.is_empty(), "{}", result.id);
-        assert_eq!(result.intents.len(), result.metrics.intents, "{}", result.id);
+        assert_eq!(
+            result.intents.len(),
+            result.metrics.intents,
+            "{}",
+            result.id
+        );
     }
 }
 
@@ -42,11 +51,21 @@ fn every_scenario_declares_the_full_evidence_contract() {
         assert!(!spec.title.is_empty());
         assert!(!spec.invariant.is_empty());
         assert!(!spec.expectation.is_empty());
-        assert!(!spec.bounded_inputs.is_empty(), "{} needs a bounded input sequence", spec.id);
+        assert!(
+            !spec.bounded_inputs.is_empty(),
+            "{} needs a bounded input sequence",
+            spec.id
+        );
         assert!(!spec.replay_artifact.is_empty());
-        assert!(spec.principal.starts_with("ew-dummy-"), "dummy identities only");
+        assert!(
+            spec.principal.starts_with("ew-dummy-"),
+            "dummy identities only"
+        );
         // The adversary's only grant across the whole corpus.
-        assert_eq!(spec.permitted_operations, vec![Permission::ProposeBoundedIntent]);
+        assert_eq!(
+            spec.permitted_operations,
+            vec![Permission::ProposeBoundedIntent]
+        );
         // The offline corpus models the one implemented topology, without
         // game-server-admin; everything else is a documented gap, not a
         // simulated mode.
@@ -77,10 +96,22 @@ fn the_corpus_stays_inside_strict_limits() {
 fn the_observer_has_zero_false_positives_and_zero_false_negatives() {
     let results: Vec<_> = corpus().iter().map(|s| s.run()).collect();
     let report = CorpusReport::new(777_001, results);
-    assert_eq!(report.totals.false_positives, 0, "a fault was called hostile");
-    assert_eq!(report.totals.false_negatives, 0, "a real violation was missed");
-    assert!(report.totals.transport_faults > 0, "scenario 5 must inject faults");
-    assert!(report.totals.protocol_violations > 0, "the corpus must show real rejections");
+    assert_eq!(
+        report.totals.false_positives, 0,
+        "a fault was called hostile"
+    );
+    assert_eq!(
+        report.totals.false_negatives, 0,
+        "a real violation was missed"
+    );
+    assert!(
+        report.totals.transport_faults > 0,
+        "scenario 5 must inject faults"
+    );
+    assert!(
+        report.totals.protocol_violations > 0,
+        "the corpus must show real rejections"
+    );
 }
 
 #[test]

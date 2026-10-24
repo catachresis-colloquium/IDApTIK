@@ -218,7 +218,10 @@ impl IsolatedHarness {
     /// delivering, where [`Self::exchange_round`] does not run).
     pub fn bump_step(&mut self) {
         self.metrics.steps += 1;
-        assert!(self.metrics.steps <= MAX_STEPS, "scenario exceeded MAX_STEPS");
+        assert!(
+            self.metrics.steps <= MAX_STEPS,
+            "scenario exceeded MAX_STEPS"
+        );
     }
 
     /// Route one proposed command frame through the relay model and, when it
@@ -236,14 +239,8 @@ impl IsolatedHarness {
     ) -> ValidatorOutcome {
         assert_eq!(proposer.kind, PrincipalKind::Adversary);
         assert!(self.authorise(proposer, Permission::ProposeBoundedIntent));
-        assert!(self.authorise(
-            &Principal::harness(),
-            Permission::DeliverThroughTestRelay
-        ));
-        assert!(self.authorise(
-            &Principal::harness(),
-            Permission::FeedProductionValidator
-        ));
+        assert!(self.authorise(&Principal::harness(), Permission::DeliverThroughTestRelay));
+        assert!(self.authorise(&Principal::harness(), Permission::FeedProductionValidator));
 
         let step = target.step();
         // Clone for the bookkeeping arms: the relay verdict owns its own
@@ -266,11 +263,10 @@ impl IsolatedHarness {
                         }
                         Err(e) => {
                             let violation = violation_for(&e);
-                            self.telemetry
-                                .push(TelemetryEvent::ValidatorRejected {
-                                    violation,
-                                    detail: e.to_string(),
-                                });
+                            self.telemetry.push(TelemetryEvent::ValidatorRejected {
+                                violation,
+                                detail: e.to_string(),
+                            });
                             self.record(step, "validator-rejected", e.to_string(), false);
                             ValidatorOutcome::Rejected(e)
                         }
@@ -290,12 +286,7 @@ impl IsolatedHarness {
                 self.telemetry.push(TelemetryEvent::RelayDropped {
                     reason: reason.to_owned(),
                 });
-                self.record(
-                    step,
-                    "relay-dropped",
-                    format!("{reason}: {payload}"),
-                    false,
-                );
+                self.record(step, "relay-dropped", format!("{reason}: {payload}"), false);
                 ValidatorOutcome::Rejected(NetError::Session(format!("relay dropped: {reason}")))
             }
             RelayVerdict::Rejected { reason } => {
@@ -318,20 +309,16 @@ impl IsolatedHarness {
         target: &mut LockstepCore,
         payload: &Value,
     ) -> ValidatorOutcome {
-        assert!(self.authorise(
-            &Principal::harness(),
-            Permission::FeedProductionValidator
-        ));
+        assert!(self.authorise(&Principal::harness(), Permission::FeedProductionValidator));
         self.metrics.wire_messages += 1;
         let step = target.step();
         match idaptik_net::envelope::decode_command(payload) {
             Ok((at, cmd)) => match target.on_peer_command(at, cmd) {
                 Ok(()) => {
-                    self.telemetry
-                        .push(TelemetryEvent::Accepted {
-                            command: cmd_name(payload),
-                            at,
-                        });
+                    self.telemetry.push(TelemetryEvent::Accepted {
+                        command: cmd_name(payload),
+                        at,
+                    });
                     self.record(step, "accepted", payload.to_string(), true);
                     ValidatorOutcome::Accepted
                 }
@@ -368,7 +355,12 @@ impl IsolatedHarness {
             .expect("raw_commit builds a valid commit control frame");
         match target.on_peer_commit(commit.through) {
             Ok(()) => {
-                self.record(target.step(), "commit-accepted", format!("through={through}"), true);
+                self.record(
+                    target.step(),
+                    "commit-accepted",
+                    format!("through={through}"),
+                    true,
+                );
                 Ok(())
             }
             Err(e) => {
@@ -384,11 +376,7 @@ impl IsolatedHarness {
 
     /// Record an injected transport fault (scenario 5). Faults come from the
     /// harness's own in-memory wire, never from a remote machine.
-    pub fn record_fault(
-        &mut self,
-        kind: crate::telemetry::FaultKind,
-        detail: impl Into<String>,
-    ) {
+    pub fn record_fault(&mut self, kind: crate::telemetry::FaultKind, detail: impl Into<String>) {
         let detail = detail.into();
         self.telemetry.push(TelemetryEvent::Fault {
             kind,
@@ -407,28 +395,23 @@ impl IsolatedHarness {
         detail: impl Into<String>,
     ) {
         let detail = detail.into();
-        self.telemetry
-            .push(TelemetryEvent::ValidatorRejected {
-                violation,
-                detail: detail.clone(),
-            });
+        self.telemetry.push(TelemetryEvent::ValidatorRejected {
+            violation,
+            detail: detail.clone(),
+        });
         self.record(self.metrics.steps, "validator-rejected", detail, false);
     }
 
     /// Record a successful recovery.
     pub fn record_recovery(&mut self, via: impl Into<String>) {
         let via = via.into();
-        self.telemetry.push(TelemetryEvent::Recovered { via: via.clone() });
+        self.telemetry
+            .push(TelemetryEvent::Recovered { via: via.clone() });
         self.record(self.metrics.steps, "recovered", via, true);
     }
 
     /// Record a sim-level denial or no-op for target-claim scenarios.
-    pub fn record_sim_outcome(
-        &mut self,
-        command: &str,
-        denial: Option<&str>,
-        no_op: bool,
-    ) {
+    pub fn record_sim_outcome(&mut self, command: &str, denial: Option<&str>, no_op: bool) {
         if let Some(reason) = denial {
             self.telemetry.push(TelemetryEvent::SimDenied {
                 command: command.into(),
@@ -473,21 +456,27 @@ impl IsolatedHarness {
 
         let mut delivered = 0;
         while delivered < max_delivery_per_turn {
-            let Some(frame) = in_flight.pop_front() else { break };
+            let Some(frame) = in_flight.pop_front() else {
+                break;
+            };
             match frame {
                 WireFrame::Command { from, at, cmd } => {
                     let target = match from {
                         Role::Infiltrator => &mut pair.hacker,
                         Role::Hacker => &mut pair.infiltrator,
                     };
-                    target.on_peer_command(at, cmd).expect("valid fixture frames");
+                    target
+                        .on_peer_command(at, cmd)
+                        .expect("valid fixture frames");
                 }
                 WireFrame::Commit { from, through } => {
                     let target = match from {
                         Role::Infiltrator => &mut pair.hacker,
                         Role::Hacker => &mut pair.infiltrator,
                     };
-                    target.on_peer_commit(through).expect("valid fixture commits");
+                    target
+                        .on_peer_commit(through)
+                        .expect("valid fixture commits");
                 }
             }
             delivered += 1;
@@ -495,14 +484,23 @@ impl IsolatedHarness {
         pair.infiltrator.advance_with(|_, _| {});
         pair.hacker.advance_with(|_, _| {});
         self.metrics.steps += 1;
-        assert!(self.metrics.steps <= MAX_STEPS, "scenario exceeded MAX_STEPS");
+        assert!(
+            self.metrics.steps <= MAX_STEPS,
+            "scenario exceeded MAX_STEPS"
+        );
     }
 
     /// Apply typed commands to a fresh sim for exactly one tick and return
     /// the events the host emitted. The sim is the production gameplay
     /// validator; the harness only supplies inputs and reads outputs.
-    pub fn sim_tick(script: &ScriptFile, commands: &[idaptik_core::scenario::command::Command])
-        -> (GhostLobbySim, Vec<idaptik_core::scenario::event::Event>, RuntimeSnapshot) {
+    pub fn sim_tick(
+        script: &ScriptFile,
+        commands: &[idaptik_core::scenario::command::Command],
+    ) -> (
+        GhostLobbySim,
+        Vec<idaptik_core::scenario::event::Event>,
+        RuntimeSnapshot,
+    ) {
         use idaptik_core::scenario::command::{Buttons, fold};
         let mut sim = headless::build(script).expect("sim builds");
         let startup = sim.drain_events();
@@ -520,7 +518,10 @@ impl IsolatedHarness {
             self.check(
                 &format!("limit:{limit}"),
                 false,
-                format!("bounded-test limit crossed: {limit}; metrics={:?}", self.metrics),
+                format!(
+                    "bounded-test limit crossed: {limit}; metrics={:?}",
+                    self.metrics
+                ),
             );
         }
     }

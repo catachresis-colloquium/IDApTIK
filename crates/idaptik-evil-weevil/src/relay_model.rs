@@ -19,8 +19,8 @@
 //! this model and the channel is a defect in *this model* — the model's
 //! [`IdaptikProfile`] table is pinned against the burble source in a test.
 
-use idaptik_net::envelope::{Role, seat_for};
 use idaptik_core::scenario::command::Command;
+use idaptik_net::envelope::{Role, seat_for};
 use serde_json::{Value, json};
 
 /// The model's verdict on one inbound frame, shaped to match burble's replies.
@@ -159,10 +159,7 @@ impl RelayModel {
         if sender != "either" && sender != self.role {
             self.rejected_count += 1;
             return RelayVerdict::Rejected {
-                reason: format!(
-                    "{tag} is a {sender} command (you joined as {})",
-                    self.role
-                ),
+                reason: format!("{tag} is a {sender} command (you joined as {})", self.role),
             };
         }
         // Mirror note_seq/2: an integer seq at or below the last seen one is

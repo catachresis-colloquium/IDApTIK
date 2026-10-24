@@ -11,11 +11,11 @@
 //! the pinned burble `GameChannel` itself, including the demonstrated
 //! `Signal` profile gap.
 
+use idaptik_core::scenario::command::Command;
+use idaptik_core::scenario::tuning::ActionKind;
 use idaptik_net::envelope::{Role, encode_command};
 use idaptik_net::phoenix::PhoenixClient;
 use idaptik_net::ws::PlainWebSocketTransport;
-use idaptik_core::scenario::command::Command;
-use idaptik_core::scenario::tuning::ActionKind;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -67,7 +67,10 @@ async fn relay_duplicate_seq_is_dropped_and_role_misrouting_rejected() {
         2,
     )
     .expect("encode");
-    let ok = hacker.push("command", first).await.expect("fresh command relays");
+    let ok = hacker
+        .push("command", first)
+        .await
+        .expect("fresh command relays");
     assert_eq!(ok.get("relayed").and_then(|v| v.as_bool()), Some(true));
 
     // 2. The identical seq again: acknowledged-and-dropped, not relayed.
@@ -79,7 +82,10 @@ async fn relay_duplicate_seq_is_dropped_and_role_misrouting_rejected() {
         2,
     )
     .expect("encode");
-    let dropped = hacker.push("command", dup).await.expect("duplicate is an ack, not an error");
+    let dropped = hacker
+        .push("command", dup)
+        .await
+        .expect("duplicate is an ack, not an error");
     assert_eq!(
         dropped.get("relayed").and_then(|v| v.as_bool()),
         Some(false)
@@ -144,10 +150,12 @@ async fn relay_role_table_rejects_misrouted_and_unknown_commands() {
     );
 
     // Non-object payloads are refused politely rather than crashing.
-    assert!(infiltrator
-        .push("command", json!("not-an-object"))
-        .await
-        .is_err());
+    assert!(
+        infiltrator
+            .push("command", json!("not-an-object"))
+            .await
+            .is_err()
+    );
 
     infiltrator.leave().await;
 }

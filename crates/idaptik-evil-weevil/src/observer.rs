@@ -94,7 +94,8 @@ impl DefensiveObserver {
     /// hidden state and no I/O.
     pub fn classify(index: usize, event: &TelemetryEvent) -> Classification {
         match event {
-            TelemetryEvent::Accepted { .. } | TelemetryEvent::SimDenied { .. }
+            TelemetryEvent::Accepted { .. }
+            | TelemetryEvent::SimDenied { .. }
             | TelemetryEvent::SimNoOp { .. } => Classification {
                 index,
                 class: EvidenceClass::Benign,
@@ -185,10 +186,7 @@ impl DefensiveObserver {
     /// violation. Genuine `ValidatorRejected` evidence is not a false
     /// positive even though it is counted as a violation elsewhere, so the
     /// event slice is required alongside the report. Must always be zero.
-    pub fn false_positives_on_faults(
-        events: &[TelemetryEvent],
-        report: &DefensiveReport,
-    ) -> usize {
+    pub fn false_positives_on_faults(events: &[TelemetryEvent], report: &DefensiveReport) -> usize {
         events
             .iter()
             .zip(&report.classifications)
@@ -198,10 +196,7 @@ impl DefensiveObserver {
 
     /// False negatives on a trace known to contain `expected_violations`
     /// validator rejections: violations the observer failed to flag.
-    pub fn false_negatives(
-        events: &[TelemetryEvent],
-        report: &DefensiveReport,
-    ) -> usize {
+    pub fn false_negatives(events: &[TelemetryEvent], report: &DefensiveReport) -> usize {
         let known = events.iter().filter(|e| e.is_violation()).count();
         known.saturating_sub(report.flagged.len())
     }

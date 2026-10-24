@@ -23,14 +23,46 @@ const ID: &str = "EW-03-conflicting-epochs";
 
 fn inputs() -> Vec<InputSpec> {
     vec![
-        InputSpec { step: 0, intent: "hello claiming a different seed".into(), expected: "handshake refusal: incompatible runs".into() },
-        InputSpec { step: 0, intent: "hello claiming a different max_ticks".into(), expected: "handshake refusal".into() },
-        InputSpec { step: 0, intent: "hello claiming protocol version NET_PROTO+1".into(), expected: "handshake refusal".into() },
-        InputSpec { step: 0, intent: "hello claiming an unsupported difficulty".into(), expected: "handshake refusal".into() },
-        InputSpec { step: 4, intent: "resync payload offered by the seat it names".into(), expected: "adopt_resync rejection: same seat".into() },
-        InputSpec { step: 0, intent: "commit watermark past the run budget".into(), expected: "lockstep rejection: past the run".into() },
-        InputSpec { step: 0, intent: "command scheduled past the run budget".into(), expected: "lockstep rejection: past the run".into() },
-        InputSpec { step: 0, intent: "rejoin hello presented to a seat with no run".into(), expected: "session driver refusal (predicate demonstrated)".into() },
+        InputSpec {
+            step: 0,
+            intent: "hello claiming a different seed".into(),
+            expected: "handshake refusal: incompatible runs".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "hello claiming a different max_ticks".into(),
+            expected: "handshake refusal".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "hello claiming protocol version NET_PROTO+1".into(),
+            expected: "handshake refusal".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "hello claiming an unsupported difficulty".into(),
+            expected: "handshake refusal".into(),
+        },
+        InputSpec {
+            step: 4,
+            intent: "resync payload offered by the seat it names".into(),
+            expected: "adopt_resync rejection: same seat".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "commit watermark past the run budget".into(),
+            expected: "lockstep rejection: past the run".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "command scheduled past the run budget".into(),
+            expected: "lockstep rejection: past the run".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "rejoin hello presented to a seat with no run".into(),
+            expected: "session driver refusal (predicate demonstrated)".into(),
+        },
     ]
 }
 
@@ -93,10 +125,7 @@ impl Scenario for EpochConflictScenario {
                     },
                 ),
             ),
-            (
-                "proto",
-                wire::future_proto_hello(Role::Hacker, &script, 0),
-            ),
+            ("proto", wire::future_proto_hello(Role::Hacker, &script, 0)),
             (
                 "difficulty",
                 wire::raw_hello(
@@ -167,16 +196,15 @@ impl Scenario for EpochConflictScenario {
         //    receives a rejoin hello has no run to resume. The async driver
         //    (`idaptik_net::live`) enforces this on the real socket path;
         //    the corpus demonstrates the predicate it keys on.
-        let rejoin_value =
-            wire::raw_hello(
-                Role::Hacker,
-                &script,
-                0,
-                wire::HelloOverrides {
-                    rejoin: Some(true),
-                    ..wire::HelloOverrides::default()
-                },
-            );
+        let rejoin_value = wire::raw_hello(
+            Role::Hacker,
+            &script,
+            0,
+            wire::HelloOverrides {
+                rejoin: Some(true),
+                ..wire::HelloOverrides::default()
+            },
+        );
         let rejoin_hello: Hello = serde_json::from_value(rejoin_value).expect("valid hello");
         // A fresh LockstepCore only exists after a non-rejoin hello, so the
         // driver predicate (`peer.rejoin` on a fresh seat) is unambiguous.

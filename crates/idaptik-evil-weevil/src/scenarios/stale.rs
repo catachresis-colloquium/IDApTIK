@@ -24,13 +24,41 @@ const ID: &str = "EW-01-stale-duplicate-messages";
 /// is discovered or generated at runtime.
 fn inputs() -> Vec<InputSpec> {
     vec![
-        InputSpec { step: 0, intent: "commit watermark through tick 5".into(), expected: "accepted".into() },
-        InputSpec { step: 1, intent: "NetSsh at tick 4 (below watermark), fresh seq".into(), expected: "lockstep rejection: stale after commit".into() },
-        InputSpec { step: 2, intent: "same envelope replayed with the same seq".into(), expected: "relay drop: stale_or_duplicate".into() },
-        InputSpec { step: 3, intent: "frame with a lower seq than the last".into(), expected: "relay drop: stale_or_duplicate".into() },
-        InputSpec { step: 4, intent: "NetSsh at tick 6 (at the frontier), new seq".into(), expected: "accepted".into() },
-        InputSpec { step: 5, intent: "command frame missing its at schedule".into(), expected: "decoder rejection".into() },
-        InputSpec { step: 6, intent: "unknown command tag WarpToRoom".into(), expected: "decoder rejection: unknown tag".into() },
+        InputSpec {
+            step: 0,
+            intent: "commit watermark through tick 5".into(),
+            expected: "accepted".into(),
+        },
+        InputSpec {
+            step: 1,
+            intent: "NetSsh at tick 4 (below watermark), fresh seq".into(),
+            expected: "lockstep rejection: stale after commit".into(),
+        },
+        InputSpec {
+            step: 2,
+            intent: "same envelope replayed with the same seq".into(),
+            expected: "relay drop: stale_or_duplicate".into(),
+        },
+        InputSpec {
+            step: 3,
+            intent: "frame with a lower seq than the last".into(),
+            expected: "relay drop: stale_or_duplicate".into(),
+        },
+        InputSpec {
+            step: 4,
+            intent: "NetSsh at tick 6 (at the frontier), new seq".into(),
+            expected: "accepted".into(),
+        },
+        InputSpec {
+            step: 5,
+            intent: "command frame missing its at schedule".into(),
+            expected: "decoder rejection".into(),
+        },
+        InputSpec {
+            step: 6,
+            intent: "unknown command tag WarpToRoom".into(),
+            expected: "decoder rejection: unknown tag".into(),
+        },
     ]
 }
 
@@ -67,10 +95,9 @@ impl Scenario for StaleDuplicateScenario {
         // Permission separation is load-bearing: the agent cannot reach the
         // validator or the policy file directly. Evaluate before the mutable
         // borrow of `harness.check`, so the two borrows never overlap.
-        let adversary_propose_only =
-            harness.authorise(&proposer, Permission::ProposeBoundedIntent)
-                && !harness.authorise(&proposer, Permission::FeedProductionValidator)
-                && !harness.authorise(&proposer, Permission::ConfigureEnforcementPolicy);
+        let adversary_propose_only = harness.authorise(&proposer, Permission::ProposeBoundedIntent)
+            && !harness.authorise(&proposer, Permission::FeedProductionValidator)
+            && !harness.authorise(&proposer, Permission::ConfigureEnforcementPolicy);
         harness.check(
             "permission:adversary-propose-only",
             adversary_propose_only,
@@ -189,13 +216,15 @@ impl Scenario for StaleDuplicateScenario {
         harness.record_intent(&unknown);
         let unknown_outcome = harness.feed_raw_to_validator(&mut target, &unknown.wire);
         let unknown_tag_evidence = matches!(unknown_outcome, ValidatorOutcome::Undecodable(_))
-            && harness.telemetry().iter().any(|t| matches!(
-                t,
-                crate::telemetry::TelemetryEvent::ValidatorRejected {
-                    violation: ViolationKind::UnknownCommandTag,
-                    ..
-                }
-            ));
+            && harness.telemetry().iter().any(|t| {
+                matches!(
+                    t,
+                    crate::telemetry::TelemetryEvent::ValidatorRejected {
+                        violation: ViolationKind::UnknownCommandTag,
+                        ..
+                    }
+                )
+            });
         harness.check(
             "unknown-tag-rejected",
             unknown_tag_evidence,

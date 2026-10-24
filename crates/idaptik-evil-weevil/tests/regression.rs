@@ -6,6 +6,8 @@
 //! production surfaces directly so a weakening of one scenario cannot hide
 //! a regression in the underlying guard.
 
+use idaptik_core::scenario::command::Command;
+use idaptik_core::scenario::tuning::ActionKind;
 use idaptik_evil_weevil::agent::{EvilWeevil, IntentKind};
 use idaptik_evil_weevil::enforce::{EnforcementAction, EnforcementPolicy};
 use idaptik_evil_weevil::harness::{IsolatedHarness, SeatPair, ValidatorOutcome, load_live_script};
@@ -14,8 +16,6 @@ use idaptik_evil_weevil::policy::{Permission, Principal};
 use idaptik_evil_weevil::relay_model::RelayModel;
 use idaptik_evil_weevil::telemetry::{FaultKind, TelemetryEvent, ViolationKind};
 use idaptik_evil_weevil::wire;
-use idaptik_core::scenario::command::Command;
-use idaptik_core::scenario::tuning::ActionKind;
 use idaptik_net::envelope::Role;
 use idaptik_net::lockstep::LockstepCore;
 
@@ -35,9 +35,12 @@ fn stale_frame_after_a_commit_is_rejected_by_the_host() {
     let intent = weevil
         .propose(
             IntentKind::StaleReplay,
-            wire::typed_command(2, &Command::Uplink {
-                kind: ActionKind::Camera,
-            }),
+            wire::typed_command(
+                2,
+                &Command::Uplink {
+                    kind: ActionKind::Camera,
+                },
+            ),
             "below the watermark",
         )
         .unwrap();
@@ -100,19 +103,23 @@ fn out_of_graph_targets_are_no_ops_that_never_panic() {
     let probe = idaptik_tui::headless::build(&script).unwrap();
     let beyond = probe.graph().nodes.len() as u32 + 1_000;
     let (baseline, _, _) = IsolatedHarness::sim_tick(&script, &[]);
-    let (attacked, events, _) = IsolatedHarness::sim_tick(&script, &[
-        Command::NetSsh {
-            node: idaptik_core::scenario::command::NetNodeIndex(beyond),
-        },
-        Command::NetHack {
-            node: idaptik_core::scenario::command::NetNodeIndex(beyond),
-        },
-    ]);
+    let (attacked, events, _) = IsolatedHarness::sim_tick(
+        &script,
+        &[
+            Command::NetSsh {
+                node: idaptik_core::scenario::command::NetNodeIndex(beyond),
+            },
+            Command::NetHack {
+                node: idaptik_core::scenario::command::NetNodeIndex(beyond),
+            },
+        ],
+    );
     assert_eq!(baseline.state(), attacked.state());
-    assert!(events.iter().all(|e| !matches!(
-        e,
-        idaptik_core::scenario::event::Event::PivotOpened { .. }
-    )));
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e, idaptik_core::scenario::event::Event::PivotOpened { .. }))
+    );
 }
 
 #[test]

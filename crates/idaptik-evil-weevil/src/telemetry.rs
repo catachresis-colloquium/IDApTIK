@@ -71,10 +71,7 @@ pub enum TelemetryEvent {
     /// out-of-graph target index).
     SimNoOp { command: String },
     /// An injected transport fault.
-    Fault {
-        kind: FaultKind,
-        detail: String,
-    },
+    Fault { kind: FaultKind, detail: String },
     /// The session recovered after a loss (resync accepted, run resumed).
     Recovered { via: String },
 }

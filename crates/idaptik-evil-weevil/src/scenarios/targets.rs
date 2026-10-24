@@ -22,9 +22,7 @@ use crate::agent::{EvilWeevil, IntentKind};
 use crate::harness::{IsolatedHarness, ValidatorOutcome, load_live_script};
 use crate::policy::{Permission, Principal};
 use crate::wire;
-use idaptik_core::scenario::command::{
-    Button, Buttons, Command, NetNodeIndex, PivotTarget, fold,
-};
+use idaptik_core::scenario::command::{Button, Buttons, Command, NetNodeIndex, PivotTarget, fold};
 use idaptik_core::scenario::common::DenyReason;
 use idaptik_core::scenario::constants::WORLD_WIDTH;
 use idaptik_core::scenario::event::Event;
@@ -37,12 +35,36 @@ const ID: &str = "EW-02-impossible-movement-invalid-targets";
 
 fn inputs() -> Vec<InputSpec> {
     vec![
-        InputSpec { step: 1, intent: "NetSsh claiming a node index beyond the graph".into(), expected: "decodes; sim no-op, state unchanged, no panic".into() },
-        InputSpec { step: 1, intent: "NetHack claiming the same out-of-graph index".into(), expected: "decodes; sim no-op".into() },
-        InputSpec { step: 1, intent: "Camera uplink cold from the van (no pivot)".into(), expected: "UplinkDenied(NoRoute)".into() },
-        InputSpec { step: 1, intent: "Pivot onto the grid jump host cold".into(), expected: "PivotDenied (ISP hop required first)".into() },
-        InputSpec { step: 30, intent: "hold right for 30 ticks against the world edge".into(), expected: "position stays finite and inside WORLD_WIDTH".into() },
-        InputSpec { step: 0, intent: "forge a TeleportToRoom position-claim tag".into(), expected: "decoder rejection: unknown command".into() },
+        InputSpec {
+            step: 1,
+            intent: "NetSsh claiming a node index beyond the graph".into(),
+            expected: "decodes; sim no-op, state unchanged, no panic".into(),
+        },
+        InputSpec {
+            step: 1,
+            intent: "NetHack claiming the same out-of-graph index".into(),
+            expected: "decodes; sim no-op".into(),
+        },
+        InputSpec {
+            step: 1,
+            intent: "Camera uplink cold from the van (no pivot)".into(),
+            expected: "UplinkDenied(NoRoute)".into(),
+        },
+        InputSpec {
+            step: 1,
+            intent: "Pivot onto the grid jump host cold".into(),
+            expected: "PivotDenied (ISP hop required first)".into(),
+        },
+        InputSpec {
+            step: 30,
+            intent: "hold right for 30 ticks against the world edge".into(),
+            expected: "position stays finite and inside WORLD_WIDTH".into(),
+        },
+        InputSpec {
+            step: 0,
+            intent: "forge a TeleportToRoom position-claim tag".into(),
+            expected: "decoder rejection: unknown command".into(),
+        },
     ]
 }
 
@@ -78,20 +100,24 @@ impl Scenario for InvalidTargetScenario {
 
         // 1-2. Out-of-graph NetSsh/NetHack: compare against a quiet tick.
         let (baseline_sim, _, _) = IsolatedHarness::sim_tick(&script, &[]);
-        let (ssh_sim, ssh_events, _) =
-            IsolatedHarness::sim_tick(&script, &[Command::NetSsh {
+        let (ssh_sim, ssh_events, _) = IsolatedHarness::sim_tick(
+            &script,
+            &[Command::NetSsh {
                 node: NetNodeIndex(invalid_node),
-            }]);
-        let (hack_sim, _, _) =
-            IsolatedHarness::sim_tick(&script, &[Command::NetHack {
+            }],
+        );
+        let (hack_sim, _, _) = IsolatedHarness::sim_tick(
+            &script,
+            &[Command::NetHack {
                 node: NetNodeIndex(invalid_node),
-            }]);
+            }],
+        );
         harness.check(
             "out-of-graph-netssh-is-a-noop",
-            ssh_sim.state() == baseline_sim.state() && ssh_events.iter().all(|e| !matches!(
-                e,
-                Event::PivotOpened { .. } | Event::NetHackAction { .. }
-            )),
+            ssh_sim.state() == baseline_sim.state()
+                && ssh_events
+                    .iter()
+                    .all(|e| !matches!(e, Event::PivotOpened { .. } | Event::NetHackAction { .. })),
             "an unknown index neither pivots nor acts",
         );
         harness.check(
@@ -103,33 +129,35 @@ impl Scenario for InvalidTargetScenario {
         harness.record_sim_outcome("NetHack", None, true);
 
         // 3. Cold camera uplink: the van has no route to the floor.
-        let (_, uplink_events, _) =
-            IsolatedHarness::sim_tick(&script, &[Command::Uplink {
+        let (_, uplink_events, _) = IsolatedHarness::sim_tick(
+            &script,
+            &[Command::Uplink {
                 kind: ActionKind::Camera,
-            }]);
-        let uplink_denied = uplink_events.iter().any(|e| matches!(
-            e,
-            Event::UplinkDenied {
-                reason: DenyReason::NoRoute,
-                ..
-            }
-        ));
+            }],
+        );
+        let uplink_denied = uplink_events.iter().any(|e| {
+            matches!(
+                e,
+                Event::UplinkDenied {
+                    reason: DenyReason::NoRoute,
+                    ..
+                }
+            )
+        });
         harness.check(
             "cold-uplink-denied-no-route",
             uplink_denied,
             "UplinkDenied(NoRoute) is emitted rather than applying",
         );
-        harness.record_sim_outcome(
-            "Uplink",
-            uplink_denied.then_some("NoRoute"),
-            false,
-        );
+        harness.record_sim_outcome("Uplink", uplink_denied.then_some("NoRoute"), false);
 
         // 4. Grid jump pivot cold: the ISP hop is a precondition.
-        let (_, pivot_events, _) =
-            IsolatedHarness::sim_tick(&script, &[Command::Pivot {
+        let (_, pivot_events, _) = IsolatedHarness::sim_tick(
+            &script,
+            &[Command::Pivot {
                 target: PivotTarget::GridJump,
-            }]);
+            }],
+        );
         let pivot_denied = pivot_events
             .iter()
             .any(|e| matches!(e, Event::PivotDenied { .. }));

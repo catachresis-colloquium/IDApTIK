@@ -59,7 +59,11 @@ fn main() -> ExitCode {
         }
         eprintln!(
             "   {} (metrics: {:?})",
-            if result.passed { "SCENARIO PASS" } else { "SCENARIO FAIL" },
+            if result.passed {
+                "SCENARIO PASS"
+            } else {
+                "SCENARIO FAIL"
+            },
             result.metrics
         );
         results.push(result);
@@ -82,8 +86,7 @@ fn main() -> ExitCode {
     });
 
     let report_path = cli.out_dir.join("corpus-report.json");
-    let report_json =
-        serde_json::to_string_pretty(&report).expect("corpus report serialises");
+    let report_json = serde_json::to_string_pretty(&report).expect("corpus report serialises");
     std::fs::write(&report_path, format!("{report_json}\n"))
         .unwrap_or_else(|e| panic!("write {}: {e}", report_path.display()));
 

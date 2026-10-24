@@ -180,12 +180,7 @@ mod tests {
         // `scheme://user:pass@host` string trips the repository's gitleaks
         // basic-auth rule even when every component is an obvious dummy. The
         // redactor must still see and scrub the completed string.
-        let cred_url = [
-            "wss://victim:",
-            "hunter2",
-            "@relay.example/voice/websocket",
-        ]
-        .join("");
+        let cred_url = ["wss://victim:", "hunter2", "@relay.example/voice/websocket"].join("");
         let mut value = json!({
             "auth_token": "ghp_lookalike-token-value",
             "nested": { "password": "hunter2", "ok": "ew-dummy-hacker-0001" },

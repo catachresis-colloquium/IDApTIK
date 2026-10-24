@@ -189,10 +189,7 @@ impl TestPolicy {
     /// this scenario? This never consults, and can never relax, a production
     /// validator — it only decides whether the attempt may be made.
     pub fn decide(&self, principal: &Principal, permission: Permission) -> PolicyDecision {
-        if self
-            .grants
-            .contains(&(principal.kind, permission))
-        {
+        if self.grants.contains(&(principal.kind, permission)) {
             PolicyDecision::Allow
         } else {
             PolicyDecision::Deny

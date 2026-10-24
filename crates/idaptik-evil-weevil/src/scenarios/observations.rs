@@ -35,11 +35,31 @@ const WITHHOLD_ROUNDS: u64 = 4;
 
 fn inputs() -> Vec<InputSpec> {
     vec![
-        InputSpec { step: DELAY_ROUNDS, intent: "seeded jitter: 1-3 deliveries per in-memory turn".into(), expected: "pacing stalls only; reference run reproduced".into() },
-        InputSpec { step: WITHHOLD_ROUNDS, intent: "withhold every frame for four turns".into(), expected: "blocked_on_peer loss predicate trips; faults recorded".into() },
-        InputSpec { step: 60, intent: "release the held queue and finish".into(), expected: "recovered run byte-identical to headless".into() },
-        InputSpec { step: 1, intent: "contrast: one genuine stale-after-commit frame".into(), expected: "violation flagged for operator review".into() },
-        InputSpec { step: 1, intent: "observe-only and local-protective enforcement".into(), expected: "no remote action exists; local actions are operator-gated".into() },
+        InputSpec {
+            step: DELAY_ROUNDS,
+            intent: "seeded jitter: 1-3 deliveries per in-memory turn".into(),
+            expected: "pacing stalls only; reference run reproduced".into(),
+        },
+        InputSpec {
+            step: WITHHOLD_ROUNDS,
+            intent: "withhold every frame for four turns".into(),
+            expected: "blocked_on_peer loss predicate trips; faults recorded".into(),
+        },
+        InputSpec {
+            step: 60,
+            intent: "release the held queue and finish".into(),
+            expected: "recovered run byte-identical to headless".into(),
+        },
+        InputSpec {
+            step: 1,
+            intent: "contrast: one genuine stale-after-commit frame".into(),
+            expected: "violation flagged for operator review".into(),
+        },
+        InputSpec {
+            step: 1,
+            intent: "observe-only and local-protective enforcement".into(),
+            expected: "no remote action exists; local actions are operator-gated".into(),
+        },
     ]
 }
 
@@ -114,10 +134,7 @@ impl Scenario for WithheldObservationScenario {
             harness.bump_step();
             harness.record_fault(FaultKind::WithheldWatermark, "commit held off the wire");
         }
-        let blocked = withheld
-            .infiltrator
-            .blocked_on_peer()
-            || withheld.hacker.blocked_on_peer();
+        let blocked = withheld.infiltrator.blocked_on_peer() || withheld.hacker.blocked_on_peer();
         harness.check(
             "withholding-trips-loss-predicate",
             blocked,
@@ -177,7 +194,9 @@ impl Scenario for WithheldObservationScenario {
             !flagged_a_fault && report.counts.fault > 0 && report.counts.violation > 0,
             format!(
                 "faults={}, violations={}, flagged={}",
-                report.counts.fault, report.counts.violation, report.flagged.len()
+                report.counts.fault,
+                report.counts.violation,
+                report.flagged.len()
             ),
         );
         let violation_recommendation = report
@@ -198,8 +217,7 @@ impl Scenario for WithheldObservationScenario {
             "observe-only-never-acts",
             observe_only.mode() == EnforcementMode::ObserveOnly
                 && observe_only.decide(violation_recommendation) == EnforcementAction::LogOnly
-                && observe_only.decide(Recommendation::RequestResync)
-                    == EnforcementAction::LogOnly,
+                && observe_only.decide(Recommendation::RequestResync) == EnforcementAction::LogOnly,
             "the default policy records and does nothing",
         );
         let operator = Principal::operator();
