@@ -83,7 +83,9 @@ impl GhostLobbySim {
         access
     }
 
-    /// The host-owned outputs for this tick, read from the world.
+    /// The host-owned outputs for this tick, read from the world. Devices the
+    /// power network is holding inert come along in the same readout: a camera
+    /// with no supply cannot trip, however the wiring is set.
     pub fn signal_readout(&self) -> Readout {
         let mut readout = Readout::default();
         let Some(net) = &self.def.signal else {
@@ -118,6 +120,9 @@ impl GhostLobbySim {
                 }
             }
         }
+        if let (Some(power), Some(pst)) = (&self.def.power, &self.state.power) {
+            readout.unpowered = pst.inert_signals(power);
+        }
         readout
     }
 
@@ -127,7 +132,9 @@ impl GhostLobbySim {
         let Some(cam) = self.def.cameras.get(i) else {
             return false;
         };
-        self.signal_device_off(&camera_node_id(i)) || self.signal_room_dark(cam.room.as_str())
+        self.signal_device_off(&camera_node_id(i))
+            || self.power_blinds_camera(i)
+            || self.signal_room_dark(cam.room.as_str())
     }
 
     /// Whether a wire has locked the door on grounded node `node`.
@@ -143,7 +150,7 @@ impl GhostLobbySim {
 
     /// Whether a wire has switched off `room`'s lights.
     pub fn signal_room_dark(&self, room: &str) -> bool {
-        self.signal_device_off(&light_node_id(room))
+        self.signal_device_off(&light_node_id(room)) || self.power_room_dark(room)
     }
 
     /// Whether the signal device on `node` exists and is switched off.

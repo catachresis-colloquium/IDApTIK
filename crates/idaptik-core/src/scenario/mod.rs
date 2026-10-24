@@ -32,6 +32,7 @@ pub mod ghost_lobby;
 pub mod ids;
 pub mod mathf;
 pub mod outcome;
+pub mod power;
 pub mod rng;
 pub mod rooftop;
 pub mod signal;

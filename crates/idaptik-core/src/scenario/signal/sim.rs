@@ -63,15 +63,30 @@ impl Access {
 
 /// The host's view of the world for one tick: which host-owned outputs
 /// ([`SignalKind::host_outputs`]) are high. Anything else listed is ignored.
+///
+/// It also says which devices **cannot operate at all** this tick — no supply,
+/// damaged, isolated, or still warming up (ADR-0013). An inert device emits
+/// nothing and ignores its inputs, so no wire and no command can make it see,
+/// open or speak. The signal network stays the only owner of *what* a device
+/// does; power only decides whether it can.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Readout {
     pub high: BTreeSet<(SignalId, OutPort)>,
+    /// Devices that cannot operate this tick.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub unpowered: BTreeSet<SignalId>,
 }
 
 impl Readout {
     /// Assert one host-owned output for this tick.
     pub fn set(&mut self, device: &str, port: OutPort) -> &mut Self {
         self.high.insert((device.into(), port));
+        self
+    }
+
+    /// Mark a device inert: it has no supply, is damaged or is still warming up.
+    pub fn unpower(&mut self, device: &str) -> &mut Self {
+        self.unpowered.insert(device.into());
         self
     }
 }
@@ -579,6 +594,11 @@ fn outputs_of(def: &SignalNetworkDef, state: &SignalState, readout: &Readout) ->
         .iter()
         .zip(&state.devices)
         .map(|(def, s)| {
+            // A device without power emits nothing: a blind camera does not trip,
+            // a dead door is not open, a held relay has no coil current.
+            if readout.unpowered.contains(&def.id) {
+                return 0u8;
+            }
             let host = |p: OutPort| readout.high.contains(&(def.id.clone(), p));
             let mut bits = 0u8;
             let mut set = |p: OutPort, on: bool| {
@@ -636,6 +656,16 @@ impl Run<'_> {
 
         // 3. Inputs change state.
         for (i, def) in self.def.devices.iter().enumerate() {
+            if readout.unpowered.contains(&def.id) {
+                // Inert: nothing is asked of it and nothing happens. Its input
+                // levels are still remembered, so a wire that was held high
+                // through the outage does not fire an edge when supply returns.
+                let s = &mut self.state.devices[i];
+                s.prev_in = levels[i];
+                s.pulse_ticks = 0;
+                s.pre_pulse = None;
+                continue;
+            }
             let s = &mut self.state.devices[i];
             let before = (s.open, s.locked, s.active);
             let level = levels[i];

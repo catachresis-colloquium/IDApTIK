@@ -8,7 +8,8 @@
 //! failed checks into typed [`ValidationError`]s.
 
 use crate::scenario::floor_graph::floor_graph;
-use crate::scenario::ids::{CameraId, DoorId, HideSpotId, ObjectiveId, RoomId, SignalId};
+use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LoadId, ObjectiveId, RoomId, SignalId};
+use crate::scenario::power::{PowerNetworkDef, PowerValidationError};
 use crate::scenario::signal::{SignalNetworkDef, SignalValidationError};
 use crate::scenario::tuning::{
     ActionKind, ActionSpec, DifficultyId, DifficultyPreset, ScoringDef, TuningConstants,
@@ -221,6 +222,11 @@ pub struct ScenarioDefinition {
     /// canonical Ghost Lobby, so its golden and every replay are unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<SignalNetworkDef>,
+    /// The floor's electrical infrastructure (ADR-0013), if it has one. Absent
+    /// everywhere else, so a floor without power — the canonical Ghost Lobby,
+    /// every recorded replay, the exchange house — is byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<PowerNetworkDef>,
     /// When Billy's arrival countdown starts. The canonical floor starts it with
     /// the run; a floor for new players can hold it until the infiltrator has
     /// found their way out of the starting room.
@@ -335,6 +341,22 @@ pub enum ValidationError {
     /// A console stands in a room the floor does not have, or outside it.
     ConsoleOffFloor {
         console: String,
+    },
+    /// The floor's power network does not validate.
+    PowerNetwork {
+        errors: Vec<PowerValidationError>,
+    },
+    /// A power element (a source, feed, breaker, load or hazard) names a room
+    /// the floor does not have.
+    PowerRoomMissing {
+        element: String,
+        room: RoomId,
+    },
+    /// A load says it *is* a signal device the floor's signal network does not
+    /// carry. Without that device the load has nothing on the floor to disable.
+    PowerSignalMissing {
+        load: LoadId,
+        signal: SignalId,
     },
 }
 
@@ -584,6 +606,81 @@ impl ScenarioDefinition {
                 missing.is_none(),
                 format!("missing={missing:?}"),
                 missing.map(|(device, node)| ValidationError::SignalNodeMissing { device, node }),
+            );
+        }
+
+
+        // --- power network (only when the floor has one) ---------------------
+        if let Some(net) = &self.power {
+            let errors = net.validate();
+            check(
+                &mut checks,
+                "power",
+                "power.valid",
+                "The power network validates",
+                errors.is_empty(),
+                format!("{} load(s), {} problem(s)", net.loads.len(), errors.len()),
+                Some(ValidationError::PowerNetwork { errors }),
+            );
+
+            // Every element that names a room stands in one this floor has.
+            let mut placements: Vec<(String, RoomId)> = Vec::new();
+            for s in &net.sources {
+                if let Some(room) = &s.room {
+                    placements.push((s.id.0.clone(), room.clone()));
+                }
+            }
+            for f in &net.feeds {
+                if let Some(room) = &f.room {
+                    placements.push((f.id.0.clone(), room.clone()));
+                }
+            }
+            for b in &net.breakers {
+                if let Some(room) = &b.room {
+                    placements.push((b.id.0.clone(), room.clone()));
+                }
+            }
+            for l in &net.loads {
+                if let Some(room) = &l.room {
+                    placements.push((l.id.0.clone(), room.clone()));
+                }
+            }
+            for h in &net.hazards {
+                placements.push((h.id.0.clone(), h.room.clone()));
+            }
+            let missing_room = placements
+                .into_iter()
+                .find(|(_, room)| !self.rooms.iter().any(|r| &r.id == room));
+            check(
+                &mut checks,
+                "power",
+                "power.rooms",
+                "Every power element stands in a room on this floor",
+                missing_room.is_none(),
+                format!("missing={missing_room:?}"),
+                missing_room.map(|(element, room)| {
+                    ValidationError::PowerRoomMissing { element, room }
+                }),
+            );
+
+            // Every load that is a device names a device this floor carries.
+            let missing_signal = net.loads.iter().find_map(|l| {
+                let signal = l.signal.as_ref()?;
+                let present = self
+                    .signal
+                    .as_ref()
+                    .is_some_and(|net| net.device(signal).is_some());
+                (!present).then(|| (l.id.clone(), signal.clone()))
+            });
+            check(
+                &mut checks,
+                "power",
+                "power.signals",
+                "Every powered device exists in the signal network",
+                missing_signal.is_none(),
+                format!("missing={missing_signal:?}"),
+                missing_signal
+                    .map(|(load, signal)| ValidationError::PowerSignalMissing { load, signal }),
             );
         }
 

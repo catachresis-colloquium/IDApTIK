@@ -10,6 +10,7 @@
 //! construction returns `Result`; arithmetic is clamped; matches are exhaustive.
 
 mod console;
+mod power;
 mod signal;
 mod systems;
 
@@ -381,6 +382,9 @@ impl GhostLobbySim {
                     crate::scenario::command::Command::Signal { op } => {
                         self.signal_command(*op);
                     }
+                    crate::scenario::command::Command::Power { op } => {
+                        self.power_command(*op);
+                    }
                     crate::scenario::command::Command::ForceCrisis => {
                         self.begin_crisis(CrisisReason::Test);
                     }
@@ -415,7 +419,7 @@ impl GhostLobbySim {
         // Sitting at a console is the same: still, but interact still works,
         // because interact is how you get up again.
         let idle;
-        let input = if self.state.signal_busy > 0.0 {
+        let input = if self.state.signal_busy > 0.0 || self.state.power_busy > 0.0 {
             idle = TickInput::default();
             &idle
         } else if self.state.using_console.is_some() {
@@ -432,6 +436,7 @@ impl GhostLobbySim {
         } else {
             input
         };
+        self.system_power();
         self.system_signal();
         self.system_player(input);
 

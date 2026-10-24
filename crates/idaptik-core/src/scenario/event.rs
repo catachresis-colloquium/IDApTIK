@@ -73,6 +73,10 @@ pub enum Event {
     Signal {
         signal: crate::scenario::signal::sim::SignalEvent,
     },
+    /// Something happened on the floor's electrical infrastructure (ADR-0013).
+    Power {
+        power: crate::scenario::power::sim::PowerEvent,
+    },
     /// A door hold became active.
     DoorHoldActive { door: DoorId, duration: f64 },
     /// The contact note was secured.
@@ -375,6 +379,10 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
             let (text, severity) = signal_line(signal)?;
             line(text, severity, Log)
         }
+        Event::Power { power } => {
+            let (text, severity) = power_line(power)?;
+            line(text, severity, Log)
+        }
         Event::ConsoleUsed { console, on } => line(
             if *on {
                 format!("You sit down at {console}.")
@@ -488,6 +496,163 @@ fn signal_line(e: &crate::scenario::signal::sim::SignalEvent) -> Option<(String,
             (format!("{device} {state}."), Severity::Info)
         }
         S::VacuumRouted { .. } => return None,
+    })
+}
+
+/// The log line for an electrical event, or `None` for pure telemetry.
+///
+/// Every line that says a device is off names *why*, because that is the
+/// question the subsystem exists to answer: command, power, damage or interlock.
+fn power_line(e: &crate::scenario::power::sim::PowerEvent) -> Option<(String, Severity)> {
+    use crate::scenario::power::sim::{Fault, PowerDenyReason as D, PowerEvent as P, Seat};
+    let who = |by: &Seat| match by {
+        Seat::Infiltrator => "You",
+        Seat::Hacker => "Hacker",
+    };
+    let secs = |ticks: u32| dec1(f64::from(ticks) * crate::scenario::mathf::TICK_DT);
+    let fault = |f: &Fault| match f {
+        Fault::None => "healthy".to_owned(),
+        Fault::ConductorCut => "conductor cut".to_owned(),
+        Fault::Overload => "overload".to_owned(),
+    };
+    Some(match e {
+        P::CableCut {
+            feed,
+            by,
+            cost,
+            loads_lost,
+        } => (
+            format!(
+                "{} cut {feed} at the cable: {loads_lost} device(s) dead, and {} of noise.",
+                who(by),
+                dec1(cost.noise)
+            ),
+            if *by == Seat::Infiltrator {
+                Severity::Warn
+            } else {
+                Severity::Hacker
+            },
+        ),
+        P::Routed {
+            load, from, to, by, ..
+        } => (
+            format!("{} rewired {load}: {from} -> {to}.", who(by)),
+            Severity::Hacker,
+        ),
+        P::Isolated {
+            breaker,
+            feed,
+            by,
+            fault: f,
+            ..
+        } => (
+            format!(
+                "{} opened {breaker} on {feed} ({}).",
+                who(by),
+                fault(f)
+            ),
+            Severity::Warn,
+        ),
+        P::Reset { breaker, by, .. } => (
+            format!("{} reset {breaker}.", who(by)),
+            Severity::Hacker,
+        ),
+        P::Tripped {
+            breaker,
+            feed,
+            fault: f,
+        } => (
+            format!("PROTECTION: {breaker} tripped on {feed} — {}.", fault(f)),
+            Severity::Bad,
+        ),
+        P::Overloaded {
+            feed,
+            draw,
+            capacity,
+            trip_ticks,
+        } => (
+            format!(
+                "OVERLOAD: {feed} at {draw}/{capacity}; protection trips in {}s.",
+                secs(*trip_ticks)
+            ),
+            Severity::Warn,
+        ),
+        P::FeedLost { feed, loads } => (
+            format!("GRID: {feed} down — {loads} device(s) off supply."),
+            Severity::Warn,
+        ),
+        P::FeedRestored { feed } => (
+            format!("GRID: {feed} has supply again."),
+            Severity::Info,
+        ),
+        P::Switched { source, on, by, .. } => (
+            format!(
+                "{} switched {source} {}.",
+                who(by),
+                if *on { "on" } else { "off" }
+            ),
+            Severity::Hacker,
+        ),
+        P::BackupEngaged {
+            source,
+            loads,
+            runtime_ticks,
+        } => (
+            format!(
+                "BACKUP: {source} carrying {loads} device(s) — {}s of runtime.",
+                secs(*runtime_ticks)
+            ),
+            Severity::Info,
+        ),
+        P::BackupSpent { source } => (
+            format!("BACKUP: {source} is spent."),
+            Severity::Warn,
+        ),
+        P::Commanded { load, on, by, .. } => (
+            format!(
+                "{} switched {load} {}.",
+                who(by),
+                if *on { "on" } else { "off" }
+            ),
+            Severity::Hacker,
+        ),
+        P::LoadChanged {
+            load,
+            operating,
+            why,
+        } => {
+            if *operating {
+                (format!("{load} running."), Severity::Info)
+            } else {
+                let phrase = why
+                    .as_ref()
+                    .map(|w| w.phrase())
+                    .unwrap_or_else(|| "off".to_owned());
+                (format!("{load} off — {phrase}."), Severity::Warn)
+            }
+        }
+        P::Shocked { hazard, room, .. } => (
+            format!("SHOCK: {hazard} in {room} — thrown clear."),
+            Severity::Bad,
+        ),
+        P::Inspected { report, .. } => (report.explain(), Severity::Info),
+        P::Denied { by, reason } => {
+            let why = match reason {
+                D::NoAccess { element } => format!("can't reach {element} from here"),
+                D::NotPhysical => "that is hand work, not a remote command".to_owned(),
+                D::RemotePanel { element } => format!("{element} is a local board"),
+                D::AlreadyCut { feed } => format!("{feed} is already cut"),
+                D::SameFeed { load } => format!("{load} is already on that feed"),
+                D::FaultPresent { fault: f } => {
+                    format!("will not reset while the {} stands", fault(f))
+                }
+                D::BackupExhausted { source } => format!("{source} is spent"),
+                D::NoSuchElement { index } => format!("no element #{index}"),
+                D::NoBandwidth => "not enough bandwidth".to_owned(),
+                D::Busy => "hands still busy".to_owned(),
+            };
+            (format!("{}: {why}.", who(by)), Severity::Warn)
+        }
     })
 }
 
