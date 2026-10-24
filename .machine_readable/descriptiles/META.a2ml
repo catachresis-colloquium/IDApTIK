@@ -43,7 +43,7 @@ records = [
 [development-practices]
 build-tool = "just"
 toolchain-manager = "mise"          # mise.toml pins erlang/elixir/zig/just/nickel; rust-toolchain.toml pins Rust
-rust-manager = "rustup"             # 1.95.0 (MSRV for Bevy 0.19)
+rust-manager = "rustup"             # 1.97.1 (MSRV for Bevy 0.20)
 ci-platform = "github-actions"      # .github/workflows/{ci,codeql,pages}.yml
 package-managers = ["cargo", "mix"]
 contribution = "DCO 1.1 — sign commits with git commit -s"
