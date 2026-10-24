@@ -1,0 +1,6 @@
+    Checking idaptik-kernel v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-kernel)
+    Checking idaptik-core v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-core)
+    Checking idaptik-tui v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-tui)
+    Checking idaptik-net v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-net)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 13.98s
+clippy exit: 0
