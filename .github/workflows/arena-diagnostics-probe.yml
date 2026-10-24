@@ -1,7 +1,8 @@
 # TEMPORARY diagnostics probe for the Evil Weevil branch — delete before merge.
-# This workflow exists because the authoring sandbox cannot reach Actions log
-# storage, so compiler/rustfmt output is mirrored into the job summary (which
-# the checks API exposes). It adds no `uses:` reference and runs no gate.
+# The authoring sandbox cannot reach Actions log storage, so this job applies
+# rustfmt and writes compiler/clippy diagnostics into a committed file, then
+# pushes back to the branch where they can be read directly. It adds no
+# `uses:` reference and is not a gate.
 name: Arena diagnostics probe
 
 on:
@@ -11,40 +12,44 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout the branch
         run: |
           git init .
-          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
-          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
-          git checkout --detach --force FETCH_HEAD
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_REF_NAME"
+          git checkout -B "$GITHUB_REF_NAME" FETCH_HEAD
+          git config user.name "arena-diagnostics-bot"
+          git config user.email "arena-diagnostics-bot@users.noreply.github.com"
       - name: Provision pinned Rust toolchain (rust-toolchain.toml)
         run: rustup show
-      - name: Collect rustfmt, compile and clippy diagnostics
+      - name: Apply rustfmt and capture compile/clippy diagnostics
         run: |
           set +e
-          {
-            echo "## rustfmt --check"
-            echo '```diff'
-            cargo fmt --all -- --check 2>&1
-            echo '```'
-            echo "## cargo test --no-run (idaptik-evil-weevil)"
-            echo '```'
-            cargo test -p idaptik-evil-weevil --no-run 2>&1
-            echo '```'
-            echo "## cargo clippy -D warnings (idaptik-evil-weevil)"
-            echo '```'
-            cargo clippy -p idaptik-evil-weevil --all-targets -- -D warnings 2>&1
-            echo '```'
-            echo "## cargo test --no-run (idaptik-net, relay test)"
-            echo '```'
-            cargo test -p idaptik-net --no-run 2>&1
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY" 2>&1
+          mkdir -p .arena-diagnostics
+          cargo fmt --all
+          cargo test -p idaptik-evil-weevil --no-run > .arena-diagnostics/compile.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/compile.txt
+          cargo clippy -p idaptik-evil-weevil --all-targets -- -D warnings \
+            > .arena-diagnostics/clippy.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/clippy.txt
+          cargo test -p idaptik-net --no-run > .arena-diagnostics/net-compile.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/net-compile.txt
           exit 0
+      - name: Commit formatting and diagnostics back to the branch
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "chore(arena): apply rustfmt and record compile/clippy diagnostics"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
