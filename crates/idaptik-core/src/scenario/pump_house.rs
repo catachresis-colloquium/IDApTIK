@@ -164,10 +164,10 @@ mod tests {
         assert!(state.infra.is_some(), "no infrastructure state");
         assert!(state.mole.is_some(), "no hosted companion");
         assert!(
-            state.infra.as_ref().is_some_and(|i| i
-                .zones
-                .get(HALL_SUMP)
-                .is_some_and(|z| !z.released)),
+            state
+                .infra
+                .as_ref()
+                .is_some_and(|i| i.zones.get(HALL_SUMP).is_some_and(|z| !z.released)),
             "the sump starts dry"
         );
     }
@@ -200,7 +200,9 @@ mod tests {
         let g = floor_graph(&def);
         let effects = apply_actuation(&g, &valve_node_id(HALL_SUMP));
         assert!(
-            effects.contains(&crate::netsim::Effect::WaterReleased(valve_node_id(HALL_SUMP))),
+            effects.contains(&crate::netsim::Effect::WaterReleased(valve_node_id(
+                HALL_SUMP
+            ))),
             "the valve actuation carries the release: {effects:?}"
         );
     }
@@ -214,11 +216,15 @@ mod tests {
         let g = floor_graph(&def);
         let effects = apply_actuation(&g, "substation");
         assert!(
-            effects.contains(&crate::netsim::Effect::DevicePowerLost(pump_node_id(HALL_SUMP))),
+            effects.contains(&crate::netsim::Effect::DevicePowerLost(pump_node_id(
+                HALL_SUMP
+            ))),
             "the cascade must fell the sump pump"
         );
         assert!(
-            effects.contains(&crate::netsim::Effect::DevicePowerLost(valve_node_id(HALL_SUMP))),
+            effects.contains(&crate::netsim::Effect::DevicePowerLost(valve_node_id(
+                HALL_SUMP
+            ))),
             "and the valve itself"
         );
     }

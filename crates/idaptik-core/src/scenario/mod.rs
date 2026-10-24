@@ -62,7 +62,9 @@ pub use building::{
     BuildingValidationError, BuildingValidationReport, CircuitDef, FloorDef, FloorKind, PortalDef,
     PortalKind, PortalLock, RoomRef, ZoneDef, load_building, scenario_floor_portals,
 };
-pub use command::{Button, Buttons, Command, Edge, MoleOp, PivotTarget, RunConfig, TickInput, fold};
+pub use command::{
+    Button, Buttons, Command, Edge, MoleOp, PivotTarget, RunConfig, TickInput, fold,
+};
 pub use common::BillyMode;
 pub use common::{
     Channel, ChuteMethod, CrisisReason, DenyReason, ExtractMethod, FailReason, Grade,

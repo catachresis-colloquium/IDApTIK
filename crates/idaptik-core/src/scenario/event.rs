@@ -104,9 +104,7 @@ pub enum Event {
     },
     /// Something the hosted Moletaire companion did, as its own typed event
     /// (ADR-0013). Rendered selectively; the rest is telemetry.
-    Mole {
-        event: crate::companion::MoleEvent,
-    },
+    Mole { mole: crate::companion::MoleEvent },
     /// An order to the hosted companion was refused.
     MoleDenied {
         reason: crate::scenario::common::MoleDenyReason,
@@ -457,8 +455,8 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
             };
             line(text, Billy, Log)
         }
-        Event::Mole { event } => {
-            let (text, severity) = mole_line(event)?;
+        Event::Mole { mole } => {
+            let (text, severity) = mole_line(mole)?;
             line(text, severity, Log)
         }
         Event::MoleDenied { reason } => {
@@ -600,10 +598,7 @@ fn mole_line(e: &crate::companion::MoleEvent) -> Option<(String, Severity)> {
             format!("The mole chews through a cable ({cable_id})."),
             Severity::Good,
         ),
-        M::TrapTriggered { .. } => (
-            "The mole's trap is dug and waiting.".into(),
-            Severity::Info,
-        ),
+        M::TrapTriggered { .. } => ("The mole's trap is dug and waiting.".into(), Severity::Info),
         M::MoleDied { .. } => (
             "The mole is gone. It does not come back.".into(),
             Severity::Bad,

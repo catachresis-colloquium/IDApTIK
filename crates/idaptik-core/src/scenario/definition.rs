@@ -711,23 +711,13 @@ impl ScenarioDefinition {
     // are the level-authoring surface's business: a zone nobody can reach or
     // an alarm watching a node that does not exist is invalid content, not an
     // intended challenge.
-    fn validate_infra(
-        &self,
-        infra: &crate::scenario::infra::InfraDef,
-        checks: &mut Vec<Check>,
-    ) {
+    fn validate_infra(&self, infra: &crate::scenario::infra::InfraDef, checks: &mut Vec<Check>) {
         // Zones: unique ids.
         let dup_zone = infra
             .water_zones
             .iter()
             .enumerate()
-            .find(|(i, z)| {
-                infra
-                    .water_zones
-                    .iter()
-                    .take(*i)
-                    .any(|e| e.id == z.id)
-            })
+            .find(|(i, z)| infra.water_zones.iter().take(*i).any(|e| e.id == z.id))
             .map(|(_, z)| z.id.clone());
         check(
             checks,
@@ -743,9 +733,10 @@ impl ScenarioDefinition {
         );
 
         // Zones: rooms exist.
-        let room_missing = infra.water_zones.iter().find(|z| {
-            !self.rooms.iter().any(|r| r.id == z.room)
-        });
+        let room_missing = infra
+            .water_zones
+            .iter()
+            .find(|z| !self.rooms.iter().any(|r| r.id == z.room));
         check(
             checks,
             "infra",
@@ -777,9 +768,7 @@ impl ScenarioDefinition {
                 .as_ref()
                 .map(|z| format!("{} fill_time={}", z.id, z.fill_time))
                 .unwrap_or_else(|| "all timed".into()),
-            bad_time.map(|z| ValidationError::InfraZoneTimingInvalid {
-                zone: z.id.clone(),
-            }),
+            bad_time.map(|z| ValidationError::InfraZoneTimingInvalid { zone: z.id.clone() }),
         );
 
         // Zones: addressable — the room's automation segment exists, so the
@@ -811,9 +800,10 @@ impl ScenarioDefinition {
         // zone's physical release — one of the ways a floor is meant to be
         // solvable — would be unreachable content, not a challenge.
         let off_handle = infra.water_zones.iter().find(|z| {
-            !self.rooms.iter().any(|r| {
-                r.id == z.room && z.valve_x >= r.x && z.valve_x < r.x + r.w
-            })
+            !self
+                .rooms
+                .iter()
+                .any(|r| r.id == z.room && z.valve_x >= r.x && z.valve_x < r.x + r.w)
         });
         check(
             checks,
@@ -876,19 +866,20 @@ impl ScenarioDefinition {
         // tamper trip watches a node the floor graph carries.
         let bad_ref = infra.alarms.iter().find_map(|a| match &a.trip {
             crate::scenario::infra::AlarmTrip::Water { zone } => {
-                (!infra.water_zones.iter().any(|z| &z.id == zone))
-                    .then(|| ValidationError::InfraAlarmZoneMissing {
+                (!infra.water_zones.iter().any(|z| &z.id == zone)).then(|| {
+                    ValidationError::InfraAlarmZoneMissing {
                         alarm: a.id.clone(),
                         zone: zone.clone(),
-                    })
+                    }
+                })
             }
-            crate::scenario::infra::AlarmTrip::PowerLost { watch } => {
-                (graph.node(watch.as_str()).is_none())
-                    .then(|| ValidationError::InfraAlarmWatchMissing {
-                        alarm: a.id.clone(),
-                        watch: watch.clone(),
-                    })
-            }
+            crate::scenario::infra::AlarmTrip::PowerLost { watch } => (graph
+                .node(watch.as_str())
+                .is_none())
+            .then(|| ValidationError::InfraAlarmWatchMissing {
+                alarm: a.id.clone(),
+                watch: watch.clone(),
+            }),
         });
         check(
             checks,

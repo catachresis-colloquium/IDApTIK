@@ -84,11 +84,13 @@ fn release_zone_by_node(
             .iter()
             .find(|z| z.fail_open && pump_node_id(&z.id) == node_id)?,
     };
-    infra.release(&zone.id, cause).then(|| Event::WaterReleased {
-        zone: zone.id.clone(),
-        room: zone.room.clone(),
-        cause,
-    })
+    infra
+        .release(&zone.id, cause)
+        .then(|| Event::WaterReleased {
+            zone: zone.id.clone(),
+            room: zone.room.clone(),
+            cause,
+        })
 }
 
 /// The lights-out window, honouring reduced motion exactly as `perform_action`

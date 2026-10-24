@@ -231,8 +231,8 @@ pub fn is_infra_sabotage(event: &Event) -> bool {
         }
         | Event::InfraShorted { .. }
         | Event::AlarmChanged { sounding: true, .. } => true,
-        Event::Mole { event } => {
-            matches!(event, crate::companion::MoleEvent::CableSabotaged { .. })
+        Event::Mole { mole } => {
+            matches!(mole, crate::companion::MoleEvent::CableSabotaged { .. })
         }
         _ => false,
     }
@@ -877,7 +877,7 @@ mod tests {
             sounding: true,
         }));
         assert!(is_infra_sabotage(&Event::Mole {
-            event: MoleEvent::CableSabotaged {
+            mole: MoleEvent::CableSabotaged {
                 cable_id: "cable-1".into(),
             },
         }));
@@ -894,7 +894,7 @@ mod tests {
             sounding: false,
         }));
         assert!(!is_infra_sabotage(&Event::Mole {
-            event: MoleEvent::SynthSoundPlayed {
+            mole: MoleEvent::SynthSoundPlayed {
                 sound: "bark".into(),
             },
         }));

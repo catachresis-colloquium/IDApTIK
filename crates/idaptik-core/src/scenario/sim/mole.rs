@@ -161,7 +161,7 @@ impl GhostLobbySim {
         };
         for ev in events {
             // The companion's own typed event is the player-visible record.
-            self.events.push(Event::Mole { event: ev.clone() });
+            self.events.push(Event::Mole { mole: ev.clone() });
             match ev {
                 // A synth decoy becomes a diversion in canonical state: a
                 // position and a window, heard through the ordinary

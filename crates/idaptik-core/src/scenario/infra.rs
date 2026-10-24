@@ -420,13 +420,13 @@ pub fn observations(
     let Some(room) = room_id_at(def, at_x) else {
         return out;
     };
-    let room = room.to_owned();
+    let room = RoomId::from(room);
 
     // Darkness: the actor's own room, normally lit, now unlit.
-    if def.rooms.iter().any(|r| r.id == room && r.lit) && room_unlit(def, state, &room) {
+    if def.rooms.iter().any(|r| r.id == room && r.lit) && room_unlit(def, state, room.as_str()) {
         out.push(Observation {
             kind: ObservationKind::Darkness,
-            x: room_centre(def, &room),
+            x: room_centre(def, room.as_str()),
             intensity: 1.0,
             room: room.clone(),
         });
@@ -436,7 +436,7 @@ pub fn observations(
     if let Some(level) = water_at(def, state, at_x) {
         out.push(Observation {
             kind: ObservationKind::Water,
-            x: room_centre(def, &room),
+            x: room_centre(def, room.as_str()),
             intensity: clamp(level, 0.0, 1.0),
             room: room.clone(),
         });
@@ -452,7 +452,7 @@ pub fn observations(
         if sparking {
             out.push(Observation {
                 kind: ObservationKind::EquipmentFailure,
-                x: room_centre(def, &room),
+                x: room_centre(def, room.as_str()),
                 intensity: c::SHORT_FLASH_NOISE,
                 room: room.clone(),
             });
@@ -557,7 +557,10 @@ mod tests {
             },
             &[],
         );
-        assert!(obs.is_empty(), "a dry, silent, lit floor is no news: {obs:?}");
+        assert!(
+            obs.is_empty(),
+            "a dry, silent, lit floor is no news: {obs:?}"
+        );
     }
 
     #[test]

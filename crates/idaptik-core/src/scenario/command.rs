@@ -341,7 +341,9 @@ mod tests {
         // else: a variant that does not survive the wire is not a command.
         for cmd in [
             Command::Mole { op: MoleOp::Dig },
-            Command::Mole { op: MoleOp::Sabotage },
+            Command::Mole {
+                op: MoleOp::Sabotage,
+            },
             Command::Mole {
                 op: MoleOp::Synth { index: 1 },
             },

@@ -26,7 +26,6 @@
 //! `BTreeSet` reachability), and additive — a building with no circuits, no
 //! locks and no embedded scenario audits clean.
 
-use crate::netsim::graph::GroundedGraph;
 use crate::scenario::building::graph::reachable_rooms;
 use crate::scenario::building::network::building_network;
 use crate::scenario::building::{BuildingDefinition, PortalDef, PortalKind, RoomRef};
@@ -456,7 +455,11 @@ mod tests {
             .find(|c| c.id == "refs.controller_grounded")
             .expect("grounding check present");
         assert!(!grounded.passed);
-        assert!(grounded.detail.contains("vault-ctrl"), "{}", grounded.detail);
+        assert!(
+            grounded.detail.contains("vault-ctrl"),
+            "{}",
+            grounded.detail
+        );
         assert!(!report.passed());
     }
 
@@ -511,7 +514,11 @@ mod tests {
             .expect("destructive check present");
         assert!(!destructive.passed, "the store cut must be surfaced");
         assert_eq!(destructive.severity, AuditSeverity::Advisory);
-        assert!(destructive.detail.contains("store"), "{}", destructive.detail);
+        assert!(
+            destructive.detail.contains("store"),
+            "{}",
+            destructive.detail
+        );
     }
 
     #[test]

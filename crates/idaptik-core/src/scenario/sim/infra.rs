@@ -35,7 +35,9 @@ use crate::scenario::agents::apply_effects;
 use crate::scenario::common::Phase;
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
-use crate::scenario::floor_graph::{camera_node_id, door_node_id, light_node_id, pump_node_id, valve_node_id};
+use crate::scenario::floor_graph::{
+    camera_node_id, door_node_id, light_node_id, pump_node_id, valve_node_id,
+};
 use crate::scenario::ids::RoomId;
 use crate::scenario::infra::{
     self, AlarmTrip, NoiseSource, Observation, ObservationKind, water_at,
@@ -97,7 +99,9 @@ impl GhostLobbySim {
                         .zones
                         .get(zone.as_str())
                         .is_some_and(|z| z.released && z.level >= c::ALARM_WATER_TRIP_LEVEL),
-                    AlarmTrip::PowerLost { watch } => self.state.dead_nodes.contains(watch.as_str()),
+                    AlarmTrip::PowerLost { watch } => {
+                        self.state.dead_nodes.contains(watch.as_str())
+                    }
                 };
                 let was = st.alarms.get(alarm.id.as_str()).copied() == Some(true);
                 if want != was {
@@ -257,7 +261,9 @@ impl GhostLobbySim {
         if self.def.infra.is_none() && self.def.mole.is_none() {
             return;
         }
-        if self.state.phase != Phase::Crisis || self.state.billy.mode == crate::scenario::common::BillyMode::Offsite {
+        if self.state.phase != Phase::Crisis
+            || self.state.billy.mode == crate::scenario::common::BillyMode::Offsite
+        {
             return;
         }
         let obs = self.actor_observations(self.state.billy.x);
