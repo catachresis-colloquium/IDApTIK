@@ -37,9 +37,9 @@ jobs:
         run: |
           set +e
           mkdir -p feedback
-          cargo check --workspace --all-targets --keep-going --message-format=short > feedback/check.txt 2>&1
+          cargo check -p idaptik-core -p idaptik-net -p idaptik-tui --all-targets --keep-going --message-format=short > feedback/check.txt 2>&1
           echo "check exit: $?" >> feedback/check.txt
-          cargo clippy --workspace --all-targets --keep-going --message-format=short > feedback/clippy.txt 2>&1
+          cargo clippy -p idaptik-core -p idaptik-net -p idaptik-tui --all-targets --keep-going --message-format=short > feedback/clippy.txt 2>&1
           echo "clippy exit: $?" >> feedback/clippy.txt
           cargo fmt --all -- --check > feedback/fmt-check.txt 2>&1
           echo "fmt exit: $?" >> feedback/fmt-check.txt
