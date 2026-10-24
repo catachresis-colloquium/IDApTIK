@@ -401,9 +401,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
       - name: Test selected frontend
-        run: cargo test -p idaptik-bevy
+        run: |
+          set +e
+          cargo test -p idaptik-bevy 2>&1 | tee /tmp/bevy_test.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### bevy-frontend cargo test failed (rc='"$rc"')'
+              echo '```'
+              grep -n -m 4 -A 12 -E '^error' /tmp/bevy_test.txt | head -70
+              echo '--- tail ---'
+              tail -15 /tmp/bevy_test.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::error::bevy-test rc=$rc -- $(grep -m1 -E '^error' /tmp/bevy_test.txt | head -c 300)"
+            exit "$rc"
+          fi
       - name: Lint selected frontend
-        run: cargo clippy -p idaptik-bevy --all-targets -- -D warnings
+        run: |
+          set +e
+          cargo clippy -p idaptik-bevy --all-targets -- -D warnings 2>&1 | tee /tmp/bevy_clippy.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### bevy-frontend clippy failed (rc='"$rc"')'
+              echo '```'
+              grep -n -m 4 -A 12 -E '^(error|warning: unused|error\[)' /tmp/bevy_clippy.txt | head -70
+              echo '--- tail ---'
+              tail -15 /tmp/bevy_clippy.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::error::bevy-clippy rc=$rc -- $(grep -m1 -E '^error' /tmp/bevy_clippy.txt | head -c 300)"
+            exit "$rc"
+          fi
 
   session-loopback:
     name: session-loopback (Burble relay + two-seat determinism gate)
