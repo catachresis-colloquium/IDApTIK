@@ -5,7 +5,11 @@ use crate::config;
 use crate::script::{ScriptFile, expand};
 use idaptik_core::Debrief;
 use idaptik_core::scenario::event::Event;
-use idaptik_core::scenario::{GhostLobbySim, RuntimeSnapshot, ghost_lobby};
+use idaptik_core::scenario::signal::ghost_lobby_wiring::ghost_lobby_wired;
+use idaptik_core::scenario::{
+    GhostLobbySim, RuntimeSnapshot, ScenarioDefinition, ghost_lobby, ghost_lobby_rooftop,
+    pump_house,
+};
 use serde::Serialize;
 use std::path::Path;
 
@@ -25,11 +29,28 @@ pub struct HeadlessOutput {
     pub final_snapshot: RuntimeSnapshot,
 }
 
+/// The floor a script names. Absent (or `"ghost-lobby"`) is the canonical
+/// floor, so every existing script — and every committed fixture — runs
+/// exactly what it always ran; the other names reach the wired, rooftop and
+/// challenge-set floors. An unknown name is an error, never a silent
+/// fallback: a script that asks for a floor must get that floor.
+pub fn scenario_for(script: &ScriptFile) -> Result<ScenarioDefinition, String> {
+    match script.scenario.as_deref() {
+        None | Some("ghost-lobby") => Ok(ghost_lobby()),
+        Some("ghost-lobby-wired") => Ok(ghost_lobby_wired()),
+        Some("ghost-lobby-rooftop") => Ok(ghost_lobby_rooftop()),
+        Some("pump-house") => Ok(pump_house()),
+        Some(other) => Err(format!(
+            "unknown scenario {other:?} (one of: ghost-lobby, ghost-lobby-wired, ghost-lobby-rooftop, pump-house)"
+        )),
+    }
+}
+
 /// Build a sim from a script's config and seed.
 pub fn build(script: &ScriptFile) -> Result<GhostLobbySim, String> {
     let diff = config::parse_difficulty(&script.difficulty)?;
     let cfg = config::run_config(diff, script.reduced_motion, script.supervised);
-    GhostLobbySim::new(ghost_lobby(), cfg, script.seed)
+    GhostLobbySim::new(scenario_for(script)?, cfg, script.seed)
         .map_err(|e| format!("invalid scenario: {e:?}"))
 }
 

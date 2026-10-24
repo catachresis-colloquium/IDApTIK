@@ -68,9 +68,13 @@ pub enum Seat {
 /// function the relay's routing table applies to the Elixir side.
 pub fn seat_for(cmd: &Command) -> Seat {
     match cmd {
-        Command::SetButton { .. } | Command::Jump | Command::Interact | Command::ThrowUsb => {
-            Seat::Infiltrator
-        }
+        Command::SetButton { .. }
+        | Command::Jump
+        | Command::Interact
+        | Command::ThrowUsb
+        // The hosted companion is the infiltrator's field asset: they are the
+        // seat standing in the building the mole tunnels under (ADR-0013).
+        | Command::Mole { .. } => Seat::Infiltrator,
         Command::Uplink { .. }
         | Command::Pivot { .. }
         | Command::Unpivot

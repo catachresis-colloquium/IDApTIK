@@ -29,11 +29,14 @@
 //! * [`music`] — the training-ground chiptune loop as pure pattern data plus
 //!   [`music::schedule_notes`], the pure look-ahead step scheduler.
 //!
-//! # Integration seam — not yet wired into `GhostLobbySim`
+//! # Integration seam — hosted by a floor that declares a mole
 //!
-//! The companion is a standalone module; a floor that hosts the mole drives
-//! it through the typed boundary only ([`MoleCommand`] in, [`MoleEvent`]
-//! out). Per the archive `GameLoop`:
+//! The companion stays a standalone, self-contained module: a floor that
+//! hosts the mole drives it through the typed boundary only ([`MoleCommand`]
+//! in, [`MoleEvent`] out) and folds the events into its own world. The host
+//! for scenario floors lives in `crate::scenario::sim` (ADR-0013); nothing in
+//! this module reaches into scenario state, so the companion remains reusable
+//! and deterministic on its own. Per the archive `GameLoop`:
 //!
 //! * [`MoleEvent::SynthSoundPlayed`] — spawn the diversion at the mole's
 //!   position; security dogs within **250 px** investigate it;

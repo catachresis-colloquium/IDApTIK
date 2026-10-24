@@ -41,6 +41,14 @@ const VACUUM_SEGMENT: &str = "auto-hall";
 /// Host octet of a room's lights within its automation subnet.
 const LIGHT_HOST: usize = 20;
 
+/// Host octet of a water zone's valve within its room's automation subnet
+/// (a floor with an `InfraDef` only; well clear of the door, light and entry
+/// octets the canonical derivation already allocates).
+const VALVE_HOST: usize = 50;
+
+/// Host octet of a water zone's sump pump within its room's automation subnet.
+const PUMP_HOST: usize = 51;
+
 /// Host octet of the first camera within the security subnet. Public so that
 /// [`crate::scenario::definition::ScenarioDefinition::validate`] derives its
 /// camera capacity from the same constant the derivation addresses by.
@@ -99,6 +107,20 @@ fn fixture(
     kind: DeviceKind,
     actuation: Actuation,
 ) -> Node {
+    passive_fixture(id, name, ip, segment, kind, Some(actuation))
+}
+
+/// A derived fixture whose actuation is optional: passive plant (a sump pump)
+/// draws from the feed exactly like an actuable one — that is the whole point,
+/// since the feed's cascade is what fells it.
+fn passive_fixture(
+    id: String,
+    name: String,
+    ip: Ipv4Addr,
+    segment: String,
+    kind: DeviceKind,
+    actuation: Option<Actuation>,
+) -> Node {
     Node {
         id,
         name,
@@ -106,7 +128,7 @@ fn fixture(
         segment,
         kind,
         security: SecurityLevel::Weak,
-        actuation: Some(actuation),
+        actuation,
         deps: vec![Dependency {
             on: FEED_NODE_ID.into(),
         }],
@@ -141,6 +163,17 @@ pub fn light_node_id(room_id: &str) -> String {
 /// The node id of the camera at `index` in the definition's camera list.
 pub fn camera_node_id(index: usize) -> String {
     format!("cam-{index}")
+}
+
+/// The node id of a water zone's valve — the node a deliberate flood hacks.
+pub fn valve_node_id(zone_id: &str) -> String {
+    format!("valve-{zone_id}")
+}
+
+/// The node id of a water zone's pump — the node whose power loss fails the
+/// zone's valve open (when the zone declares `fail_open`).
+pub fn pump_node_id(zone_id: &str) -> String {
+    format!("pump-{zone_id}")
 }
 
 /// Deserialise the authored backbone.
@@ -231,6 +264,41 @@ pub fn floor_graph(def: &ScenarioDefinition) -> GroundedGraph {
             DeviceKind::Sensor,
             Actuation::RunVacuum,
         ));
+    }
+
+    // Infrastructure: one valve node and one pump node per declared water
+    // zone, on the zone room's automation segment. A floor with no `InfraDef`
+    // derives neither, so the committed graph golden is unchanged. The valve
+    // is the deliberate-flood actuation; the pump carries no actuation at all
+    // — its whole role is to *lose power* in a cascade, which the host reads
+    // as the zone's fail-open release.
+    if let Some(infra) = &def.infra {
+        for zone in &infra.water_zones {
+            let segment_id = room_segment_id(zone.room.as_str());
+            let Some(segment) = graph.segment(&segment_id) else {
+                continue;
+            };
+            if let Some(ip) = host_ip(&segment.subnet, VALVE_HOST) {
+                nodes.push(fixture(
+                    valve_node_id(&zone.id),
+                    format!("{} WATER VALVE", zone.room.as_str().to_uppercase()),
+                    ip,
+                    segment_id.clone(),
+                    DeviceKind::Sensor,
+                    Actuation::OpenValve,
+                ));
+            }
+            if let Some(ip) = host_ip(&segment.subnet, PUMP_HOST) {
+                nodes.push(passive_fixture(
+                    pump_node_id(&zone.id),
+                    format!("{} SUMP PUMP", zone.room.as_str().to_uppercase()),
+                    ip,
+                    segment_id,
+                    DeviceKind::PowerSupply,
+                    None,
+                ));
+            }
+        }
     }
     graph.nodes.extend(nodes);
 

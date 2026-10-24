@@ -10,7 +10,9 @@
 //! [`crate::scenario::actor::belief`] rather than a private copy.
 
 use super::GhostLobbySim;
+use crate::netsim::Effect;
 use crate::scenario::actor::{self, Leakage, belief};
+use crate::scenario::agents::apply_effects;
 use crate::scenario::command::{Button, Edge, TickInput};
 use crate::scenario::common::{
     BillyMode, ChuteMethod, CrisisReason, ExtractMethod, ObjectKind, ObjectiveStatus, Phase,
@@ -18,7 +20,7 @@ use crate::scenario::common::{
 };
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
-use crate::scenario::floor_graph::camera_node_id;
+use crate::scenario::floor_graph::{camera_node_id, valve_node_id};
 use crate::scenario::ids::RoomId;
 use crate::scenario::mathf::{TICK_DT, approach, clamp, dist, powf, sin};
 use crate::scenario::state::Place;
@@ -106,7 +108,15 @@ impl GhostLobbySim {
         } else {
             self.preset.player_speed
         };
-        let speed = base * if crouch { c::CROUCH_SPEED } else { 1.0 };
+        // Released water is knee-deep on the floor line (ADR-0013): it slows
+        // the player to a wade wherever it has been let in. The roof never
+        // floods, and a dry floor keeps the speed bit-identical to before.
+        let wade = if self.state.player.place == Place::Floor {
+            self.wade_factor_at(self.state.player.x)
+        } else {
+            1.0
+        };
+        let speed = base * if crouch { c::CROUCH_SPEED } else { 1.0 } * wade;
         let target_vx = dir * speed;
         let accel = if dir != 0.0 {
             c::ACCEL_DRIVE
@@ -200,6 +210,17 @@ impl GhostLobbySim {
                 c::NOISE_WALK_K * movement_noise
             };
             self.state.player.noise = self.state.player.noise.max(n);
+        }
+        // Wading through released water is loud: the same flood that hides a
+        // hack announces the wader to every ear in the room. A floor with no
+        // water contributes nothing here.
+        if self.state.player.place == Place::Floor
+            && self.state.player.vx.abs() > c::NOISE_MOVE_MIN_VX
+        {
+            let wade_noise = self.wade_noise_at(self.state.player.x);
+            if wade_noise > 0.0 {
+                self.state.player.noise = self.state.player.noise.max(wade_noise);
+            }
         }
         self.state.player.noise = (self.state.player.noise - c::NOISE_DECAY * dt).max(0.0);
     }
@@ -299,6 +320,31 @@ impl GhostLobbySim {
                 }
             } else {
                 self.state.chute.progress = (self.state.chute.progress - 1.2 * dt).max(0.0);
+            }
+        }
+
+        // valve handle — the physical release (ADR-0013). A floor that
+        // declares a water zone with a handle in this room lets the
+        // infiltrator turn it by hand, and the zone releases through the
+        // same canonical path a hacked valve node walks: the splash, the
+        // shorts, the alarm and the guard's reaction are identical whichever
+        // way the water was let in.
+        if !active {
+            if let Some(zone) = self.valve_handle_at(room, cx) {
+                active = true;
+                if interact_held {
+                    self.state.player.valve_turn += dt;
+                    self.state.player.vx *= 0.7;
+                    if self.state.player.valve_turn >= c::VALVE_TURN_HOLD {
+                        self.state.player.valve_turn = 0.0;
+                        let effects = vec![Effect::WaterReleased(valve_node_id(zone.as_str()))];
+                        let events = apply_effects(&self.def, &mut self.state, self.cfg, &effects);
+                        self.events.extend(events);
+                    }
+                } else {
+                    self.state.player.valve_turn =
+                        (self.state.player.valve_turn - 1.5 * dt).max(0.0);
+                }
             }
         }
 
@@ -921,8 +967,18 @@ impl GhostLobbySim {
         }
         let noise_invest = self.state.player.noise > self.actor.stats.invest_noise
             && dist(self.state.billy.x, self.state.player.x) < self.actor.stats.invest_dist;
-        if sees || noise_invest {
-            self.state.billy.last_known_x = self.state.player.x;
+        // Building awareness (ADR-0013): when the guard neither sees the
+        // player nor hears their footsteps, the strongest unusual noise he
+        // can hear — splashing water, arcing shorts, a sounding alarm, a
+        // mole's decoy — pulls his attention to where *it* was heard, never
+        // to where the player is. His own ears are the only input.
+        let infra_pull = if sees || noise_invest {
+            None
+        } else {
+            self.infra_investigation_target()
+        };
+        if sees || noise_invest || infra_pull.is_some() {
+            self.state.billy.last_known_x = infra_pull.unwrap_or(self.state.player.x);
             self.set_billy_mode(if sees {
                 BillyMode::Pursue
             } else {
