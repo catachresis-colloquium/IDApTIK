@@ -155,11 +155,14 @@ T	crates/idaptik-core/tests/actor_registry.rs	test
 T	crates/idaptik-core/tests/agent_fusion.rs	test
 T	crates/idaptik-core/tests/arrival_clock.rs	test
 T	crates/idaptik-core/tests/billy_doors.rs	test
+T	crates/idaptik-core/tests/building_audit.rs	test
 T	crates/idaptik-core/tests/building_runtime.rs	test
+T	crates/idaptik-core/tests/challenge_set.rs	test
 T	crates/idaptik-core/tests/common/mod.rs	test support
 T	crates/idaptik-core/tests/consoles.rs	test
 T	crates/idaptik-core/tests/golden_reset.rs	test
 T	crates/idaptik-core/tests/grounded_slice.rs	test
+T	crates/idaptik-core/tests/infra_observations.rs	test
 T	crates/idaptik-core/tests/interp.rs	test
 T	crates/idaptik-core/tests/json_roundtrip.rs	test
 T	crates/idaptik-core/tests/mechanics_b.rs	test
