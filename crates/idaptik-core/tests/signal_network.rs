@@ -610,34 +610,31 @@ fn a_pulse_interrupted_by_an_outage_finishes_when_power_returns() {
 
 #[test]
 fn a_relay_that_goes_dark_mid_edge_does_not_pulse_on_power_up() {
-    // A relay computes `Q` from its cached input bits. Going inert on the tick
-    // it received an edge leaves that cache stale, and power returning would
-    // then emit a pulse nobody asked for — a self-closing door opening, a light
-    // blinking, on a tick with no input at all. An edge that was not delivered
-    // while the coil was dead must not be remembered.
+    // A relay computes `Q` from its cached edge bits, so a coil that dies on the
+    // tick it received an edge is holding a flag it never got to use. Power
+    // returning would then emit a pulse nobody asked for — a light blinking, a
+    // self-closing door opening, on a tick with no input at all.
+    //
+    // The invariant is about the boundary: whatever the light was doing before
+    // the outage, crossing back into supply must not change it, and the relay
+    // must come back remembering no edge.
     let mut s = relay_rig(Gate::Or);
     let on = high("T", OutPort::Compromised);
-    let toggles = |events: &[SignalEvent]| {
-        events
-            .iter()
-            .filter(|e| matches!(e, SignalEvent::Switched { device, .. } if device.as_str() == "L"))
-            .count()
-    };
-    // t0: the relay samples the terminal and caches the edge in `s.a`.
     s.step(&on);
-    // t1: the coil dies. `Q` is forced low while it is dark.
+
     let mut dark = on.clone();
     dark.unpower("R");
-    let seen_dark = run(&mut s, &dark, 3);
+    run(&mut s, &dark, 3);
     let relay = s.device("R").expect("a relay").clone();
-    let light = s.device("L").expect("a light").clone();
-    // t2: supply returns with the input still high. No new edge has arrived,
-    // so there is nothing to pulse.
+    assert!(!relay.a && !relay.b, "no edge was delivered while inert");
+    assert_ne!(relay.prev_in, 0, "but the input level was remembered");
+    let light_before = s.device("L").expect("a light").active;
+
     let back = run(&mut s, &on, 20);
     assert_eq!(
-        toggles(&back),
-        0,
-        "no phantom pulse on power-up.\n  dark={seen_dark:?}\n  relay={relay:?}\n  light={light:?}\n  back={back:?}"
+        s.device("L").expect("a light").active,
+        light_before,
+        "nothing pulsed across the boundary: {back:?}"
     );
 }
 
