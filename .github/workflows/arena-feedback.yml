@@ -41,11 +41,15 @@ jobs:
           echo "check exit: $?" >> feedback/check.txt
           cargo clippy -p idaptik-core -p idaptik-net -p idaptik-tui --all-targets --keep-going --message-format=short > feedback/clippy.txt 2>&1
           echo "clippy exit: $?" >> feedback/clippy.txt
+          cargo test -p idaptik-core --all-targets --keep-going --message-format=short > feedback/test-core.txt 2>&1
+          echo "test-core exit: $?" >> feedback/test-core.txt
+          cargo test -p idaptik-net -p idaptik-tui --all-targets --keep-going --message-format=short > feedback/test-front.txt 2>&1
+          echo "test-front exit: $?" >> feedback/test-front.txt
           cargo fmt --all -- --check > feedback/fmt-check.txt 2>&1
           echo "fmt exit: $?" >> feedback/fmt-check.txt
           cargo fmt --all
           git diff > feedback/fmt.patch
-          wc -l feedback/check.txt feedback/clippy.txt feedback/fmt.patch
+          wc -l feedback/check.txt feedback/clippy.txt feedback/test-core.txt feedback/test-front.txt feedback/fmt.patch
 
       - name: Publish the diagnostics to a side branch
         working-directory: work

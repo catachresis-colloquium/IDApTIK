@@ -1320,9 +1320,10 @@ impl PowerState {
                     .map(|f| f.cut)
                     .unwrap_or(false),
             };
-            let touching = readout.body.as_ref().is_some_and(|b| {
-                b.room == hdef.room && b.x >= hdef.x.0 && b.x <= hdef.x.1
-            });
+            let touching = readout
+                .body
+                .as_ref()
+                .is_some_and(|b| b.room == hdef.room && b.x >= hdef.x.0 && b.x <= hdef.x.1);
             let shock = live && touching;
             let Some(h) = self.hazards.get_mut(i) else {
                 continue;
