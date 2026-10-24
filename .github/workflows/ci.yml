@@ -304,7 +304,24 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.20.2 --locked
       - name: Check advisories, dependencies, licences, and sources
-        run: cargo deny check --hide-inclusion-graph
+        run: |
+          # Same failure-capture pattern as the vendor-parity step: cargo
+          # deny's verdict exists only in the run log, which a remote
+          # operator (or a sandbox without log egress) cannot read.
+          set +e
+          cargo deny check --hide-inclusion-graph 2>&1 | tee /tmp/deny_out.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### cargo-deny failed (rc='"$rc"') -- last output lines'
+              echo '```'
+              tail -40 /tmp/deny_out.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::error::cargo-deny rc=$rc -- $(tail -3 /tmp/deny_out.txt | tr '\n' ' | ')"
+            exit "$rc"
+          fi
 
   # Gate for the vendored bevy_winit feature patch (issue #105): source and
   # manifest parity with the published crate, font-parser-free resolved graph,
@@ -326,7 +343,25 @@ jobs:
       - name: Fixture self-test (clean + firing fixtures, no network)
         run: bash tests/vendor_winit_check_test.sh
       - name: Vendored copy matches the published crate
-        run: bash scripts/vendor_bevy_winit_check.sh parity
+        run: |
+          # Capture the raw exit code and the last lines of output: the
+          # checker's own die() carries the detail, but any failure path that
+          # slips past it (a set -e trip on an unguarded command) must still
+          # be diagnosable without run-log access.
+          set +e
+          bash scripts/vendor_bevy_winit_check.sh parity 2>&1 | tee /tmp/parity_out.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### vendor-parity failed (rc='"$rc"') -- last output lines'
+              echo '```'
+              tail -40 /tmp/parity_out.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::error::vendor-parity rc=$rc -- $(tail -3 /tmp/parity_out.txt | tr '\n' ' | ')"
+            exit "$rc"
+          fi
       - name: Font-parser-free graph with title-free CSD active
         run: bash scripts/vendor_bevy_winit_check.sh graph
 
