@@ -282,10 +282,11 @@ pub fn power_test_floor() -> PowerNetworkDef {
             Restart::FailSafe,
         ),
     ];
-    // Validation wants the exit's own node id, which is the scenario door's node,
-    // and that is the load's id here: `door_node_id(d4) == "door-d4"`.
+    // The scenario's own door is `D4`, and its grounded node, the signal
+    // network's device and this load are one string — which is what lets the
+    // power network disable the door without a mapping table.
     debug_assert_eq!(
-        crate::scenario::floor_graph::door_node_id(DoorId::from(DOOR_EXIT)),
+        crate::scenario::floor_graph::door_node_id(DoorId::from("D4")),
         DOOR_EXIT
     );
     let mut sources = vec![
