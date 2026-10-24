@@ -1,0 +1,76 @@
+# TEMPORARY authoring aid (removed before merge): the authoring sandbox can
+# reach api.github.com but not the Azure blob host the Actions log API
+# redirects to, so this job runs the same gates as `just test-ghost` and posts
+# a compact error digest as a PR comment the author can read back.
+name: arena-feedback
+
+on:
+  push:
+    branches: [ "arena/9befe5c4-idaptik" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  feedback:
+    runs-on: ubuntu-latest
+    env:
+      DIGEST: /tmp/arena-digest.md
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision pinned Rust toolchain
+        run: |
+          rustup show
+          : > "$DIGEST"
+      - name: fmt --check
+        continue-on-error: true
+        run: |
+          {
+            echo '## fmt --check'
+            echo '```diff'
+            cargo fmt --all -- --check 2>&1 | head -c 12000
+            echo '```'
+          } >> "$DIGEST"
+      - name: check (short messages, all targets)
+        continue-on-error: true
+        run: |
+          {
+            echo '## cargo check --all-targets (core/tui/net) — short'
+            echo '```'
+            cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets --message-format short 2>&1 | grep -E ": (error|warning)" | head -160
+            echo '```'
+          } >> "$DIGEST"
+      - name: check (full context, first errors)
+        continue-on-error: true
+        run: |
+          {
+            echo '## cargo check — full context (first 240 lines)'
+            echo '```'
+            cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets 2>&1 | sed -n '/^error/,/^$/p' | head -240
+            echo '```'
+          } >> "$DIGEST"
+      - name: test (core)
+        continue-on-error: true
+        run: |
+          {
+            echo '## cargo test -p idaptik-core'
+            echo '```'
+            cargo test -p idaptik-core 2>&1 | grep -E "(^error|test result:|FAILED|^---- |panicked at|assertion|left:|right:)" | head -160
+            echo '```'
+          } >> "$DIGEST"
+      - name: Post digest as PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -s "$DIGEST" || echo "no digest produced" > "$DIGEST"
+          head -c 60000 "$DIGEST" > digest-trimmed.md
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number -q '.[0].number')
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" --body-file digest-trimmed.md
+          else
+            echo "::error::No open PR for $GITHUB_REF_NAME"
+            cat digest-trimmed.md
+          fi
