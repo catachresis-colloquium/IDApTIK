@@ -31,7 +31,7 @@ use super::{
     SourceDef, SourceKind,
 };
 use crate::scenario::definition::ScenarioDefinition;
-use crate::scenario::ids::{DoorId, FeedId};
+use crate::scenario::ids::FeedId;
 use crate::scenario::signal::ghost_lobby_wiring::ghost_lobby_wired;
 
 /// The committed golden of [`power_test_floor`].
@@ -398,6 +398,7 @@ pub fn powered_ghost_lobby() -> ScenarioDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scenario::ids::DoorId;
 
     #[test]
     fn the_exit_load_is_the_door_it_mechanises() {

@@ -321,6 +321,7 @@ mod tests {
     use crate::scenario::event::Event;
     use crate::scenario::floor_graph::door_node_id;
     use crate::scenario::ids::{FeedId, LoadId, SignalId};
+    use crate::scenario::power::LoadKind;
     use crate::scenario::power::sim::{
         OffReason, PowerDenyReason, PowerEvent, PowerIndex, PowerOp,
     };
@@ -328,6 +329,7 @@ mod tests {
         BRK_A, BRK_B, DOOR_EXIT, FEED_A, FEED_B, PUMP_LAUNDRY, powered_ghost_lobby,
     };
     use crate::scenario::signal::sim::Seat;
+    use crate::scenario::state::Place;
 
     fn sim() -> GhostLobbySim {
         GhostLobbySim::new(powered_ghost_lobby(), RunConfig::standard(), 123456).expect("valid")
@@ -736,12 +738,13 @@ mod tests {
         // Isolate the plant board: the motor stops, the order does not. (A cut
         // conductor is permanent — its breaker can never be reset — so an
         // outage that is meant to end is an isolation, not a cut.)
+        let brk = breaker_index(&sim, BRK_A);
         step(
             &mut sim,
             &[Command::Power {
                 op: PowerOp::Isolate {
                     by: Seat::Infiltrator,
-                    breaker: breaker_index(&sim, BRK_A),
+                    breaker: brk,
                     open: true,
                 },
             }],
@@ -758,7 +761,7 @@ mod tests {
             &[Command::Power {
                 op: PowerOp::Isolate {
                     by: Seat::Infiltrator,
-                    breaker: breaker_index(&sim, BRK_A),
+                    breaker: brk,
                     open: false,
                 },
             }],
@@ -778,12 +781,13 @@ mod tests {
         // busy with the other is refused, not queued.
         let mut sim = sim();
         stand(&mut sim, "hall");
+        let feed = feed_index(&sim, FEED_B);
         step(
             &mut sim,
             &[Command::Power {
                 op: PowerOp::CutCable {
                     by: Seat::Infiltrator,
-                    feed: feed_index(&sim, FEED_B),
+                    feed,
                 },
             }],
         );

@@ -566,7 +566,7 @@ fn a_latch_flips_on_each_rising_edge_not_each_tick() {
 fn unpowered(ids: &[&str]) -> Readout {
     let mut r = Readout::default();
     for id in ids {
-        r.unpower(*id);
+        r.unpower(id);
     }
     r
 }
