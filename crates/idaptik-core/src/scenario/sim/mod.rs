@@ -413,13 +413,18 @@ impl GhostLobbySim {
         self.tick += 1;
 
         self.system_timers();
+        // Power runs before the input is chosen, not after it. It is the only
+        // system that can make the body unable to act in the same tick it acts
+        // — contact with live metal — and a stun that only took hold next tick
+        // would let a shocked infiltrator finish an interaction on the way down.
+        self.system_power();
         // Hands busy at a wiring panel hold still and touch nothing else. A
         // run that never wires never sets the timer, so this is the input
         // unchanged.
         // Sitting at a console is the same: still, but interact still works,
         // because interact is how you get up again.
         let idle;
-        let input = if self.state.signal_busy > 0.0 || self.state.power_busy > 0.0 {
+        let input = if self.hands_busy() > 0.0 {
             idle = TickInput::default();
             &idle
         } else if self.state.using_console.is_some() {
@@ -436,7 +441,6 @@ impl GhostLobbySim {
         } else {
             input
         };
-        self.system_power();
         self.system_signal();
         self.system_player(input);
 
@@ -536,6 +540,18 @@ impl GhostLobbySim {
             .iter()
             .position(|r| r.contains(cx))
             .unwrap_or(def.rooms.len().saturating_sub(1))
+    }
+
+    /// Seconds the infiltrator's hands are occupied — by signal wiring,
+    /// electrical work, or the stun of live metal.
+    ///
+    /// There is one pair of hands. The two subsystems keep separate timers
+    /// because they are separate systems, but physical work is exclusive: a
+    /// player mid-cut cannot start a wire, and a player mid-wire cannot start a
+    /// cut. Every caller asks this, never a timer directly, so the rule has one
+    /// home.
+    pub fn hands_busy(&self) -> f64 {
+        self.state.signal_busy.max(self.state.power_busy)
     }
 
     /// The id string of the room containing world-x, if any.

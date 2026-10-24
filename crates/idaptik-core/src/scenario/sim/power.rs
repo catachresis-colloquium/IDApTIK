@@ -22,13 +22,14 @@ use super::GhostLobbySim;
 use crate::netsim::access::can_reach;
 use crate::scenario::event::Event;
 use crate::scenario::floor_graph::{VACUUM_NODE_ID, camera_node_id, door_node_id, light_node_id};
-use crate::scenario::ids::{LoadId, RoomId};
+use crate::scenario::ids::{LoadId, RoomId, SignalId};
 use crate::scenario::mathf::TICK_DT;
-use crate::scenario::power::LoadKind;
+use crate::scenario::power::{LoadDef, LoadKind};
 use crate::scenario::power::sim::{
     BodyAt, LoadReport, PowerAccess, PowerDenyReason, PowerEvent, PowerOp, PowerReadout,
 };
 use crate::scenario::signal::sim::Seat;
+use crate::scenario::state::Place;
 
 /// Whether the body standing in `here` is standing in `room`.
 ///
@@ -119,7 +120,12 @@ impl GhostLobbySim {
                 }
             }
         }
-        if let Some(room) = Self::room_id_at(&self.def, self.state.player.x) {
+        // Only a body on the floor is a body in a room. On the roof or on the
+        // rope the horizontal position says nothing about what is underfoot,
+        // so a hazard beneath the roof must not reach through the ceiling.
+        if matches!(self.state.player.place, Place::Floor)
+            && let Some(room) = Self::room_id_at(&self.def, self.state.player.x)
+        {
             readout.body = Some(BodyAt {
                 room: RoomId::from(room),
                 x: self.state.player.x + self.def.player.w / 2.0,
@@ -156,7 +162,7 @@ impl GhostLobbySim {
             });
             return;
         }
-        if by == Seat::Infiltrator && self.state.power_busy > 0.0 {
+        if by == Seat::Infiltrator && self.hands_busy() > 0.0 {
             self.events.push(Event::Power {
                 power: PowerEvent::Denied {
                     by,
@@ -207,33 +213,41 @@ impl GhostLobbySim {
         }
 
         // Disabled equipment is disabled *on the floor*, not merely quiet on the
-        // network: a dead door does not slide and a dead vacuum does not move.
-        let dead: Vec<(String, LoadKind)> = match (&self.def.power, &self.state.power) {
+        // network. A door is a physical position, so a dead mechanism is told to
+        // stay shut here. Everything else asks the power model each tick instead
+        // of having its intent deleted: a vacuum that is told to run is still a
+        // vacuum that was told to run after the supply comes back.
+        let dead: Vec<(Option<String>, LoadKind)> = match (&self.def.power, &self.state.power) {
             (Some(net), Some(st)) => net
                 .loads
                 .iter()
                 .zip(&st.loads)
                 .filter(|(_, s)| !s.operating)
-                .map(|(l, _)| (l.id.0.clone(), l.kind))
+                .map(|(l, _)| (self.driven_node(l).map(str::to_owned), l.kind))
                 .collect(),
             _ => Vec::new(),
         };
-        for (id, kind) in dead {
-            match kind {
-                LoadKind::Door => {
-                    for door in &mut self.state.doors {
-                        if door_node_id(door.id.clone()) == id {
-                            door.open = 0.0;
-                            door.pending = 0.0;
-                        }
+        for (node, kind) in dead {
+            let Some(node) = node else {
+                continue;
+            };
+            if kind == LoadKind::Door {
+                for door in &mut self.state.doors {
+                    if door_node_id(door.id.clone()) == node {
+                        door.open = 0.0;
+                        door.pending = 0.0;
                     }
                 }
-                LoadKind::Vacuum if id == VACUUM_NODE_ID => {
-                    self.state.vacuum.active = false;
-                }
-                _ => {}
             }
         }
+    }
+
+    /// Whether the floor's power model is currently refusing the vacuum its
+    /// motor. Its *intent* is left alone: a `Resume` device is expected to pick
+    /// up where it left off, and an `active` flag cleared by an outage would be
+    /// a run it never gets back without another command.
+    pub(super) fn power_holds_vacuum(&self) -> bool {
+        self.power_device_dead(VACUUM_NODE_ID)
     }
 
     /// The full account of one device: what it is, what it is doing, and — the
@@ -241,6 +255,30 @@ impl GhostLobbySim {
     pub fn power_report(&self, load: &str) -> Option<LoadReport> {
         let (net, st) = (self.def.power.as_ref()?, self.state.power.as_ref()?);
         st.report(net, &LoadId::from(load))
+    }
+
+    /// The grounded node a load physically drives, if it drives one.
+    ///
+    /// The signal reference is authoritative when a load has one: a load may be
+    /// named for its supply rather than for the device it feeds
+    /// (`office-camera-supply` driving `cam-1`), and the *device* is what
+    /// carries the grounded node. A load with no signal reference is a dumb
+    /// device, and its own id is the node the floor graph knows it by.
+    ///
+    /// Without this, a load whose id was not the node would run a camera that
+    /// the power model believed was blinding something else — the load would be
+    /// correctly off and the camera would correctly keep looking.
+    fn driven_node<'a>(&'a self, l: &'a LoadDef) -> Option<&'a str> {
+        match &l.signal {
+            Some(signal) => self
+                .def
+                .signal
+                .as_ref()?
+                .device(signal)?
+                .node
+                .as_deref(),
+            None => Some(l.id.as_str()),
+        }
     }
 
     /// Whether a powered load is currently holding `node`'s device inert.
@@ -251,7 +289,18 @@ impl GhostLobbySim {
         net.loads
             .iter()
             .zip(&st.loads)
-            .any(|(l, s)| l.id.0 == node && !s.operating)
+            .any(|(l, s)| !s.operating && self.driven_node(l) == Some(node))
+    }
+
+    /// Whether a signal device is inert because the floor has no power for it.
+    pub(super) fn power_holds_signal_device(&self, id: &SignalId) -> bool {
+        let (Some(net), Some(st)) = (&self.def.power, &self.state.power) else {
+            return false;
+        };
+        net.loads
+            .iter()
+            .zip(&st.loads)
+            .any(|(l, s)| l.signal.as_ref() == Some(id) && !s.operating)
     }
 
     /// Whether the camera on `i` has no working supply.
@@ -276,7 +325,7 @@ mod tests {
         OffReason, PowerDenyReason, PowerEvent, PowerIndex, PowerOp,
     };
     use crate::scenario::power::test_floor::{
-        BRK_B, DOOR_EXIT, FEED_A, FEED_B, PUMP_LAUNDRY, powered_ghost_lobby,
+        BRK_A, BRK_B, DOOR_EXIT, FEED_A, FEED_B, PUMP_LAUNDRY, powered_ghost_lobby,
     };
     use crate::scenario::signal::sim::Seat;
 
@@ -589,6 +638,183 @@ mod tests {
         assert!(
             sim.power_report(PUMP_LAUNDRY).expect("a load").operating,
             "the interlock released and the pump warmed up"
+        );
+    }
+
+    #[test]
+    fn the_roof_is_not_the_room_below_it() {
+        // A hazard is bounded in a room, and only a body *in* that room is in
+        // contact with it. Standing on the roof above the laundry is standing
+        // over it, not in it: no ceiling conducts.
+        use crate::scenario::rooftop::ghost_lobby_rooftop;
+        let mut def = ghost_lobby_rooftop();
+        def.power = Some(crate::scenario::power::test_floor::power_test_floor());
+        let mut sim = GhostLobbySim::new(def, RunConfig::standard(), 123456).expect("valid");
+        assert!(sim.state().power.is_some(), "the floor really is powered");
+
+        // Over the middle of the laundry, where the exposed housing is — on the
+        // roof, and the same place on the floor.
+        sim.state.player.x = 960.0;
+        sim.state.player.place = Place::Roof;
+        let roof = step(&mut sim, &[]);
+        assert!(
+            !power_events(&roof)
+                .iter()
+                .any(|e| matches!(e, PowerEvent::Shocked { .. })),
+            "{:?}",
+            power_events(&roof)
+        );
+
+        // Down on the floor, the same position is a shock.
+        sim.state.player.place = Place::Floor;
+        let inside = step(&mut sim, &[]);
+        assert!(
+            power_events(&inside)
+                .iter()
+                .any(|e| matches!(e, PowerEvent::Shocked { .. })),
+            "{:?}",
+            power_events(&inside)
+        );
+    }
+
+    #[test]
+    fn a_shock_stops_the_body_on_the_tick_it_lands() {
+        // The stun has to be in place *before* this tick's input is read, or a
+        // shocked infiltrator finishes the interaction they were reaching for.
+        use crate::scenario::command::{Button, Buttons};
+        let mut sim = sim();
+        sim.state.player.x = 960.0;
+        let mut held = Buttons::default();
+        held.set(Button::Right, true);
+        let _ = step(&mut sim, &[]);
+        assert!(sim.state().power_busy > 0.0, "the floor is holding the body");
+
+        let before = sim.state.player.x;
+        let input = TickInput {
+            buttons: held,
+            ..TickInput::default()
+        };
+        sim.tick(&input);
+        assert_eq!(sim.state.player.x, before, "no walking while stunned");
+    }
+
+    #[test]
+    fn the_vacuum_keeps_its_order_through_an_outage() {
+        // `Resume` means what it says: the run request survives the outage and
+        // the vacuum picks up again. Clearing `active` would delete the only
+        // record of what it was told to do.
+        let mut def = powered_ghost_lobby();
+        if let Some(net) = def.power.as_mut() {
+            net.loads.push(crate::scenario::power::LoadDef {
+                id: "vac-0".into(),
+                label: "Robot vacuum".into(),
+                kind: LoadKind::Vacuum,
+                feed: FeedId::from(FEED_A),
+                draw: 2,
+                signal: Some(SignalId::from("vac-0")),
+                room: Some("laundry".into()),
+                restart: crate::scenario::power::Restart::Resume,
+                start_on: true,
+                condition: crate::scenario::power::Condition::Intact,
+                restart_ticks: None,
+                node: Some("vac-0".into()),
+            });
+            // Headroom for the vacuum: the plant board is at its rating, and
+            // this test is about the outage rather than about protection.
+            if let Some(f) = net.feeds.iter_mut().find(|f| f.id.as_str() == FEED_A) {
+                f.capacity = 30;
+            }
+        }
+        let mut sim = GhostLobbySim::new(def, RunConfig::standard(), 123456).expect("valid");
+        sim.state.vacuum.active = true;
+        for _ in 0..5 {
+            step(&mut sim, &[]);
+        }
+        let rolling = sim.state.vacuum.x;
+        assert!(rolling > 0.0, "it was moving before the outage");
+
+        // Isolate the plant board: the motor stops, the order does not. (A cut
+        // conductor is permanent — its breaker can never be reset — so an
+        // outage that is meant to end is an isolation, not a cut.)
+        step(
+            &mut sim,
+            &[Command::Power {
+                op: PowerOp::Isolate {
+                    by: Seat::Infiltrator,
+                    breaker: breaker_index(&sim, BRK_A),
+                    open: true,
+                },
+            }],
+        );
+        for _ in 0..5 {
+            step(&mut sim, &[]);
+        }
+        assert!(sim.state.vacuum.active, "it is still asked to clean");
+        let stalled = sim.state.vacuum.x;
+
+        // Supply returns; the warm-up runs; the vacuum moves again.
+        step(
+            &mut sim,
+            &[Command::Power {
+                op: PowerOp::Isolate {
+                    by: Seat::Infiltrator,
+                    breaker: breaker_index(&sim, BRK_A),
+                    open: false,
+                },
+            }],
+        );
+        for _ in 0..200 {
+            step(&mut sim, &[]);
+        }
+        assert!(
+            sim.state.vacuum.x > stalled,
+            "back to work after the supply came back"
+        );
+    }
+
+    #[test]
+    fn the_hands_are_one_pair() {
+        // Electrical work and wiring work are both physical. Starting one while
+        // busy with the other is refused, not queued.
+        let mut sim = sim();
+        stand(&mut sim, "hall");
+        step(
+            &mut sim,
+            &[Command::Power {
+                op: PowerOp::CutCable {
+                    by: Seat::Infiltrator,
+                    feed: feed_index(&sim, FEED_B),
+                },
+            }],
+        );
+        assert!(sim.state().power_busy > 0.0, "the hands are full");
+
+        let net = sim.definition().signal.as_ref().expect("wired");
+        let from = net.index_of(&SignalId::from("cam-0")).expect("a device");
+        let to = net.index_of(&SignalId::from(DOOR_EXIT)).expect("a device");
+        let events = step(
+            &mut sim,
+            &[Command::Signal {
+                op: crate::scenario::signal::sim::SignalOp::Wire {
+                    by: Seat::Infiltrator,
+                    from: crate::scenario::signal::sim::SignalIndex(from as u16),
+                    from_port: crate::scenario::signal::OutPort::Tripped,
+                    to: crate::scenario::signal::sim::SignalIndex(to as u16),
+                    to_port: crate::scenario::signal::InPort::Lock,
+                },
+            }],
+        );
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                Event::Signal {
+                    signal: crate::scenario::signal::sim::SignalEvent::Denied {
+                        reason: crate::scenario::signal::sim::SignalDenyReason::Busy,
+                        ..
+                    }
+                }
+            )),
+            "{events:?}"
         );
     }
 

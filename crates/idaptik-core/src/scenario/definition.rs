@@ -358,6 +358,13 @@ pub enum ValidationError {
         load: LoadId,
         signal: SignalId,
     },
+    /// An interlock watches a signal device the floor does not carry. The host
+    /// only ever reports devices that exist, so a missing one reads as "not
+    /// active" for ever: the interlock would silently never hold.
+    PowerInterlockSignalMissing {
+        interlock: String,
+        signal: SignalId,
+    },
 }
 
 /// One named check in the Exchange-House-style validation report.
@@ -679,6 +686,33 @@ impl ScenarioDefinition {
                 format!("missing={missing_signal:?}"),
                 missing_signal
                     .map(|(load, signal)| ValidationError::PowerSignalMissing { load, signal }),
+            );
+
+            // Every interlock that watches a signal watches one that exists.
+            // An interlock is a safety rule; one wired to nothing is worse than
+            // none at all, because it reads as protection and holds nothing.
+            let missing_interlock = net.interlocks.iter().find_map(|il| {
+                let signal = match &il.holds_when {
+                    crate::scenario::power::InterlockWhen::SignalActive(sig)
+                    | crate::scenario::power::InterlockWhen::SignalLocked(sig) => sig,
+                    crate::scenario::power::InterlockWhen::LoadOperating(_) => return None,
+                };
+                let present = self
+                    .signal
+                    .as_ref()
+                    .is_some_and(|net| net.device(signal).is_some());
+                (!present).then(|| (il.id.clone(), signal.clone()))
+            });
+            check(
+                &mut checks,
+                "power",
+                "power.interlocks",
+                "Every interlock watches a signal device this floor carries",
+                missing_interlock.is_none(),
+                format!("missing={missing_interlock:?}"),
+                missing_interlock.map(|(interlock, signal)| {
+                    ValidationError::PowerInterlockSignalMissing { interlock, signal }
+                }),
             );
         }
 

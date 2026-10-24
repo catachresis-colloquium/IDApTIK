@@ -12,6 +12,7 @@ use idaptik_core::scenario::power::test_floor::{
     BRK_A, BRK_B, CAM_HALL, DOOR_EXIT, FAN_KITCHEN, FEED_A, FEED_B, MAINS_A, MAINS_B,
     POWER_TEST_FLOOR_JSON, PUMP_LAUNDRY, UPS_HALL, power_test_floor, powered_ghost_lobby,
 };
+use idaptik_core::scenario::definition::ValidationError;
 use idaptik_core::scenario::power::{
     BackupMode, BackupSpec, Condition, InterlockDef, InterlockWhen, LoadKind, POWER_FORMAT,
     PowerNetworkDef, PowerTuning, PowerValidationError, Restart, SourceKind, load_power_network,
@@ -757,4 +758,206 @@ fn the_whole_definitions_tuning_is_readable() {
     assert_eq!(def.sources[2].kind, SourceKind::Battery);
     assert!(def.sources.iter().any(|s| s.id.as_str() == MAINS_A));
     assert!(def.feeds.iter().any(|f| f.id.as_str() == FEED_A));
+}
+
+// --- the seams the review found -------------------------------------------------
+
+#[test]
+fn a_dumb_load_cannot_be_switched_by_the_hacker() {
+    // Access and permission are different questions. The hacker may reach the
+    // pump through the signal network — and still cannot switch it, because a
+    // load with no panel node has no remote panel to switch it with. Routing
+    // and commanding are the same rule, asked in one place.
+    let mut sim = floor();
+    run(&mut sim, 200);
+    let mut access = PowerAccess::default();
+    access.hacker.insert(PUMP_LAUNDRY.to_owned());
+    let events = sim.apply(
+        &PowerCommand::SetCommand {
+            by: Seat::Hacker,
+            load: load(PUMP_LAUNDRY),
+            on: false,
+        },
+        &access,
+    );
+    assert_eq!(
+        denied(&events),
+        Some(&PowerDenyReason::RemotePanel {
+            element: PUMP_LAUNDRY.to_owned()
+        })
+    );
+    assert!(
+        sim.report(&load(PUMP_LAUNDRY))
+            .is_some_and(|r| r.commanded),
+        "and the order did not land"
+    );
+}
+
+#[test]
+fn reconnecting_a_disconnected_load_needs_no_change_of_feed() {
+    // A device authored `Disconnected` still names the feed it *should* be on.
+    // Wiring it back in is a rewire of that same feed, so "already on that
+    // feed" must not be an error — otherwise a single-feed floor could never
+    // reconnect anything.
+    let mut def = power_test_floor();
+    if let Some(l) = def.loads.iter_mut().find(|l| l.id == load(OFFICE_CAM)) {
+        l.condition = Condition::Disconnected;
+    }
+    let mut sim = PowerSim::new(def).expect("valid");
+    run(&mut sim, 200);
+    assert_eq!(why(&sim, OFFICE_CAM), Some(OffReason::Disconnected));
+
+    let events = route(&mut sim, Seat::Infiltrator, OFFICE_CAM, FEED_B);
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, PowerEvent::Routed { .. })),
+        "{events:?}"
+    );
+    run(&mut sim, 130);
+    assert!(operating(&sim, OFFICE_CAM), "reconnected and warm");
+
+    // And now it is on that feed, asking for it again *is* a no-op.
+    assert_eq!(
+        denied(&route(&mut sim, Seat::Infiltrator, OFFICE_CAM, FEED_B)),
+        Some(&PowerDenyReason::SameFeed {
+            load: load(OFFICE_CAM)
+        })
+    );
+}
+
+#[test]
+fn a_rewire_cannot_skip_the_authored_warm_up() {
+    // `cam-1` is a `Resume` device. Routing it to a live feed is a fresh
+    // connection, so it starts its warm-up from the beginning rather than
+    // inheriting "supply was already here" and operating at once.
+    let mut def = power_test_floor();
+    // Headroom on the plant board, so this test is about the warm-up and not
+    // about tripping protection on the way there.
+    if let Some(f) = def.feeds.iter_mut().find(|f| f.id == feed(FEED_A)) {
+        f.capacity = 30;
+    }
+    let mut sim = PowerSim::new(def).expect("valid");
+    run(&mut sim, 200);
+    assert!(operating(&sim, OFFICE_CAM));
+    route(&mut sim, Seat::Infiltrator, OFFICE_CAM, FEED_A);
+    run(&mut sim, 1);
+    assert!(
+        matches!(why(&sim, OFFICE_CAM), Some(OffReason::Restarting { .. })),
+        "{:?}",
+        why(&sim, OFFICE_CAM)
+    );
+    run(&mut sim, 130);
+    assert!(operating(&sim, OFFICE_CAM));
+}
+
+#[test]
+fn a_disconnected_device_draws_nothing_until_it_is_wired_back_in() {
+    // The definition's projection and the run's protection agree with the
+    // contract: a device wired to nothing is not a connection. Reconnecting it
+    // puts its rating back on the board, which is what makes a rewire a
+    // decision rather than a free upgrade.
+    let mut def = power_test_floor();
+    if let Some(l) = def.loads.iter_mut().find(|l| l.id == load(OFFICE_CAM)) {
+        l.condition = Condition::Disconnected;
+    }
+    // Give feed-b exactly enough headroom that the camera's 3 units decide it.
+    if let Some(f) = def.feeds.iter_mut().find(|f| f.id == feed(FEED_B)) {
+        f.capacity = 15;
+    }
+    let mut sim = PowerSim::new(def).expect("valid");
+    run(&mut sim, 200);
+
+    // 13 connected units against 15: headroom while the camera is off the board.
+    let draw = sim.state().connected_draw(sim.definition(), &feed(FEED_B));
+    assert_eq!(draw, 10, "the camera and the door only");
+    route(&mut sim, Seat::Infiltrator, OFFICE_CAM, FEED_B);
+    let draw = sim.state().connected_draw(sim.definition(), &feed(FEED_B));
+    assert_eq!(draw, 13, "and its rating is back on the board");
+}
+
+#[test]
+fn a_one_tick_backup_still_delivers_its_one_tick() {
+    // Runtime is spent *after* the tick it paid for. A backup authored for one
+    // tick that never carried current would be a backup that does not exist.
+    let mut def = power_test_floor();
+    if let Some(s) = def.sources.iter_mut().find(|s| s.id.as_str() == UPS_HALL)
+        && let Some(b) = s.backup.as_mut()
+    {
+        b.runtime_ticks = 1;
+    }
+    let mut sim = PowerSim::new(def).expect("valid");
+    run(&mut sim, 200);
+    cut(&mut sim, Seat::Infiltrator, FEED_B);
+
+    let engaged = run(&mut sim, 1);
+    assert!(
+        engaged
+            .iter()
+            .any(|e| matches!(e, PowerEvent::BackupEngaged { .. })),
+        "{engaged:?}"
+    );
+    assert!(
+        sim.report(&load(CAM_HALL)).is_some_and(|r| r.operating),
+        "one tick of runtime buys one tick of camera"
+    );
+    let spent = run(&mut sim, 2);
+    assert!(
+        spent
+            .iter()
+            .any(|e| matches!(e, PowerEvent::BackupSpent { .. })),
+        "{spent:?}"
+    );
+    assert!(!operating(&sim, CAM_HALL));
+}
+
+#[test]
+fn a_second_breaker_on_a_feed_is_a_definition_error() {
+    // Supply follows the feed's own breaker. A second one would "isolate" a
+    // feed that keeps running — a panel that reports protection it cannot give.
+    let mut def = power_test_floor();
+    def.breakers.push(idaptik_core::scenario::power::BreakerDef {
+        id: BreakerId::from("brk-a-spare"),
+        label: "Spare".into(),
+        feed: feed(FEED_A),
+        start_open: false,
+        remote: false,
+        room: None,
+        node: None,
+    });
+    assert!(
+        def.validate()
+            .iter()
+            .any(|e| matches!(e, PowerValidationError::BreakerFeedMismatch { .. })),
+        "{:?}",
+        def.validate()
+    );
+}
+
+#[test]
+fn an_interlock_watching_a_missing_signal_is_a_floor_error() {
+    // The host only ever reports signal devices that exist, so an interlock
+    // wired to one that does not reads as "never held" for ever — protection
+    // that protects nothing is worse than none, because it looks like safety.
+    let mut def = powered_ghost_lobby();
+    if let Some(net) = def.power.as_mut() {
+        net.interlocks.push(InterlockDef {
+            id: "il-ghost".into(),
+            label: "Watches a device nobody built".into(),
+            load: load(PUMP_LAUNDRY),
+            holds_when: InterlockWhen::SignalActive("no-such-device".into()),
+        });
+    }
+    let report = def.validate();
+    assert!(
+        !report.passed(),
+        "a network referencing a missing signal must not validate"
+    );
+    let errors = report.ok().expect_err("it must fail");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::PowerInterlockSignalMissing { .. })),
+        "{errors:?}"
+    );
 }

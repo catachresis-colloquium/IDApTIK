@@ -60,7 +60,14 @@ pub const CAM_HALL: &str = "cam-0";
 pub const FAN_KITCHEN: &str = "fan-kitchen";
 /// The laundry pump.
 pub const PUMP_LAUNDRY: &str = "pump-laundry";
-/// The service exit's mechanism.
+/// The scenario door the service exit's mechanism belongs to, as the floor
+/// definition spells it.
+pub const EXIT_DOOR: &str = "D4";
+/// The service exit's mechanism: the load, the signal device and the grounded
+/// node are all one string, [`crate::scenario::floor_graph::door_node_id`] of
+/// [`EXIT_DOOR`]. [`tests::the_exit_load_is_the_door_it_mechanises`] is what
+/// keeps those two spellings honest — an invariant belongs in a test, not in a
+/// build that can panic on the way to the menu.
 pub const DOOR_EXIT: &str = "door-d4";
 
 /// The maintenance bridge's grounded node: the security board's remote panel.
@@ -282,13 +289,6 @@ pub fn power_test_floor() -> PowerNetworkDef {
             Restart::FailSafe,
         ),
     ];
-    // The scenario's own door is `D4`, and its grounded node, the signal
-    // network's device and this load are one string — which is what lets the
-    // power network disable the door without a mapping table.
-    debug_assert_eq!(
-        crate::scenario::floor_graph::door_node_id(DoorId::from("D4")),
-        DOOR_EXIT
-    );
     let mut sources = vec![
         source(
             MAINS_A,
@@ -398,6 +398,24 @@ pub fn powered_ghost_lobby() -> ScenarioDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_exit_load_is_the_door_it_mechanises() {
+        // One spelling, derived once: the scenario door's grounded node is the
+        // signal device's node and this load's id. Nothing in the two networks
+        // maps between them because there is nothing to map.
+        assert_eq!(
+            crate::scenario::floor_graph::door_node_id(DoorId::from(EXIT_DOOR)),
+            DOOR_EXIT
+        );
+        let net = power_test_floor();
+        let load = net
+            .loads
+            .iter()
+            .find(|l| l.id.as_str() == DOOR_EXIT)
+            .expect("the exit mechanism is a load");
+        assert_eq!(load.signal.as_ref().map(|s| s.as_str()), Some(DOOR_EXIT));
+    }
 
     #[test]
     fn the_test_floor_validates() {

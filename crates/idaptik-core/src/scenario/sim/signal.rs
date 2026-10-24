@@ -126,8 +126,12 @@ impl GhostLobbySim {
         readout
     }
 
-    /// Whether a wire has switched camera `i` off, or switched off the lights
-    /// in the room it watches.
+    /// Whether a camera `i` is blind: a wire switched it off, its supply is
+    /// gone, or the lights it needs are out.
+    ///
+    /// The name is historical — callers ask "can this camera see?" and every
+    /// one of those three answers is no. It is the single camera-seam, so the
+    /// power leg belongs here rather than being remembered at each call site.
     pub fn signal_blinds_camera(&self, i: usize) -> bool {
         let Some(cam) = self.def.cameras.get(i) else {
             return false;
@@ -136,6 +140,8 @@ impl GhostLobbySim {
             || self.power_blinds_camera(i)
             || self.signal_room_dark(cam.room.as_str())
     }
+
+
 
     /// Whether a wire has locked the door on grounded node `node`.
     pub fn signal_door_locked(&self, node: &str) -> bool {
@@ -153,15 +159,20 @@ impl GhostLobbySim {
         self.signal_device_off(&light_node_id(room)) || self.power_room_dark(room)
     }
 
-    /// Whether the signal device on `node` exists and is switched off.
+    /// Whether the signal device on `node` is off — switched off by a wire, or
+    /// with no supply to run at all.
+    ///
+    /// One seam, two reasons. A device the power model is holding inert is not
+    /// operating whatever the wiring says, so every caller that asks "is this
+    /// device off?" gets the same answer rather than half of it.
     fn signal_device_off(&self, node: &str) -> bool {
         let (Some(net), Some(st)) = (&self.def.signal, &self.state.signal) else {
             return false;
         };
-        net.devices
-            .iter()
-            .zip(&st.devices)
-            .any(|(d, s)| d.node.as_deref() == Some(node) && !s.active)
+        net.devices.iter().zip(&st.devices).any(|(d, s)| {
+            d.node.as_deref() == Some(node)
+                && (!s.active || self.power_holds_signal_device(&d.id))
+        })
     }
 
     /// `Command::Signal` (immediate; self-guards on paused/ended).
@@ -187,7 +198,7 @@ impl GhostLobbySim {
             Seat::Infiltrator => &net.tuning.infiltrator,
             Seat::Hacker => &net.tuning.hacker,
         };
-        if by == Seat::Infiltrator && self.state.signal_busy > 0.0 {
+        if by == Seat::Infiltrator && self.hands_busy() > 0.0 {
             self.events.push(deny(SignalDenyReason::Busy));
             return;
         }

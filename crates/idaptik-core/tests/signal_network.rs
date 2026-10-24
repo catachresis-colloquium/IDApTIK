@@ -561,6 +561,78 @@ fn a_latch_flips_on_each_rising_edge_not_each_tick() {
     assert_eq!(toggles(&run(&mut s, &on, 20)), 1);
 }
 
+/// A readout that holds `ids` inert: no supply, damaged, warming up — the
+/// device cannot operate whatever its wires say.
+fn unpowered(ids: &[&str]) -> Readout {
+    let mut r = Readout::default();
+    for id in ids {
+        r.unpower(*id);
+    }
+    r
+}
+
+#[test]
+fn a_pulse_interrupted_by_an_outage_finishes_when_power_returns() {
+    // A momentary pulse opens a normally closed door. The supply dies halfway
+    // through it. The mechanism cannot move while it is dark — but the *order*
+    // it was given is still standing, so the door must end up closed once it
+    // has current again. Clearing the countdown and the saved state together
+    // would leave a pulse as an indefinitely open door.
+    let mut s = sim();
+    let all = Access::everyone(s.definition());
+    let pulse = s.definition().tuning.door_pulse_ticks;
+    s.apply(
+        &wire(
+            Seat::Hacker,
+            BRIDGE,
+            OutPort::Compromised,
+            D1,
+            InPort::Pulse,
+        ),
+        &all,
+    );
+    let held = high(BRIDGE, OutPort::Compromised);
+    run(&mut s, &held, 3);
+    assert!(s.device(D1).expect("door").open, "the pulse opened it");
+
+    // Dark for the rest of the pulse and well beyond it.
+    run(&mut s, &unpowered(&[D1]), pulse + 10);
+    // Still open: a mechanism with no current has not finished travelling.
+    assert!(s.device(D1).expect("door").open);
+
+    // Current returns with the input low; the interrupted pulse completes.
+    run(&mut s, &idle(), pulse + 5);
+    assert!(
+        !s.device(D1).expect("door").open,
+        "the pulse ran out and the door went back to closed"
+    );
+}
+
+#[test]
+fn a_latch_does_not_toggle_on_power_up() {
+    // A latch relay latches on an A rising edge. Here the edge arrives while
+    // the relay is dark and the input stays high until supply returns. On
+    // restore there is no new edge, so the latch must not move: the cached
+    // input history has to be synchronised while the coil is inert.
+    let mut s = relay_rig(Gate::Latch);
+    let on = high("T", OutPort::Compromised);
+    let toggles = |events: &[SignalEvent]| {
+        events
+            .iter()
+            .filter(|e| matches!(e, SignalEvent::Switched { device, .. } if device.as_str() == "L"))
+            .count()
+    };
+    assert_eq!(toggles(&run(&mut s, &on, 5)), 1, "the first edge latches");
+
+    // Dark, and T stays high throughout: an edge that arrives while inert.
+    let mut dark = on.clone();
+    dark.unpower("R");
+    run(&mut s, &dark, 5);
+
+    // Supply returns with T still high: no edge, no toggle.
+    assert_eq!(toggles(&run(&mut s, &on, 20)), 0, "no phantom edge");
+}
+
 #[test]
 fn signals_cross_one_wire_per_tick() {
     let mut s = relay_rig(Gate::Or);

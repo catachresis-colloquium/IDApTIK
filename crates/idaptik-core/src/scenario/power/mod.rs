@@ -538,19 +538,23 @@ impl PowerNetworkDef {
         self.feed(feed).and_then(|f| self.breaker_index(&f.breaker))
     }
 
-    /// The closed-book connected draw of `feed` under the runtime assignment:
-    /// the sum of every load's rating, whatever it is doing. Capacity is a
-    /// rating against connected equipment, not instantaneous load — the abstract
-    /// sim does not model inrush, and a number a player can read off the board is
-    /// worth more than a number that changes sixty times a second.
+    /// The **authored** connected draw of `feed` under an assignment: every
+    /// load's rating added up, whatever its condition and whatever it is doing.
+    ///
+    /// This is level design's view — what the board says before the run starts —
+    /// and it is what the fixture assertions read. It is deliberately *not* what
+    /// protection uses: only the runtime knows which devices are actually
+    /// connected, and a disconnected one is not. That question belongs to
+    /// [`sim::PowerState::connected_draw`], which is the authority.
+    ///
+    /// Capacity is a rating against connected equipment, not instantaneous
+    /// load — the abstract sim does not model inrush, and a number a player can
+    /// read off the board is worth more than one that changes sixty times a
+    /// second.
     pub fn connected_draw(&self, feed: &FeedId, feeds: &[FeedId]) -> u32 {
         self.loads
             .iter()
             .enumerate()
-            // A damaged or disconnected device draws nothing: it is not a
-            // connection, so it cannot load a board. That is also why rewiring
-            // one back in is felt on the feed it lands on.
-            .filter(|(_, l)| l.condition == Condition::Intact)
             .filter(|(i, _)| feeds.get(*i) == Some(feed))
             .map(|(_, l)| l.draw)
             .sum()
@@ -638,12 +642,22 @@ impl PowerNetworkDef {
             }
         }
 
+        // There is exactly one protective device per feed, and this is the
+        // other half of that sentence: the feed names one, and that one names
+        // the feed back. A second breaker on the same feed would otherwise load
+        // happily and then "isolate" equipment that goes on running, because
+        // supply follows the feed's own breaker and nobody else's.
         for b in &self.breakers {
-            if self.feed(&b.feed).is_none() {
-                errs.push(E::BreakerFeedMissing {
+            match self.feed(&b.feed) {
+                None => errs.push(E::BreakerFeedMissing {
                     breaker: b.id.clone(),
                     feed: b.feed.clone(),
-                });
+                }),
+                Some(f) if f.breaker != b.id => errs.push(E::BreakerFeedMismatch {
+                    feed: f.id.clone(),
+                    breaker: b.id.clone(),
+                }),
+                Some(_) => {}
             }
         }
 

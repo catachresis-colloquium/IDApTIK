@@ -657,13 +657,23 @@ impl Run<'_> {
         // 3. Inputs change state.
         for (i, def) in self.def.devices.iter().enumerate() {
             if readout.unpowered.contains(&def.id) {
-                // Inert: nothing is asked of it and nothing happens. Its input
-                // levels are still remembered, so a wire that was held high
-                // through the outage does not fire an edge when supply returns.
+                // Inert: nothing is asked of it and nothing happens — but it
+                // must be handed back in the state it was interrupted in.
+                //
+                // * A pulse that was running is *not* cancelled: the mechanism
+                //   simply cannot move until it has current again. Dropping the
+                //   timer and the saved state together would leave a door open
+                //   for ever, because nothing is left to close it.
+                // * The edge history is synchronised with the inputs, so a wire
+                //   held high through the outage does not fire on restore. The
+                //   relay's cached inputs are part of that history: it latches
+                //   on `a && !s.a`, so leaving `s.a` stale would toggle a latch
+                //   on power-up for an edge that arrived while it was dark.
                 let s = &mut self.state.devices[i];
-                s.prev_in = levels[i];
-                s.pulse_ticks = 0;
-                s.pre_pulse = None;
+                let level = levels[i];
+                s.a = level & InPort::A.bit() != 0;
+                s.b = level & InPort::B.bit() != 0;
+                s.prev_in = level;
                 continue;
             }
             let s = &mut self.state.devices[i];

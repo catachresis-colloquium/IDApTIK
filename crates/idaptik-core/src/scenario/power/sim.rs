@@ -665,9 +665,20 @@ impl PowerState {
         self.loads.iter().map(|l| l.feed.clone()).collect()
     }
 
-    /// The connected draw of `feed` under the current assignment.
+    /// The connected draw of `feed`, as the run actually stands.
+    ///
+    /// The definition says where a load was *authored*; only the state knows
+    /// whether it is connected now. A damaged or disconnected device draws
+    /// nothing — it is not a connection — and a device rewired back in has
+    /// already had its `feed` and `condition` updated, so protection sees the
+    /// load return the moment the rewire lands.
     pub fn connected_draw(&self, def: &PowerNetworkDef, feed: &FeedId) -> u32 {
-        def.connected_draw(feed, &self.assignment())
+        self.loads
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.condition == Condition::Intact && &s.feed == feed)
+            .map(|(i, _)| def.loads.get(i).map(|l| l.draw).unwrap_or(0))
+            .sum()
     }
 
     /// Whether a feed's *primary* source is delivering.
@@ -944,25 +955,10 @@ impl PowerState {
         to: &FeedId,
         access: &PowerAccess,
     ) -> Result<Vec<PowerEvent>, PowerDenyReason> {
-        if !access.can(by, load.as_str()) {
-            return Err(PowerDenyReason::NoAccess {
-                element: load.0.clone(),
-            });
-        }
-        let Some(li) = def.load_index(load) else {
-            return Err(PowerDenyReason::NoAccess {
-                element: load.0.clone(),
-            });
-        };
+        let li = self.device_panel(def, by, load, access)?;
         if def.feed_index(to).is_none() {
             return Err(PowerDenyReason::NoAccess {
                 element: to.0.clone(),
-            });
-        }
-        let panel_is_remote = def.loads.get(li).is_some_and(|l| l.node.is_some());
-        if by == Seat::Hacker && !panel_is_remote {
-            return Err(PowerDenyReason::RemotePanel {
-                element: load.0.clone(),
             });
         }
         let Some(s) = self.loads.get_mut(li) else {
@@ -970,7 +966,11 @@ impl PowerState {
                 element: load.0.clone(),
             });
         };
-        if &s.feed == to {
+        // Reconnecting a device that is wired to nothing is a rewire even when
+        // it names the feed it was authored on: the feed is where it *should*
+        // be, not where it is. Only a device that already has a connection can
+        // be told it is already there.
+        if &s.feed == to && s.condition == Condition::Intact {
             return Err(PowerDenyReason::SameFeed { load: load.clone() });
         }
         let from = s.feed.clone();
@@ -979,8 +979,12 @@ impl PowerState {
         if s.condition == Condition::Disconnected {
             s.condition = Condition::Intact;
         }
-        // A fresh connection starts from rest; nothing resumes by itself.
+        // The new connection has not carried anything yet: drop the old
+        // warm-up *and* the claim that supply was already present, so the next
+        // tick sees a fresh rise and starts the authored delay. Otherwise a
+        // rewire would be a way to skip the restart policy the floor states.
         s.restart_left = 0;
+        s.energized = false;
         Ok(vec![PowerEvent::Routed {
             load: load.clone(),
             from,
@@ -988,6 +992,37 @@ impl PowerState {
             by,
             cost: route_cost(def, by),
         }])
+    }
+
+    /// The one gate every device-level verb passes through: the seat must be
+    /// able to touch the load, and a seat working *remotely* must have a panel
+    /// to work it from.
+    ///
+    /// Access and permission are different questions, and both belong here
+    /// rather than in each verb. The infiltrator's hands are the panel; the
+    /// hacker's are a wire, so a load authored without a `node` is a load the
+    /// hacker can watch and cannot switch — whatever else can reach its signal.
+    fn device_panel(
+        &self,
+        def: &PowerNetworkDef,
+        by: Seat,
+        load: &LoadId,
+        access: &PowerAccess,
+    ) -> Result<usize, PowerDenyReason> {
+        if !access.can(by, load.as_str()) {
+            return Err(PowerDenyReason::NoAccess {
+                element: load.0.clone(),
+            });
+        }
+        let li = def.load_index(load).ok_or_else(|| PowerDenyReason::NoAccess {
+            element: load.0.clone(),
+        })?;
+        if by == Seat::Hacker && def.loads.get(li).is_none_or(|l| l.node.is_none()) {
+            return Err(PowerDenyReason::RemotePanel {
+                element: load.0.clone(),
+            });
+        }
+        Ok(li)
     }
 
     fn isolate(
@@ -1112,16 +1147,7 @@ impl PowerState {
         on: bool,
         access: &PowerAccess,
     ) -> Result<Vec<PowerEvent>, PowerDenyReason> {
-        if !access.can(by, load.as_str()) {
-            return Err(PowerDenyReason::NoAccess {
-                element: load.0.clone(),
-            });
-        }
-        let Some(li) = def.load_index(load) else {
-            return Err(PowerDenyReason::NoAccess {
-                element: load.0.clone(),
-            });
-        };
+        let li = self.device_panel(def, by, load, access)?;
         let Some(state) = self.loads.get_mut(li) else {
             return Err(PowerDenyReason::NoAccess {
                 element: load.0.clone(),
@@ -1206,21 +1232,25 @@ impl PowerState {
                     s.engaged = wanted;
                     s.output = wanted;
                     if wanted {
-                        s.runtime_left = s.runtime_left.saturating_sub(1);
-                        if s.runtime_left == 0 {
-                            s.spent = true;
-                            s.engaged = false;
-                            s.output = false;
-                            events.push(PowerEvent::BackupSpent {
-                                source: sdef.id.clone(),
-                            });
-                        } else if !was {
+                        if !was {
                             events.push(PowerEvent::BackupEngaged {
                                 source: sdef.id.clone(),
                                 loads: spec.serves.len(),
                                 runtime_ticks: s.runtime_left,
                             });
                         }
+                        // The runtime is spent *after* this tick is served: a
+                        // tick of runtime that carries no current would be a
+                        // backup that cannot run a one-tick load at all. It
+                        // stops, and says so, on the tick it has nothing left.
+                        s.runtime_left = s.runtime_left.saturating_sub(1);
+                        if s.runtime_left == 0 {
+                            s.spent = true;
+                        }
+                    } else if was && s.spent {
+                        events.push(PowerEvent::BackupSpent {
+                            source: sdef.id.clone(),
+                        });
                     }
                 }
             }
