@@ -42,27 +42,27 @@ use crate::scenario::tuning::{ActionKind, DifficultyPreset};
 /// The playable Ghost Lobby simulation — forward-compatible as a UMS floor.
 #[derive(Debug, Clone)]
 pub struct GhostLobbySim {
-    def: ScenarioDefinition,
-    cfg: RunConfig,
+    pub(crate) def: ScenarioDefinition,
+    pub(crate) cfg: RunConfig,
     seed: u32,
     rng: Mulberry32,
     tick: u64,
-    state: RuntimeState,
+    pub(crate) state: RuntimeState,
     idx: IdIndex,
     /// The active difficulty preset (resolved once; rebuilt on reset/restore).
     preset: DifficultyPreset,
     /// The floor's grounded network, derived from the definition once. It is a
     /// pure function of `def`, so a reset cannot stale it and a snapshot need not
     /// carry it; `restore` rebuilds it from the definition it is handed.
-    graph: GroundedGraph,
+    pub(crate) graph: GroundedGraph,
     /// Billy expressed as data: the default archetype's composed form. Like
     /// `graph` it is a pure function of committed content, so a snapshot need
     /// not carry it and `restore`/`reset` cannot stale it. The FSM, sight and
     /// belief systems read every tunable number from here, so any registry
     /// archetype drives the same machinery.
     actor: ComposedActor,
-    paused: bool,
-    events: Vec<Event>,
+    pub(crate) paused: bool,
+    pub(crate) events: Vec<Event>,
 }
 
 /// A last-resort preset so construction stays total even if a preset is missing;

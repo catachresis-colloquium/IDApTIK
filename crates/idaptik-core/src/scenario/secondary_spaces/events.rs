@@ -1,7 +1,35 @@
-//! Human-readable renderings of secondary events, for the scenario log view.
-
+// Human-readable renderings of secondary events, for the scenario log view.
 use crate::scenario::common::Severity;
 use crate::scenario::secondary_spaces::model::*;
+use serde::{Deserialize, Serialize};
+
+/// A typed event from the secondary-space layer, wrapped as
+/// [`crate::scenario::event::Event::Secondary`] so it appears in the same log
+/// as everything else the run produces.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "event")]
+pub enum SecondaryEvent {
+    RouteEntered { route_id: RouteId },
+    RouteLeft { route_id: RouteId },
+    RouteReversed { route_id: RouteId },
+    RouteObstructed { route_id: Option<RouteId>, reason: ObstructionReason },
+    EntryRefused { route_id: Option<RouteId>, reason: EntryRefusalReason },
+    GrilleOpened { access_point: AccessPointId },
+    GrilleClosed { access_point: AccessPointId },
+    ConnectionCreated { from: AccessPointId, to: AccessPointId },
+    CableSabotaged { cable_id: CableId, node_id: String },
+    CableDamaged { cable_id: CableId },
+    SabotageRefused { reason: SabotageRefusalReason },
+    FanEncountered { fan: String },
+    ValveEncountered { valve: String, open: bool },
+    WaterEntered { at: f64 },
+    NoiseEmitted { at: f64, loudness: f64 },
+    VibrationDetected { reading: crate::companion::coprocessors::VibrationReading },
+    ScanComplete { objects: u32 },
+    DebrisLeft { at: f64 },
+    EvidenceLeft { at: f64, kind: EvidenceKind },
+    MoleEntrapped { route_id: RouteId },
+}
 
 impl SecondaryEvent {
     /// Human-readable description plus severity. Ids only: the playable view

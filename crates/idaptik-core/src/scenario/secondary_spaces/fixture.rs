@@ -1,12 +1,11 @@
-//! The authored secondary network for the Ghost Lobby floor: one maintenance
-//! route (hall grille -> service grille), one real cable feeding the
-//! substation, and one damaged-cable section the mole can encounter on his
-//! way back.
-//!
-//! This is content, not physics: every id is stable and every section is
-//! declared. Cable-sabotage events resolve to `cable-substation-feed`, never
-//! to an id invented from position.
-
+// The authored secondary network for the Ghost Lobby floor: one maintenance
+// route (hall grille -> service grille), one real cable feeding the
+// substation, and one damaged-cable section the mole can encounter on his
+// way back.
+//
+// This is content, not physics: every id is stable and every section is
+// declared. Cable-sabotage events resolve to `cable-substation-feed`, never
+// to an id invented from position.
 use crate::scenario::constants as c;
 use crate::scenario::secondary_spaces::model::*;
 

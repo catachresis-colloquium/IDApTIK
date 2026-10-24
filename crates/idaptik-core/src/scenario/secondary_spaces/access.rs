@@ -1,22 +1,22 @@
-//! Actor access to routes: who may traverse what, and why not.
-//!
-//! Human, Moletaire and the security robot deliberately do **not** inherit
-//! identical access: the check combines the route's actor mask, its
-//! clearance vs the actor's body box, its current route state, and its
-//! equipment requirements.
+// Actor access to routes: who may traverse what, and why not.
+//
+// Human, Moletaire and the security robot deliberately do **not** inherit
+// identical access: the check combines the route's actor mask, its
+// clearance vs the actor's body box, its current route state, and its
+// equipment requirements.
+use serde::{Deserialize, Serialize};
 
-use std::collections::{BTreeMap, BTreeSet};
-
+use crate::companion::Equipment;
 use crate::scenario::secondary_spaces::model::*;
 
 /// The result of asking whether an actor may traverse a route right now.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum RouteAccess {
     Allowed,
     Denied { reason: AccessDenial },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum AccessDenial {
     RouteSealed,
     RouteCollapsed,
@@ -78,7 +78,7 @@ pub fn route_accessibility(
     let missing: Vec<Equipment> = route
         .equipment_required
         .iter()
-        .filter(|required| equipped.map_or(true, |carried| carried != *required))
+        .filter(|required| equipped.map_or(true, |carried| carried != **required))
         .cloned()
         .collect();
     if !missing.is_empty() {
@@ -105,6 +105,7 @@ pub fn mole_travel_cost_per_sec(route: &RouteSpec, path_efficiency: f64) -> f64 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
 
     fn duct_route() -> RouteSpec {
         RouteSpec {

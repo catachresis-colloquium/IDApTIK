@@ -1,33 +1,27 @@
-//! Secondary spaces: the ducts, conduits, pipes, excavations and routes that
-//! run beneath and behind the Ghost Lobby floor.
-//!
-//! # Design
-//!
-//! This layer is **authored content, not structural physics**. Every route,
-/// grille, cable and hazard is declared in content ([`SecondarySpec`]) with
-//! stable ids, and every traversal rule is a simple static check:
-//!
-//! * actor class vs the route's actor mask and clearance (body dimensions),
-//! * route state ([`Open`](RouteState::Open) / [`Sealed`](RouteState::Sealed) /
-//!   [`Collapsed`](RouteState::Collapsed)),
-//! * equipment requirements,
-//! * position on an authored route span.
-//!
-//! Topology changes invalidate cached navigation via
-//! [`SecondaryState::topology_version`] and surface readable events
-//! ([`SecondaryEvent::RouteObstructed`],
-//! [`SecondaryEvent::MoleEntrapped`]). Entrapment, injury and irreversible
-//! consequences are events with explicit reasons, never silent state changes.
-//!
-//! # Moletaire vs host-PC acceleration
-//!
-//! Route travel cost is expressed per route ([`RouteSpec::travel_cost_per_sec`]).
-//! When Moletaire traverses, his fictional PathOptimiser coprocessor improves
-//! the effective cost — an in-world augment modelled by the companion
-//! definition's ladders. No host clock, CPU measurement or wall time is ever
-//! read: time is the fixed [`crate::scenario::mathf::TICK_DT`] only, so
-//! coprocessor upgrades and host acceleration can never be confused.
-
+// Secondary spaces: ducts, maintenance passages, cable conduits, traversable
+// pipes, excavatable material and structural barriers beneath the Ghost
+// Lobby floor, and Moletaire's access to them.
+//
+// This layer is authored content, not structural physics. Every route,
+// grille, cable and hazard is declared in content ([`SecondarySpec`]) with
+// stable ids, and every traversal rule is a simple static check: actor class
+// vs the route's actor mask and clearance (body dimensions), route state
+// ([`Open`](RouteState::Open) / [`Sealed`](RouteState::Sealed) /
+// [`Collapsed`](RouteState::Collapsed)), equipment requirements, position on
+// an authored route span. Topology changes invalidate cached navigation via
+// [`SecondaryState::topology_version`] and surface readable events
+// ([`SecondaryEvent::RouteObstructed`],
+// [`SecondaryEvent::MoleEntrapped`]). Entrapment, injury and irreversible
+// consequences are events with explicit reasons, never silent state changes.
+//
+// # Moletaire vs host-PC acceleration
+//
+// Route travel cost is expressed per route ([`RouteSpec::travel_cost_per_sec`]).
+// When Moletaire traverses, his fictional PathOptimiser coprocessor improves
+// the effective cost — an in-world augment modelled by the companion
+// definition's ladders. No host clock, CPU measurement or wall time is ever
+// read: time is the fixed [`crate::scenario::mathf::TICK_DT`] only, so
+// coprocessor upgrades and host-PC acceleration stay distinct.
 use crate::companion::equipment::Equipment;
 use crate::scenario::ids::RoomId;
 use serde::{Deserialize, Serialize};
@@ -73,7 +67,7 @@ secondary_id!(CableId);
 secondary_id!(SpaceId);
 
 /// Body box the simulation reserves for an actor class (canvas units).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ActorBody {
     pub w: f64,
     pub h: f64,
@@ -122,7 +116,7 @@ impl ActorClass {
     }
 
     /// The bit this class sets in an [`ActorClassSet`].
-    pub fn bit(self) -> u8 {
+    pub const fn bit(self) -> u8 {
         match self {
             ActorClass::Human => 1,
             ActorClass::Moletaire => 2,
@@ -271,8 +265,9 @@ pub enum AccessPointKind {
 }
 
 /// The state of a real authored cable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum CableState {
+    #[default]
     Intact,
     Damaged,
     /// Cut through: the node it feeds loses power (cascade via the grounded
@@ -491,43 +486,8 @@ impl SecondaryState {
     }
 }
 
-/// Events emitted by the secondary-space layer. Wrapped as
-/// [`crate::scenario::event::Event::Secondary`] so they appear in the same
-/// log as everything else the run produces.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "event")]
-pub enum SecondaryEvent {
-    RouteEntered { route_id: RouteId },
-    RouteLeft { route_id: RouteId },
-    RouteReversed { route_id: RouteId },
-    RouteObstructed { route_id: Option<RouteId>, reason: ObstructionReason },
-    EntryRefused { route_id: Option<RouteId>, reason: EntryRefusalReason },
-    GrilleOpened { access_point: AccessPointId },
-    GrilleClosed { access_point: AccessPointId },
-    ConnectionCreated { from: AccessPointId, to: AccessPointId },
-    CableSabotaged { cable_id: CableId, node_id: String },
-    CableDamaged { cable_id: CableId },
-    SabotageRefused { reason: SabotageRefusalReason },
-    FanEncountered { fan: String },
-    ValveEncountered { valve: String, open: bool },
-    WaterEntered { at: f64 },
-    NoiseEmitted { at: f64, loudness: f64 },
-    VibrationDetected { reading: crate::companion::coprocessors::VibrationReading },
-    ScanComplete { objects: u32 },
-    DebrisLeft { at: f64 },
-    EvidenceLeft { at: f64, kind: EvidenceKind },
-    MoleEntrapped { route_id: RouteId },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ObstructionReason {
-    Sealed,
-    Collapsed,
-    OutsideAuthoredRoute,
-    NoAccessPoint,
-    NotTraversableForActor,
-}
-
+/// Entry/refusal/obstruction/sabotage refusal reasons — read-only, deliberate,
+/// human-readable explanations kept in the event log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntryRefusalReason {
     AlreadyInRoute,
@@ -538,6 +498,15 @@ pub enum EntryRefusalReason {
     NotTraversable { actor: ActorClass },
     MoleDead,
     MoleBusy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObstructionReason {
+    Sealed,
+    Collapsed,
+    OutsideAuthoredRoute,
+    NoAccessPoint,
+    NotTraversableForActor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

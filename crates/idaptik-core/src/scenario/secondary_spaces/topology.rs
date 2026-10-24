@@ -1,7 +1,6 @@
-//! Spatial queries over the authored secondary network: which route covers a
-/// world position, where its access points are, which cable sits at a
-/// position, and how topology changes invalidate navigation.
-
+// Spatial queries over the authored secondary network: which route covers a
+// world position, where its access points are, which cable sits at a
+// position, and how topology changes invalidate navigation.
 use crate::scenario::secondary_spaces::model::*;
 
 /// Read-only view over one route spec and its current runtime state.
@@ -38,7 +37,9 @@ impl<'a> RouteNetwork<'a> {
             .access_points
             .iter()
             .filter(|ap| (ap.x - x).abs() <= reach)
-            .filter(|ap| room.map_or(true, |r| ap.room.as_deref() == Some(r)))
+            .filter(|ap| {
+                room.map_or(true, |r| ap.room.as_ref().map(|rr| rr.as_str()) == Some(r))
+            })
             .min_by(|a, b| {
                 ((a.x - x).abs())
                     .partial_cmp(&(b.x - x).abs())
@@ -74,7 +75,7 @@ impl<'a> RouteNetwork<'a> {
     /// Inline sections of `route` that cover `x`, in declaration order.
     pub fn spaces_at<'b>(
         &'b self,
-        route_id: &RouteId,
+        route_id: &'b RouteId,
         x: f64,
     ) -> impl Iterator<Item = &'b SpaceSpec> + 'b {
         self.spec.spaces.iter().filter(move |space| {
@@ -119,6 +120,7 @@ pub fn resolve_sabotage_cable(spec: &SecondarySpec, x: f64) -> Option<CableId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
 
     fn spec() -> SecondarySpec {
         SecondarySpec {
@@ -218,9 +220,9 @@ mod tests {
     #[test]
     fn resolve_sabotage_names_the_real_cable_not_the_position() {
         let spec = spec();
-        assert_eq!(
-            resolve_sabotage_cable(&spec, 1180.0).map(|id| id.as_str()),
-            Some("cable-substation-feed")
+        assert!(
+            resolve_sabotage_cable(&spec, 1180.0)
+                .is_some_and(|id| id.as_str() == "cable-substation-feed")
         );
         // A position invented from outside the authored reach resolves to
         // nothing: the mole chewed dirt.

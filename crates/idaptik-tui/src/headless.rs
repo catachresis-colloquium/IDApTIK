@@ -5,9 +5,7 @@ use crate::config;
 use crate::script::{ScriptFile, expand};
 use idaptik_core::Debrief;
 use idaptik_core::scenario::event::Event;
-use idaptik_core::scenario::{
-    GhostLobbySim, RuntimeSnapshot, ghost_lobby, ghost_lobby_secondary,
-};
+use idaptik_core::scenario::{GhostLobbySim, RuntimeSnapshot, ghost_lobby, ghost_lobby_secondary};
 use serde::Serialize;
 use std::path::Path;
 
@@ -36,8 +34,7 @@ pub fn build(script: &ScriptFile) -> Result<GhostLobbySim, String> {
     } else {
         ghost_lobby()
     };
-    GhostLobbySim::new(def, cfg, script.seed)
-        .map_err(|e| format!("invalid scenario: {e:?}"))
+    GhostLobbySim::new(def, cfg, script.seed).map_err(|e| format!("invalid scenario: {e:?}"))
 }
 
 /// Simulate a script to its end (or `max_ticks`), returning the sim and the full

@@ -362,7 +362,7 @@ pub struct MoletaireSnapshot {
 }
 
 /// The deterministic Moletaire companion simulation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MoletaireSim {
     def: CompanionDefinition,
     seed: u32,
