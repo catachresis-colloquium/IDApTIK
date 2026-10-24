@@ -20,6 +20,8 @@ jobs:
       DIGEST: /tmp/arena-digest.md
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Provision pinned Rust toolchain
         run: |
           rustup show
