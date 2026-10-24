@@ -61,7 +61,9 @@ jobs:
           emit_gzip() {
             local title="$1" file="$2" part=0
             gzip -cn9 "$file" | base64 -w0 | fold -w 3000 > .arena-diagnostics/gz.b64
-            while IFS= read -r line; do
+            # The `|| [ -n "$line" ]` guard keeps the final fragment when
+            # fold's last line has no trailing newline.
+            while IFS= read -r line || [ -n "$line" ]; do
               echo "::warning title=${title}-part-${part}::${line}"
               part=$((part + 1))
             done < .arena-diagnostics/gz.b64
