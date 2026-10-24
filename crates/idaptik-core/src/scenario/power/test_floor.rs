@@ -127,6 +127,7 @@ fn breaker(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn load(
     id: &str,
     label: &str,

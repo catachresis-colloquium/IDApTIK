@@ -562,12 +562,7 @@ impl PowerNetworkDef {
         ids.extend(self.breakers.iter().map(|b| b.id.0.clone()));
         ids.extend(self.hazards.iter().map(|h| h.id.0.clone()));
         ids.extend(self.interlocks.iter().map(|i| i.id.clone()));
-        for id in ids {
-            if !seen.insert(id.clone()) {
-                return Some(id);
-            }
-        }
-        None
+        ids.into_iter().find(|id| !seen.insert(id.clone()))
     }
 
     /// Every problem with the definition; empty means it is playable.

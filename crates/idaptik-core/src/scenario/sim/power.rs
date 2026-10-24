@@ -228,10 +228,8 @@ impl GhostLobbySim {
                         }
                     }
                 }
-                LoadKind::Vacuum => {
-                    if id == VACUUM_NODE_ID {
-                        self.state.vacuum.active = false;
-                    }
+                LoadKind::Vacuum if id == VACUUM_NODE_ID => {
+                    self.state.vacuum.active = false;
                 }
                 _ => {}
             }

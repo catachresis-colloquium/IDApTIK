@@ -21,7 +21,7 @@ use idaptik_core::scenario::signal::sim::Seat;
 const OFFICE_CAM: &str = "cam-1";
 const LAUNDRY_LIGHT: &str = "light-laundry";
 
-fn sim() -> PowerSim {
+fn floor() -> PowerSim {
     PowerSim::new(power_test_floor()).expect("the test floor validates")
 }
 
@@ -78,7 +78,7 @@ fn route(sim: &mut PowerSim, by: Seat, load_id: &str, to: &str) -> Vec<PowerEven
     let access = all(sim);
     let cmd = PowerCommand::Route {
         by,
-        load: load(id),
+        load: load(load_id),
         feed: feed(to),
     };
     sim.apply(&cmd, &access)
@@ -180,7 +180,7 @@ fn an_unprotected_or_circular_network_is_rejected() {
 
 #[test]
 fn a_settled_floor_runs_its_devices() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 260);
     assert!(operating(&sim, CAM_HALL));
     assert!(operating(&sim, OFFICE_CAM));
@@ -194,14 +194,14 @@ fn a_settled_floor_runs_its_devices() {
 #[test]
 fn every_rung_of_the_ladder_can_be_seen() {
     // No command.
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     command(&mut sim, Seat::Infiltrator, OFFICE_CAM, false);
     run(&mut sim, 2);
     assert_eq!(why(&sim, OFFICE_CAM), Some(OffReason::NoCommand));
 
     // Unpowered: the source is off, which is recoverable.
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     switch(&mut sim, Seat::Infiltrator, MAINS_B, false);
     run(&mut sim, 2);
@@ -211,7 +211,7 @@ fn every_rung_of_the_ladder_can_be_seen() {
     );
 
     // Isolated: protection open.
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     isolate(&mut sim, Seat::Infiltrator, BRK_B, true);
     run(&mut sim, 2);
@@ -223,7 +223,7 @@ fn every_rung_of_the_ladder_can_be_seen() {
     );
 
     // Unavailable: the conductor is gone for the run.
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     cut(&mut sim, Seat::Infiltrator, FEED_B);
     run(&mut sim, 2);
@@ -273,7 +273,7 @@ fn every_rung_of_the_ladder_can_be_seen() {
 
 #[test]
 fn a_command_never_beats_a_dead_supply() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     cut(&mut sim, Seat::Infiltrator, FEED_B);
     run(&mut sim, 2);
@@ -292,7 +292,7 @@ fn a_command_never_beats_a_dead_supply() {
 
 #[test]
 fn losing_one_feed_does_not_touch_the_other() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 260);
     assert!(operating(&sim, LAUNDRY_LIGHT) && operating(&sim, OFFICE_CAM));
     cut(&mut sim, Seat::Infiltrator, FEED_A);
@@ -310,7 +310,7 @@ fn losing_one_feed_does_not_touch_the_other() {
 
 #[test]
 fn restart_behaviour_is_stated_per_device_not_discovered() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     // Isolation is reversible, so this is the clean way to test a restore.
     isolate(&mut sim, Seat::Infiltrator, BRK_B, true);
@@ -350,7 +350,7 @@ fn restart_behaviour_is_stated_per_device_not_discovered() {
 
 #[test]
 fn the_backup_runs_for_its_stated_runtime_and_then_stops() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     let events = cut(&mut sim, Seat::Infiltrator, FEED_B);
     assert!(
@@ -394,7 +394,7 @@ fn the_backup_runs_for_its_stated_runtime_and_then_stops() {
 
 #[test]
 fn an_overload_trips_the_protection_and_only_a_clear_fault_resets_it() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     // Feed B carries 13 of its 14 units. Put the 6-unit pump on it.
     route(&mut sim, Seat::Infiltrator, PUMP_LAUNDRY, FEED_B);
@@ -437,7 +437,7 @@ fn an_overload_trips_the_protection_and_only_a_clear_fault_resets_it() {
 
 #[test]
 fn a_cut_conductor_trips_the_protection_and_never_clears() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     cut(&mut sim, Seat::Infiltrator, FEED_A);
     run(&mut sim, 2);
@@ -461,7 +461,7 @@ fn a_cut_conductor_trips_the_protection_and_never_clears() {
 #[test]
 fn exposed_power_is_live_only_where_it_is_authored_and_only_while_fed() {
     let hazard = HazardId::from("haz-pump");
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
 
     // In the laundry, inside the authored bounds.
@@ -507,7 +507,7 @@ fn exposed_power_is_live_only_where_it_is_authored_and_only_while_fed() {
 
 #[test]
 fn a_cable_cut_is_hand_work_and_rewiring_is_not() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
 
     // The hacker can reach the feed and still cannot cut it.
@@ -538,7 +538,7 @@ fn a_cable_cut_is_hand_work_and_rewiring_is_not() {
 
 #[test]
 fn a_local_board_is_not_a_remote_board() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     // Give the hacker the *access* and it still cannot work a local-only board.
     let mut access = PowerAccess::default();
@@ -573,7 +573,7 @@ fn a_local_board_is_not_a_remote_board() {
 
 #[test]
 fn a_dumb_load_has_no_remote_panel() {
-    let mut sim = sim();
+    let mut sim = floor();
     run(&mut sim, 200);
     let mut access = PowerAccess::default();
     access.hacker.insert(PUMP_LAUNDRY.to_owned());
@@ -632,7 +632,7 @@ fn the_wire_form_names_one_namespace_per_verb() {
 
 #[test]
 fn a_snapshot_restores_the_run_exactly() {
-    let mut a = sim();
+    let mut a = floor();
     run(&mut a, 40);
     cut(&mut a, Seat::Infiltrator, FEED_B);
     run(&mut a, 30);
@@ -652,7 +652,7 @@ fn a_snapshot_restores_the_run_exactly() {
 
 #[test]
 fn the_snapshot_format_is_not_negotiable() {
-    let mut snapshot = sim().snapshot();
+    let mut snapshot = floor().snapshot();
     snapshot.format = "idaptik-power-snapshot/0".into();
     assert!(PowerSim::restore(snapshot).is_err());
 }
