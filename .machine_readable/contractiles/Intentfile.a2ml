@@ -21,8 +21,9 @@ roadmap: Envelope -> Wheel -> Skateboard -> Bicycle -> Chassis -> Motorcycle
 
 Ship an asymmetric infiltration game where the hacker solves a real, legible
 network rather than pressing a "hack" button, and the infiltrator moves
-through a physical space whose layer bites back. Rust owns gameplay truth;
-Elixir owns multiplayer and session life.
+through a physical space whose layer bites back. Rust owns deterministic game
+semantics; the current Elixir/Burble path owns relay/session life, while
+simulation authority is selected separately by deployment topology (ADR-0013).
 
 ## Anti-Purpose
 

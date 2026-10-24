@@ -5,10 +5,10 @@
 project = "IDApTIK"
 version = "0.1.0"
 type = "game"
-last-updated = "2026-09-20"
+last-updated = "2026-10-24"
 branch = "main"
 build-status = "Envelope vertical slice implemented; player-facing GUI incomplete"
-test-status = "Rust core/TUI/FFI/net, Bevy frontend, Nickel contracts, and the Burble-backed two-seat loopback are CI-gated; the cross-repository UMS round trip is not currently CI-gated"
+test-status = "Rust core/TUI/FFI/net, Bevy frontend, Nickel contracts, and the Burble-backed two-seat relay loopback are CI-gated; ADR-0013 topology/state contract tests are in-repo, but direct P2P, hosted-authority, and real multi-server integration gates are not implemented; the cross-repository UMS round trip is not currently CI-gated"
 
 [project-context]
 description = "Asymmetric two-player infiltration game. One player infiltrates a physical space; the other hacks a grounded network simulation."
@@ -32,11 +32,12 @@ phase-goal = "Turn the proven Ghost Lobby/TUI/netplay slice into a coherent play
 
 [component-status]
 core = { status = "live", notes = "Deterministic event-sourced Ghost Lobby, building runtime, grounded network, actors, snapshots, package loading, and replay." }
-net = { status = "live", notes = "Two-seat delay lockstep, pacing, pause, peer loss, digest checks, snapshot resync, and interactive client." }
+deployment-contract = { status = "contract-only", notes = "ADR-0013 and crates/idaptik-net/src/deployment.rs specify the axes/state policy; direct transport, hosted authority, durable LMDB journal, and federated routing are not implemented." }
+net = { status = "live-partial", notes = "Two-seat delay lockstep, pacing, pause, peer loss, digest checks, snapshot resync, and interactive relay client. Current live path is Burble/Phoenix relay-only with both clients simulating; direct P2P, hosted server authority, and federated session routing remain unimplemented (ADR-0013)." }
 ffi = { status = "partial", notes = "The Rust-exported C ABI drives the real Ghost Lobby simulation with JSON command/event and snapshot parity; the Idris2 ABI model exists (crates/idaptik-ffi/abi, gated in CI); the Zig adapter now exists too (crates/idaptik-ffi/zig-adapter) with conformance and fuzz suites; the Idris2 proof obligations and the serde-wire conformance suite remain, tracked in issue #103." }
 tui = { status = "live", notes = "Playable reference frontend plus headless, replay, and export verification." }
 bevy-frontend = { status = "selected-partial", notes = "Working renderer, HUD, keymap, interpolation, and parity tests; full player-facing shell and visual validation remain." }
-burble-relay = { status = "external-live", notes = "The relay lives in sibling metadatastician/burble. IDApTIK pins a known-compatible revision in CI and gates role routing, de-duplication, determinism, peer loss, lockstep, and snapshot resync through its game lane." }
+burble-relay = { status = "external-live", notes = "The relay lives in sibling metadatastician/burble. IDApTIK pins a known-compatible revision in CI and gates the relay-backed client path; Burble forwards role-checked commands/events and is not an IDApTIK simulation authority." }
 config = { status = "live", notes = "Nickel schemas, positive exports, semantic Rust round-trip, and negative fixtures." }
 ums-package = { status = "live-v1", notes = "IDApTIK-owned v1 package syntax, loader, semantic validation, deterministic execution, snapshot/restore, and replay." }
 ums-roundtrip = { status = "tested", notes = "Every UMS ADR-0014 clause met as of 2026-07-28. RoundTripResult.accepted exports the loader's parsed view of the authored envelope; UMS diffs it against the profile source and fails on any difference. Deliberately excludes `scenario`, which the compiler copies from this repository's own fixture verbatim -- comparing it would be a tautology." }
@@ -48,21 +49,22 @@ moletaire = { status = "tested-seam", notes = "Deterministic companion module ex
 items = [
   { item = "Bevy is the selected graphical frontend; Fyrox is retired", ref = "ADR-0008" },
   { item = "IDApTIK owns the versioned UMS package boundary", ref = "ADR-0007" },
-  { item = "Elixir session life is supplied by the external Burble game lane; IDApTIK owns deterministic gameplay and the client contract", ref = "ADR-0006" },
+  { item = "The current Burble path supplies external relay/session lifecycle; Rust owns game semantics, and Burble is not simulation authority", ref = "ADR-0006" },
   { item = "Enaction Engine is the runtime kernel; UMS is the authoring studio; a shipped game runs with neither UMS source nor binaries present", ref = "enaction ADR-0013" },
   { item = "IDApTIK may depend one-way on enaction-* under three stated conditions; never on idaptik-ums or slavia-core", ref = "ADR-0009" },
   { item = "The evidence ledger and VSM supervisor stay in idaptik-core until a three-part extraction trigger fires", ref = "ADR-0010" },
   { item = "Cognitive-model work is documented in the open; the private-repository split is withdrawn", ref = "ADR-0011" },
   { item = "Cognition is discrete and event-gated, affect continuous and per-tick; they join only at an event-sourced ledger, and affect buys attention rather than belief", ref = "enaction ADR-0014" },
+  { item = "Topology, administrative ownership, simulation authority, and optional GSA integration are separate; peer, hosted, and federated state classes have explicit storage and failure contracts", ref = "ADR-0013" },
   { item = "Mass (fixed point, 1/10000) is the kernel confidence type; a relational solution count is not a confidence and has no numeric conversion", ref = "enaction ADR-0016" },
 ]
 
 [open-decisions]
 remaining = [
-  { item = "Persistence and save-compatibility policy", resolve-by = "post-Envelope" },
+  { item = "Long-term player-save compatibility, export, and session-log retention beyond live-authority recovery", resolve-by = "post-Envelope" },
   { item = "Long-term Rust/Elixir wire encoding beyond the current JSON contract", resolve-by = "post-Envelope", ref = "ADR-0005" },
   { item = "Canonical era versus switchable style axis", resolve-by = "before substantial asset production" },
-  { item = "Public relay, matchmaking, and authoritative-host policy", resolve-by = "before public playtesting" },
+  { item = "Public matchmaking/rendezvous/NAT traversal and consensus-backed cross-server authority transfer", resolve-by = "before public playtesting", ref = "ADR-0013" },
   { item = "Canonical proposition language: whether a Dempster-Shafer focal set can contain a non-ground proposition. Blocks a single shared ESM crate", resolve-by = "before any kernel extraction" },
   { item = "Theory-of-mind depth and resource accounting. Any cap must be counted in deterministic units -- inferences or unifications, never milliseconds -- or byte-parity breaks", resolve-by = "before nested belief ships" },
   { item = "Whether affect is state or an annotation on events. The shared contract currently permits only the latter", resolve-by = "before affect enters Rust" },
@@ -75,7 +77,7 @@ remaining = [
   { item = "Validate the Bevy frontend in a real window and establish performance/accessibility baselines", priority = "critical" },
   { item = "Add a first intentional art, UI, and sound pass", priority = "high" },
   { item = "Write the era ledger, initial region trope definitions, and story-bible skeleton", priority = "high" },
-  { item = "Define persistence/versioning using the existing snapshot and event-log substrate", priority = "medium" },
+  { item = "Define long-term player-save compatibility and retention beyond per-session authority recovery", priority = "medium" },
 ]
 
 [cross-repository-reconciliation]

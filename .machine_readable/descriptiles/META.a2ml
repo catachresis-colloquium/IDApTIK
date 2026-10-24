@@ -6,7 +6,7 @@
 
 [metadata]
 version = "0.1.0"
-last-updated = "2026-09-20"
+last-updated = "2026-10-24"
 
 [project-info]
 name = "IDApTIK"
@@ -38,6 +38,11 @@ records = [
   { id = "ADR-0006", title = "gossamer host window + burble transport — the two-player windowed slice", status = "accepted" },
   { id = "ADR-0007", title = "Versioned UMS package boundary owned by IDApTIK", status = "accepted" },
   { id = "ADR-0008", title = "Select Bevy and retire Fyrox", status = "accepted" },
+  { id = "ADR-0009", title = "Enaction kernel dependency direction", status = "accepted" },
+  { id = "ADR-0010", title = "CAC kernel grown in idaptik-core", status = "accepted" },
+  { id = "ADR-0011", title = "Cognitive-model work documented in the open", status = "accepted" },
+  { id = "ADR-0012", title = "Signal network for re-wiring the building", status = "proposed" },
+  { id = "ADR-0013", title = "Deployment topologies, simulation authority, and state ownership", status = "accepted", notes = "Separates topology, administrative ownership, simulation authority, and optional GSA; runtime support remains partial." },
 ]
 
 [development-practices]
@@ -51,5 +56,6 @@ contribution = "DCO 1.1 — sign commits with git commit -s"
 [design-rationale]
 gameplay-truth-in-rust = "One engine-agnostic core crate holds all gameplay truth; the selected Bevy frontend translates input into commands and presents events/snapshots without feeding render state back into the simulation (ADR-0003, ADR-0008)."
 asymmetric-by-construction = "Control is not shared: the infiltrator moves through the world, the hacker manipulates a grounded, legible network (real topology, subnets/zones, routing, DNS, traceroute, SSH pivoting, trace timers). The hacker has physical presence and real discovery risk."
-elixir-owns-sessions = "Rust owns deterministic gameplay truth; Elixir/OTP owns multiplayer and session lifecycle as a relay-only lockstep over a typed Command/Event wire (ADR-0002, ADR-0005)."
+elixir-owns-sessions = "Rust owns deterministic gameplay semantics; the current Elixir/OTP Burble path owns relay/session lifecycle, while simulation authority is topology-specific and separate (ADR-0002, ADR-0005, ADR-0013)."
+distribution-axes = "Network topology, administrative ownership, simulation authority, and optional GSA integration are independent deployment axes; no cache, relay, or discovery service is consensus (ADR-0013)."
 determinism = "The scenario sim is deterministic and event-sourced (definition-as-data), which is what lets the TUI frontend act as a --headless/--replay/--export verifier over core (ADR-0004)."

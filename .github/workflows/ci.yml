@@ -1,7 +1,7 @@
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
-#   just test-ghost           -> cargo test (core/tui/ffi) + clippy -D warnings + fmt --check
+#   just test-ghost           -> cargo test (core/tui/ffi/net) + clippy -D warnings + fmt --check
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
@@ -331,7 +331,7 @@ jobs:
         run: bash scripts/vendor_bevy_winit_check.sh graph
 
   test-ghost:
-    name: test-ghost (core/tui/ffi + clippy + fmt)
+    name: test-ghost (core/tui/ffi/net + clippy + fmt)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

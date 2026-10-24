@@ -7,8 +7,9 @@
 
 @abstract:
 Physical-state invariants for IDApTIK, the asymmetric two-player infiltration
-game (Rust gameplay truth + Elixir session relay). These are hard
-requirements: CI and pre-commit hooks should fail if any check fails. Probes
+game (Rust gameplay semantics + the current Elixir/Burble relay path, with
+simulation authority selected by deployment topology per ADR-0013). These are
+hard requirements: CI and pre-commit hooks should fail if any check fails. Probes
 target IDApTIK's real tree, not a generic template.
 @end
 
