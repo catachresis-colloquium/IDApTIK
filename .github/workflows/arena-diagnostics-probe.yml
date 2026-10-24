@@ -56,6 +56,16 @@ jobs:
               part=$((part + 1))
             done
           }
+          # Text diffs compress ~8x, so gzip+base64 carries the whole rustfmt
+          # report in a couple of annotations instead of ten truncated ones.
+          emit_gzip() {
+            local title="$1" file="$2" part=0
+            gzip -cn9 "$file" | base64 -w0 | fold -w 3800 > .arena-diagnostics/gz.b64
+            while IFS= read -r line; do
+              echo "::warning title=${title}-part-${part}::${line}"
+              part=$((part + 1))
+            done < .arena-diagnostics/gz.b64
+          }
           # Compact error-only compiler views first, so they survive even if
           # the annotation cap is reached.
           grep -E "error(\[|:)|warning:|-->|^exit=" .arena-diagnostics/compile.txt \
@@ -76,5 +86,5 @@ jobs:
           grep -qE "error|warning" .arena-diagnostics/clippy-errors.txt \
             && emit clippy-errors .arena-diagnostics/clippy-errors.txt || true
           emit test-errors .arena-diagnostics/test-errors.txt
-          emit rustfmt .arena-diagnostics/rustfmt.txt
+          emit_gzip rustfmt-gz .arena-diagnostics/rustfmt.txt
           exit 0
