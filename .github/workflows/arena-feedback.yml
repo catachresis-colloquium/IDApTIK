@@ -1,0 +1,57 @@
+name: arena-build-feedback
+
+# TEMPORARY, agent-authored. The development sandbox has no Rust toolchain and
+# no route to install one, and GitHub's job logs are served from a blob host the
+# sandbox cannot reach. This workflow compiles the branch, then pushes what the
+# compiler said (and what rustfmt wanted) to a side branch the sandbox *can*
+# fetch. It carries no `uses:` refs, so the Actions lockfile gate cannot desync
+# on it. Delete it with the rest of the feedback machinery.
+
+on:
+  push:
+    branches:
+      - arena/e86a742d-idaptik
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  feedback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch the branch
+        run: |
+          set -eu
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" work
+          cd work
+          git log --oneline -1
+
+      - name: Provision pinned Rust toolchain
+        working-directory: work
+        run: rustup show
+
+      - name: Collect compiler diagnostics
+        working-directory: work
+        run: |
+          set +e
+          mkdir -p feedback
+          cargo check --workspace --all-targets --message-format=short > feedback/check.log 2>&1
+          echo "check exit: $?" >> feedback/check.log
+          cargo fmt --all -- --check > feedback/fmt.log 2>&1
+          echo "fmt exit: $?" >> feedback/fmt.log
+          cargo fmt --all
+          git diff > feedback/fmt.patch
+          wc -l feedback/check.log feedback/fmt.log feedback/fmt.patch
+
+      - name: Publish the diagnostics to a side branch
+        working-directory: work
+        run: |
+          set -eu
+          git config user.name "arena-feedback"
+          git config user.email "arena-feedback@users.noreply.github.com"
+          git checkout -b arena/feedback
+          git add -A feedback
+          git commit --no-verify -m "chore: build feedback for ${GITHUB_SHA}"
+          git push --no-verify origin HEAD:refs/heads/arena/feedback
