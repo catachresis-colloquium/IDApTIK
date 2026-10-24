@@ -38,12 +38,16 @@ jobs:
           echo "exit=$?" >> .arena-diagnostics/clippy.txt
           cargo test -p idaptik-net --no-run > .arena-diagnostics/net-compile.txt 2>&1
           echo "exit=$?" >> .arena-diagnostics/net-compile.txt
+          cargo test -p idaptik-evil-weevil > .arena-diagnostics/test-run.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/test-run.txt
 
           emit() {
             local title="$1" file="$2" part=0
+            # Annotation messages cap at 4096 chars after decoding, so keep
+            # each raw chunk comfortably under that.
             while true; do
               local chunk
-              chunk=$(dd if="$file" bs=1 skip=$((part * 60000)) count=60000 2>/dev/null)
+              chunk=$(dd if="$file" bs=1 skip=$((part * 3500)) count=3500 2>/dev/null)
               [ -z "$chunk" ] && break
               local encoded
               encoded=$(printf '%s' "$chunk" | jq -sRr @uri)
@@ -59,8 +63,11 @@ jobs:
             | head -120 > .arena-diagnostics/clippy-errors.txt
           grep -E "error(\[|:)|warning:|-->|^exit=" .arena-diagnostics/net-compile.txt \
             | head -120 > .arena-diagnostics/net-errors.txt
+          grep -E "test result|FAILED|panicked|^exit=" .arena-diagnostics/test-run.txt \
+            | head -80 > .arena-diagnostics/test-errors.txt
           emit compile-errors .arena-diagnostics/compile-errors.txt
           emit clippy-errors .arena-diagnostics/clippy-errors.txt
           emit net-errors .arena-diagnostics/net-errors.txt
+          emit test-errors .arena-diagnostics/test-errors.txt
           emit rustfmt .arena-diagnostics/rustfmt.txt
           exit 0

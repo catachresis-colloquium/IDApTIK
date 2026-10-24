@@ -65,17 +65,22 @@ impl Scenario for StaleDuplicateScenario {
         let mut weevil = EvilWeevil::new(proposer.clone());
 
         // Permission separation is load-bearing: the agent cannot reach the
-        // validator or the policy file directly.
-        harness.check(
-            "permission:adversary-propose-only",
+        // validator or the policy file directly. Evaluate before the mutable
+        // borrow of `harness.check`, so the two borrows never overlap.
+        let adversary_propose_only =
             harness.authorise(&proposer, Permission::ProposeBoundedIntent)
                 && !harness.authorise(&proposer, Permission::FeedProductionValidator)
-                && !harness.authorise(&proposer, Permission::ConfigureEnforcementPolicy),
+                && !harness.authorise(&proposer, Permission::ConfigureEnforcementPolicy);
+        harness.check(
+            "permission:adversary-propose-only",
+            adversary_propose_only,
             "adversary holds only ProposeBoundedIntent",
         );
+        let harness_cannot_propose =
+            !harness.authorise(&Principal::harness(), Permission::ProposeBoundedIntent);
         harness.check(
             "permission:harness-cannot-propose",
-            !harness.authorise(&Principal::harness(), Permission::ProposeBoundedIntent),
+            harness_cannot_propose,
             "the delivery identity cannot author adversarial intents",
         );
 
@@ -183,16 +188,17 @@ impl Scenario for StaleDuplicateScenario {
             .unwrap();
         harness.record_intent(&unknown);
         let unknown_outcome = harness.feed_raw_to_validator(&mut target, &unknown.wire);
+        let unknown_tag_evidence = matches!(unknown_outcome, ValidatorOutcome::Undecodable(_))
+            && harness.telemetry().iter().any(|t| matches!(
+                t,
+                crate::telemetry::TelemetryEvent::ValidatorRejected {
+                    violation: ViolationKind::UnknownCommandTag,
+                    ..
+                }
+            ));
         harness.check(
             "unknown-tag-rejected",
-            matches!(unknown_outcome, ValidatorOutcome::Undecodable(_))
-                && harness.telemetry().iter().any(|t| matches!(
-                    t,
-                    crate::telemetry::TelemetryEvent::ValidatorRejected {
-                        violation: ViolationKind::UnknownCommandTag,
-                        ..
-                    }
-                )),
+            unknown_tag_evidence,
             "unknown command tags cannot decode into a Command",
         );
 

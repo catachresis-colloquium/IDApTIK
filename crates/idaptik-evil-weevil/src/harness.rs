@@ -36,7 +36,7 @@ use serde_json::Value;
 use std::path::Path;
 
 /// One observable fact recorded during a scenario.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObservedEffect {
     pub step: u64,
     pub what: String,
@@ -46,7 +46,7 @@ pub struct ObservedEffect {
 }
 
 /// A named invariant check, evaluated during the run.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScenarioCheck {
     pub name: String,
     pub passed: bool,
@@ -299,12 +299,13 @@ impl IsolatedHarness {
                 ValidatorOutcome::Rejected(NetError::Session(format!("relay dropped: {reason}")))
             }
             RelayVerdict::Rejected { reason } => {
+                let error = NetError::Session(format!("relay rejected: {reason}"));
                 self.telemetry.push(TelemetryEvent::ValidatorRejected {
                     violation: ViolationKind::RoleForbidden,
                     detail: reason.clone(),
                 });
                 self.record(step, "relay-rejected", reason, false);
-                ValidatorOutcome::Rejected(NetError::Session(format!("relay rejected: {reason}")))
+                ValidatorOutcome::Rejected(error)
             }
         }
     }
@@ -466,6 +467,7 @@ impl IsolatedHarness {
         }
         self.metrics.peak_queue_depth = self.metrics.peak_queue_depth.max(in_flight.len());
         self.metrics.wire_messages = self
+            .metrics
             .wire_messages
             .saturating_add(in_flight.len().min(max_delivery_per_turn));
 

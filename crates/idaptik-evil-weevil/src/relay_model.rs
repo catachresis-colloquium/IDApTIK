@@ -246,8 +246,8 @@ impl RelayModel {
             },
         ];
         for cmd in sample {
-            let tag = serde_json::to_value(&cmd)
-                .expect("command serialises")
+            let value = serde_json::to_value(&cmd).expect("command serialises");
+            let tag = value
                 .get("cmd")
                 .and_then(Value::as_str)
                 .expect("tagged enum");
@@ -299,8 +299,10 @@ mod tests {
     #[test]
     fn relayed_frames_have_seq_stripped() {
         let mut relay = RelayModel::join("idaptik", Role::Hacker).unwrap();
-        let RelayVerdict::Relayed { payload } = relay.command(with_seq(net_ssh(2, 0), 1))
-        else {
+        // Bind the verdict first: matching directly against the temporary
+        // would leave `payload` borrowing a value dropped at the semicolon.
+        let verdict = relay.command(with_seq(net_ssh(2, 0), 1));
+        let RelayVerdict::Relayed { payload } = &verdict else {
             panic!("fresh command must relay");
         };
         assert!(payload.get("seq").is_none(), "burble strips seq");

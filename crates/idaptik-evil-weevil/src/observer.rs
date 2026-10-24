@@ -16,7 +16,7 @@
 //!    or remote-action variant, and local protective decisions never assume
 //!    universal ban authority.
 
-use crate::telemetry::{FaultKind, TelemetryEvent, ViolationKind};
+use crate::telemetry::{FaultKind, TelemetryEvent};
 use serde::{Deserialize, Serialize};
 
 /// Evidence classes, ordered from least to most severe.
