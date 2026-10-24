@@ -609,12 +609,13 @@ fn a_pulse_interrupted_by_an_outage_finishes_when_power_returns() {
 }
 
 #[test]
-fn a_latch_does_not_toggle_on_power_up() {
-    // A latch relay latches on an A rising edge. Here the edge arrives while
-    // the relay is dark and the input stays high until supply returns. On
-    // restore there is no new edge, so the latch must not move: the cached
-    // input history has to be synchronised while the coil is inert.
-    let mut s = relay_rig(Gate::Latch);
+fn a_relay_that_goes_dark_mid_edge_does_not_pulse_on_power_up() {
+    // A relay computes `Q` from its cached input bits. Going inert on the tick
+    // it received an edge leaves that cache stale, and power returning would
+    // then emit a pulse nobody asked for — a self-closing door opening, a light
+    // blinking, on a tick with no input at all. An edge that was not delivered
+    // while the coil was dead must not be remembered.
+    let mut s = relay_rig(Gate::Or);
     let on = high("T", OutPort::Compromised);
     let toggles = |events: &[SignalEvent]| {
         events
@@ -622,15 +623,19 @@ fn a_latch_does_not_toggle_on_power_up() {
             .filter(|e| matches!(e, SignalEvent::Switched { device, .. } if device.as_str() == "L"))
             .count()
     };
-    assert_eq!(toggles(&run(&mut s, &on, 5)), 1, "the first edge latches");
-
-    // Dark, and T stays high throughout: an edge that arrives while inert.
+    // t0: the relay samples the terminal and caches the edge in `s.a`.
+    s.step(&on);
+    // t1: the coil dies. `Q` is forced low while it is dark.
     let mut dark = on.clone();
     dark.unpower("R");
-    run(&mut s, &dark, 5);
-
-    // Supply returns with T still high: no edge, no toggle.
-    assert_eq!(toggles(&run(&mut s, &on, 20)), 0, "no phantom edge");
+    run(&mut s, &dark, 3);
+    // t2: supply returns with the input still high. No new edge has arrived,
+    // so there is nothing to pulse.
+    assert_eq!(
+        toggles(&run(&mut s, &on, 20)),
+        0,
+        "no phantom pulse on power-up"
+    );
 }
 
 #[test]

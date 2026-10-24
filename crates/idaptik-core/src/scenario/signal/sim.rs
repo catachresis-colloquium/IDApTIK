@@ -665,15 +665,16 @@ impl Run<'_> {
                 //   timer and the saved state together would leave a door open
                 //   for ever, because nothing is left to close it.
                 // * The edge history is synchronised with the inputs, so a wire
-                //   held high through the outage does not fire on restore. The
-                //   relay's cached inputs are part of that history: it latches
-                //   on `a && !s.a`, so leaving `s.a` stale would toggle a latch
-                //   on power-up for an edge that arrived while it was dark.
+                //   held high through the outage does not fire on restore. That
+                //   history is `prev_in` *and* the relay's cached edge flags:
+                //   `Q` is computed from `s.a`/`s.b`, so a relay that went dark
+                //   on the same tick it received an edge would otherwise emit a
+                //   pulse on power-up that nobody asked for. No edge was
+                //   delivered while it was inert, so none is remembered.
                 let s = &mut self.state.devices[i];
-                let level = levels[i];
-                s.a = level & InPort::A.bit() != 0;
-                s.b = level & InPort::B.bit() != 0;
-                s.prev_in = level;
+                s.a = false;
+                s.b = false;
+                s.prev_in = levels[i];
                 continue;
             }
             let s = &mut self.state.devices[i];

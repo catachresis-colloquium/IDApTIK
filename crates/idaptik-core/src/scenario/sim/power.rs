@@ -755,6 +755,12 @@ mod tests {
         assert!(sim.state.vacuum.active, "it is still asked to clean");
         let stalled = sim.state.vacuum.x;
 
+        // Opening and closing a board are both hand work, and the hands are
+        // already full from the isolation.
+        while sim.hands_busy() > 0.0 {
+            step(&mut sim, &[]);
+        }
+
         // Supply returns; the warm-up runs; the vacuum moves again.
         step(
             &mut sim,
