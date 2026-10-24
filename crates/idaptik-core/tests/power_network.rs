@@ -369,8 +369,14 @@ fn the_backup_runs_for_its_stated_runtime_and_then_stops() {
     );
     // "Temporary operation": the camera never blinks, because the UPS picks up
     // in the same tick the cable goes.
-    assert!(operating(&sim, CAM_HALL));
+    let said = sim
+        .report(&load(CAM_HALL))
+        .map(|r| r.explain())
+        .unwrap_or_default();
+    assert!(operating(&sim, CAM_HALL), "{said}");
     assert!(!operating(&sim, OFFICE_CAM), "the UPS serves one device");
+    // Nine hundred ticks of runtime, counted from the tick it picked up. One of
+    // them is already spent, so 898 more must leave it with exactly one.
     for tick in 2..=899 {
         let events = run(&mut sim, 1);
         assert!(
@@ -384,7 +390,12 @@ fn the_backup_runs_for_its_stated_runtime_and_then_stops() {
             "the backup stays engaged: {events:?}"
         );
     }
-    let spent = run(&mut sim, 3);
+    let said = sim
+        .report(&load(CAM_HALL))
+        .map(|r| r.explain())
+        .unwrap_or_default();
+    assert!(operating(&sim, CAM_HALL), "{said}");
+    let spent = run(&mut sim, 2);
     assert!(
         spent
             .iter()
