@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Container image for the IDApTIK development environment.
+#
+# Runtime-agnostic on purpose: this builds identically under Podman and Docker.
+# Podman is the estate's default (rootless, daemonless); see
+# docs/dev-notes/toolchain-authority.md §Containers.
+#
+#   podman build -t idaptik-dev -f .devcontainer/Containerfile .
+#   podman run --rm -it -v "$PWD:/work:Z" -w /work idaptik-dev just doctor
+#
+# This image is the BOOTSTRAP, not the environment. The environment is
+# guix.scm, and the tool versions are mise.toml + rust-toolchain.toml. The
+# image carries only what is needed to run `./install.sh --no-build` in a fresh
+# clone: git, just, a shell, and the download tools that installer uses.
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+# Keep this list minimal. Anything the game needs at build time belongs in
+# guix.scm (for Guix users) and `just bevy-linux-deps` (for Debian users);
+# anything version-pinned belongs in mise.toml. Duplicating either here is how
+# three files start disagreeing.
+RUN apk add --no-cache \
+      bash \
+      ca-certificates \
+      coreutils \
+      curl \
+      findutils \
+      git \
+      just \
+      openssh-client \
+      tar \
+      xz
+
+ENV SHELL=/bin/bash \
+    RUST_BACKTRACE=1
+
+# Wolfi provides a non-root user. Rootless is the point of the Podman default.
+USER nonroot
+WORKDIR /home/nonroot
+
+# `just setup` trusts mise.toml, installs every pinned tool, adds the wasm32
+# target and installs the tracked pre-push hook. It deliberately does not
+# install Bevy's system libraries: those need root, and a dev container should
+# not quietly escalate. Run `just bevy-linux-deps` with sudo inside the
+# container, or (preferred) use `guix shell -f guix.scm` on the host instead.
+CMD ["/bin/bash"]

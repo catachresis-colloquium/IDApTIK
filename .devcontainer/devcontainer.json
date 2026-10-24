@@ -1,0 +1,39 @@
+{
+  "name": "IDApTIK (Podman or Docker)",
+  "build": {
+    "context": "..",
+    "dockerfile": "Containerfile"
+  },
+  "containerEnv": {
+    "EDITOR": "code --wait",
+    "RUST_BACKTRACE": "1",
+    "LANG": "C.UTF-8"
+  },
+  "containerUser": "nonroot",
+  "remoteUser": "nonroot",
+  "updateRemoteUserUID": false,
+  "shutdownAction": "stopContainer",
+  "postCreateCommand": "just setup",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "tamasfe.even-better-toml",
+        "skellock.just",
+        "timonwong.shellcheck",
+        "EditorConfig.EditorConfig",
+        "eamodio.gitlens",
+        "rust-lang.rust-analyzer",
+        "asciidoctor.asciidoctor-vscode"
+      ],
+      "settings": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 2,
+        "editor.formatOnSave": true,
+        "files.insertFinalNewline": true,
+        "files.trimFinalNewlines": true,
+        "files.trimTrailingWhitespace": true,
+        "rust-analyzer.check.command": "clippy"
+      }
+    }
+  }
+}
