@@ -380,6 +380,9 @@ mod tests {
         // Walk to the office and ask the camera there to come on. The command
         // is legal, reachable and lands; the supply is what refuses.
         stand(&mut sim, "office");
+        while sim.state.power_busy > 0.0 {
+            step(&mut sim, &[]);
+        }
         let cam = load_index(&sim, "cam-1");
         let events = step(
             &mut sim,
