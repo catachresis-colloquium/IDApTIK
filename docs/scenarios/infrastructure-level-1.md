@@ -99,6 +99,12 @@ Two authored choices in that table are load-bearing and easy to get wrong:
   scopes; this level uses the entity one, and A5 is what a *circuit* lockout
   looks like (the hacker's cut), which is why the two routes teach different
   things.
+
+  One convention, because "open" and "closed" are ambiguous at a breaker:
+  `iso-m` **closed** means its contacts are closed and the pump has supply (its
+  state at load); `iso-m` **open** means it is racked out and the pump is locked
+  out at R0. Throwing it is therefore an *opening* action, and the evidence token
+  is `OpenIsolator`.
 - **`socket-l2`'s material is `copper`, not `pvc`.** An entity's `material` is
   the thing that arcs, and `pvc` has `water_film_conductive: false` in the
   catalogue — a wet plastic housing cannot satisfy `WE-2`. What arcs is the
@@ -112,13 +118,18 @@ Two authored choices in that table are load-bearing and easy to get wrong:
 |---|---|---|---|---|---|
 | `stair-s1` | Stair | `svc/riser` ↔ floor 0 landing | 3.0 s | — | always open |
 | `ladder-l1` | Ladder | riser ↔ plant | 1.6 s | — | always open |
-| `door-d5` | Door | riser ↔ lobby | 1.5 s | `M` | powered; `lock: d5-lock`; manual release `rel-d5` |
+| `door-d5` | Door | riser ↔ lobby | 1.5 s | `M` | powered: an unpowered door is impassable, which *is* its lock; manual release `rel-d5` |
 | `crawl-c1` | Vent | plant ↔ lobby | 2.2 s | — | flooded above 180 mm |
 | `lift-l1` | Lift | lobby ↔ floor 0 | 2.4 s | `M` | **strands you if M dies** |
 
 | Circuit | Source node | Serves |
 |---|---|---|
-| `M` | `feed-m` (`PowerStation`, zone `svc`) | pump-p1, socket-l2, door-d5, lift-l1, rel-d5's controller |
+| `M` | `feed-m` (`PowerStation`, zone `svc`) | pump-p1, socket-l2, door-d5, lift-l1 |
+
+`rel-d5` is deliberately **not** on `M`. It is a mechanical release — a cable, a
+pawl and a wrench — which is the only reason A5 has an exit after the feed dies.
+Putting it on the circuit would have made the "cut the feed" route an unwinnable
+dead end rather than the expensive mistake it is meant to be.
 
 Objectives: `Reach(svc/lobby)` → `Interact(terminal-svc)` → `Extract(stair-s1 or
 lift-l1)`.
@@ -151,7 +162,7 @@ above 180 mm.
 | 84 | pump at full wetness | 150 mm | a start from here is a `WE-7` arc risk |
 | 140 | water reaches the crawl sill | 180 mm (288 L) | `WA-2`: `crawl-c1` denied |
 | 140+ | crawl becomes a weir: flow rises with head above 180 mm | 180 → 220 mm | the plant settles near 220 mm, spilling up to ≈ 0.8 L/s |
-| ≈ 270 | lobby socket submerged | 25 mm in lobby | `WE-2` → shock field in the lobby |
+| ≈ 266 | lobby socket submerged | 25 mm in lobby | `WE-2` → shock field in the lobby |
 | any time (grate open) | equilibrium where inflow = outflow | 67 mm | depth **falls** to 67 mm and stays; the clock stops |
 
 The first 80 seconds are the free window. Everything after that is a choice.
@@ -182,8 +193,9 @@ Destroyed: nothing. Irreversible: nothing. **This is the intended clean run.**
 2. Gate opens. Outflow at 110 mm is `1 200 × 110 × 0.01 = 1.32 L/s` against
    0.8 L/s inflow, so the depth falls towards the equilibrium 67 mm — but it is
    an exponential approach with `τ = 1 600 ml/mm ÷ 12 ml/s per mm ≈ 133 s`, not a
-   step: 89 mm after 90 s, 72 mm after 240 s, inside 67 ± 2 mm only by ≈ 400 s.
-   The crawl (sill 180) is passable the entire time.
+   step: 88.7 mm after 90 s, 73.8 mm after 240 s, and inside 67 ± 2 mm only by
+   ≈ 400 s (68.8 mm). Those three figures are simulated from the weir and the
+   grate rating, not estimated.
 3. `crawl-c1` stays passable throughout. Exit as A1.
 
 Cost: 2 s of loud scraping (`Scraping`, `WaterSlosh`), plus the wade. The
@@ -251,7 +263,7 @@ Do nothing for 140 s:
 1. `crawl-c1` closes — your own shortcut is gone.
 2. The plant becomes a weir: it settles near 220 mm and spills up to ≈ 0.8 L/s
    into the lobby (the approach is exponential, τ ≈ 80 s).
-3. At ≈ 270 s the lobby socket is submerged and arcing: a `WE-3` shock field in
+3. At ≈ 266 s the lobby socket is submerged and arcing: a `WE-3` shock field in
    the room with the terminal and the lift, plus `GasAlarm`-class noise from the
    breaker trip and `BurntInsulation` evidence.
 
@@ -377,7 +389,7 @@ Level-specific, on top of the rule tests in the catalogue:
 | `l1_isolation_blocks_remote_start` | A4: remote start refused, pump dry, D5 opens |
 | `l1_cut_feed_denies_door_and_lift` | A5: `TraversalDenied{Unpowered}` for both |
 | `l1_crawl_closes_at_140s` | A6: passable at 139 s, `Flooded` at 141 s |
-| `l1_lobby_socket_arcs_when_submerged` | A6: shock field appears at ≈ 265 s (the weir ramps, so the last 50 L takes longer than a constant 0.8 L/s) |
+| `l1_lobby_socket_arcs_when_submerged` | A6: shock field appears at 266 ± 3 s — integrated from the weir, because the ramp means the last 50 L takes longer than a constant 0.8 L/s |
 | `l1_overtop_is_a_weir_not_a_drain` | plant settles at 220 ± 5 mm, not 180 and not the ceiling |
 | `l1_no_rng` | identical event log across two runs with the same script |
 | `l1_backflow_returns_20l` | stopping the pump adds 20 000 ml to `plant` |

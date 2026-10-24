@@ -64,10 +64,12 @@ Four notes on the model, all from the design document:
   sill. A submerged duct is nearly sealed to water and completely sealed to
   air, and both halves of that sentence matter.
 - **this level does not run level 1's leak.** `valve-v1` is closed at load
-  (the previous shift's fix) and `iso-m` is in, so the branch is isolated while
-  `M` stays live for the lift, `door-d5` and the pump. The standing 176 L is
-  what is left of that incident, and `WE-5` never finished drying it. B4
-  reopens the valve, deliberately.
+  (the previous shift's fix), so the branch is dead-legged and nothing is being
+  added to the 176 L standing in the plant. `iso-m` is **closed**, so the pump
+  still has supply and anybody may start it — B3 does exactly that, and that is
+  the trap. `M` stays live for the lift, `door-d5` and the socket throughout.
+  The standing water is what is left of the earlier incident, and `WE-5` never
+  finished drying it. B4 reopens the valve, deliberately.
 
 ### 1.1 Entities added
 
@@ -126,7 +128,7 @@ far below LFL.
 |---|---|---|---|
 | 0 | 24 | 10 | `GasReek`; nobody else knows |
 | 60 | 48 | 20 | `gd-1` trips → alarm + `ctl-vent` starts `fan-f1` |
-| 72 | 0 | 0 | a 4 L/s extractor has cleared 48 L; alarm clears after `min_run` |
+| 73 | 0 | 0 | 4 L/s extraction against a 0.4 L/s source is 3.6 L/s net, so 48 L takes 13.3 s of running, not 12; the alarm clears after `dwell_ticks` |
 | 180 | 96 | 40 | **LFL** (if extraction never ran) |
 | 195 | 102 | 42 | an `Inductive` start in the riser now ignites |
 
@@ -368,7 +370,7 @@ version that matters.
 
 | Phase | Arithmetic | Ticks |
 |---|---|---|
-| fan on, 20 → 15 ‰ | 12 L at net 3.6 L/s = 3.33 s, but `min_run` 120 | 200 |
+| fan on, 20 → 15 ‰ | 12 L at net 3.6 L/s = 3.33 s, but `dwell_ticks` 120 | 200 |
 | off, cooldown | — | 30 |
 | off, 15 → 20 ‰ | 12 L at 0.4 L/s = 30 s | 1 800 |
 | **period** | 200 + 30 + 1 800 | **2 030** |
