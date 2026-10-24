@@ -79,7 +79,7 @@ impl PowerAccess {
 }
 
 /// Where the infiltrator's body is, for hazards: the room and the body centre.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BodyAt {
     pub room: RoomId,
     pub x: f64,
@@ -764,9 +764,10 @@ impl PowerState {
         if let Some(bi) = def.breaker_of(&s.feed)
             && let Some(b) = self.breakers.get(bi)
             && b.open
+            && let Some(bdef) = def.breakers.get(bi)
         {
             return Some(OffReason::Isolated {
-                breaker: b.id.clone(),
+                breaker: bdef.id.clone(),
             });
         }
 
@@ -1319,9 +1320,9 @@ impl PowerState {
                     .map(|f| f.cut)
                     .unwrap_or(false),
             };
-            let touching = readout
-                .body
-                .is_some_and(|b| b.room == hdef.room && b.x >= hdef.x.0 && b.x <= hdef.x.1);
+            let touching = readout.body.as_ref().is_some_and(|b| {
+                b.room == hdef.room && b.x >= hdef.x.0 && b.x <= hdef.x.1
+            });
             let shock = live && touching;
             let Some(h) = self.hazards.get_mut(i) else {
                 continue;

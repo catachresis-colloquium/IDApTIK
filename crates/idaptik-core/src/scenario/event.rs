@@ -504,7 +504,8 @@ fn signal_line(e: &crate::scenario::signal::sim::SignalEvent) -> Option<(String,
 /// Every line that says a device is off names *why*, because that is the
 /// question the subsystem exists to answer: command, power, damage or interlock.
 fn power_line(e: &crate::scenario::power::sim::PowerEvent) -> Option<(String, Severity)> {
-    use crate::scenario::power::sim::{Fault, PowerDenyReason as D, PowerEvent as P, Seat};
+    use crate::scenario::power::sim::{Fault, PowerDenyReason as D, PowerEvent as P};
+    use crate::scenario::signal::sim::Seat;
     let who = |by: &Seat| match by {
         Seat::Infiltrator => "You",
         Seat::Hacker => "Hacker",

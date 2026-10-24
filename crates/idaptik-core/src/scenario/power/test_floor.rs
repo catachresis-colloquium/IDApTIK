@@ -369,7 +369,7 @@ pub fn power_test_floor() -> PowerNetworkDef {
             holds_when: InterlockWhen::SignalActive("light-laundry".into()),
         }],
         hazards: vec![HazardDef {
-            id: "haz-pump".to_owned(),
+            id: "haz-pump".into(),
             label: "Exposed pump housing".to_owned(),
             feed: FeedId::from(FEED_A),
             room: "laundry".into(),
