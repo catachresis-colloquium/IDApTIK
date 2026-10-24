@@ -383,6 +383,12 @@ pub enum ValidationError {
         zone: String,
         room: RoomId,
     },
+    /// A water zone's manual handle does not stand inside the room it
+    /// floods, so nobody could ever reach it to turn it.
+    InfraZoneHandleOffRoom {
+        zone: String,
+        room: RoomId,
+    },
     /// Two alarms share an id.
     InfraDuplicateAlarm(String),
     /// An alarm names a room the floor does not have.
@@ -795,6 +801,31 @@ impl ScenarioDefinition {
                 .map(|z| format!("{} in {}", z.id, z.room))
                 .unwrap_or_else(|| "all addressable".into()),
             unaddressable.map(|z| ValidationError::InfraZoneUnaddressable {
+                zone: z.id.clone(),
+                room: z.room.clone(),
+            }),
+        );
+
+        // Zones: the manual handle stands inside the room it floods. A handle
+        // in the wrong room (or none) is one nobody could ever reach, so the
+        // zone's physical release — one of the ways a floor is meant to be
+        // solvable — would be unreachable content, not a challenge.
+        let off_handle = infra.water_zones.iter().find(|z| {
+            !self.rooms.iter().any(|r| {
+                r.id == z.room && z.valve_x >= r.x && z.valve_x < r.x + r.w
+            })
+        });
+        check(
+            checks,
+            "infra",
+            "infra.zones.handle_in_room",
+            "Every water zone's manual handle stands in the room it floods",
+            off_handle.is_none(),
+            off_handle
+                .as_ref()
+                .map(|z| format!("{} valve_x={} in {}", z.id, z.valve_x, z.room))
+                .unwrap_or_else(|| "all placed".into()),
+            off_handle.map(|z| ValidationError::InfraZoneHandleOffRoom {
                 zone: z.id.clone(),
                 room: z.room.clone(),
             }),

@@ -33,6 +33,7 @@ pub mod ids;
 pub mod infra;
 pub mod mathf;
 pub mod outcome;
+pub mod pump_house;
 pub mod rng;
 pub mod rooftop;
 pub mod signal;
@@ -49,6 +50,7 @@ pub use actor::{
     billy_archetype, default_registry, load_actor_pack,
 };
 pub use agents::Agents;
+pub use building::audit::{AuditSeverity, AuthoringCheck, AuthoringReport};
 pub use building::exchange_house::{EXCHANGE_HOUSE_JSON, EXCHANGE_HOUSE_RUN_JSON, exchange_house};
 pub use building::sim::{
     BUILDING_SNAPSHOT_FORMAT, BuildingCommand, BuildingDebrief, BuildingDebriefExport,
@@ -84,6 +86,7 @@ pub use infra::{
 };
 pub use mathf::TICK_DT;
 pub use outcome::{Debrief, ScoreBreakdown, Tag, debrief_text, grade_for};
+pub use pump_house::{HALL_SUMP, PUMP_HOUSE_ID, pump_house};
 pub use rng::{InitRoll, Mulberry32, roll_init};
 pub use rooftop::ghost_lobby_rooftop;
 pub use sim::GhostLobbySim;

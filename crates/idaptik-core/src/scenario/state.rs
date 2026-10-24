@@ -70,6 +70,10 @@ pub struct PlayerState {
     /// Seconds spent picking the front door's lock.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub lockpick: f64,
+    /// Seconds spent turning a water zone's manual valve handle. Absent on a
+    /// floor without infrastructure, so its snapshots are unchanged.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub valve_turn: f64,
 }
 
 /// Billy's physical state, FSM bookkeeping and belief meters.
@@ -460,6 +464,7 @@ impl RuntimeState {
                     Place::Floor
                 },
                 lockpick: 0.0,
+                valve_turn: 0.0,
             },
             billy: BillyState {
                 x: def.billy.spawn_x,

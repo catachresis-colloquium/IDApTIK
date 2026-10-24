@@ -10,7 +10,9 @@
 //! [`crate::scenario::actor::belief`] rather than a private copy.
 
 use super::GhostLobbySim;
+use crate::netsim::Effect;
 use crate::scenario::actor::{self, Leakage, belief};
+use crate::scenario::agents::apply_effects;
 use crate::scenario::command::{Button, Edge, TickInput};
 use crate::scenario::common::{
     BillyMode, ChuteMethod, CrisisReason, ExtractMethod, ObjectKind, ObjectiveStatus, Phase,
@@ -18,7 +20,7 @@ use crate::scenario::common::{
 };
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
-use crate::scenario::floor_graph::camera_node_id;
+use crate::scenario::floor_graph::{camera_node_id, valve_node_id};
 use crate::scenario::ids::RoomId;
 use crate::scenario::mathf::{TICK_DT, approach, clamp, dist, powf, sin};
 use crate::scenario::state::Place;
@@ -318,6 +320,34 @@ impl GhostLobbySim {
                 }
             } else {
                 self.state.chute.progress = (self.state.chute.progress - 1.2 * dt).max(0.0);
+            }
+        }
+
+        // valve handle — the physical release (ADR-0013). A floor that
+        // declares a water zone with a handle in this room lets the
+        // infiltrator turn it by hand, and the zone releases through the
+        // same canonical path a hacked valve node walks: the splash, the
+        // shorts, the alarm and the guard's reaction are identical whichever
+        // way the water was let in.
+        if !active {
+            if let Some(zone) = self.valve_handle_at(room, cx) {
+                active = true;
+                if interact_held {
+                    self.state.player.valve_turn += dt;
+                    self.state.player.vx *= 0.7;
+                    if self.state.player.valve_turn >= c::VALVE_TURN_HOLD {
+                        self.state.player.valve_turn = 0.0;
+                        let effects = vec![Effect::WaterReleased(valve_node_id(
+                            zone.as_str(),
+                        ))];
+                        let events =
+                            apply_effects(&self.def, &mut self.state, self.cfg, &effects);
+                        self.events.extend(events);
+                    }
+                } else {
+                    self.state.player.valve_turn =
+                        (self.state.player.valve_turn - 1.5 * dt).max(0.0);
+                }
             }
         }
 

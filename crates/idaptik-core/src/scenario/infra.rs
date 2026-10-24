@@ -80,6 +80,11 @@ pub struct WaterZoneDef {
     pub id: String,
     /// The room the water lands in.
     pub room: RoomId,
+    /// World-x of the manual handle, standing in the zone's room: the
+    /// physical release. Holding interact beside it turns it, and the zone
+    /// releases through the same canonical path as hacking the valve node —
+    /// one consequence model, two ways in.
+    pub valve_x: f64,
     /// Seconds from release to full depth. Must be positive and finite.
     pub fill_time: f64,
     /// Whether the zone's pump valve fails open: losing the pump's power
@@ -507,6 +512,7 @@ mod tests {
             water_zones: vec![WaterZoneDef {
                 id: "z1".into(),
                 room: def.rooms.first().unwrap().id.clone(),
+                valve_x: 150.0,
                 fill_time: 4.0,
                 fail_open: true,
             }],

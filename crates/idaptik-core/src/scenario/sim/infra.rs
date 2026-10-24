@@ -273,6 +273,27 @@ impl GhostLobbySim {
         }
     }
 
+    /// The zone whose manual valve handle the body's centre at `cx` can
+    /// reach, standing in `room`, and only while the zone is still dry — a
+    /// flooding zone's handle is no longer a decision point. `None` on any
+    /// floor without infrastructure.
+    pub(crate) fn valve_handle_at(&self, room: Option<&str>, cx: f64) -> Option<String> {
+        let infra_def = self.def.infra.as_ref()?;
+        let infra = self.state.infra.as_ref()?;
+        infra_def
+            .water_zones
+            .iter()
+            .find(|z| {
+                Some(z.room.as_str()) == room
+                    && (cx - z.valve_x).abs() < c::VALVE_DIST
+                    && !infra
+                        .zones
+                        .get(z.id.as_str())
+                        .is_some_and(|z| z.released)
+            })
+            .map(|z| z.id.clone())
+    }
+
     /// The speed multiplier wading imposes on a body at `x` (1.0 on any
     /// floor without infrastructure, so existing movement math is untouched).
     pub(crate) fn wade_factor_at(&self, x: f64) -> f64 {

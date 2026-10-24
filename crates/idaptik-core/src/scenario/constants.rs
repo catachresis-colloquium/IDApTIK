@@ -468,14 +468,21 @@ pub const WATER_SHORT_FLASH: f64 = 0.6;
 /// Water level (0..=1) at which a water-triggered alarm trips.
 pub const ALARM_WATER_TRIP_LEVEL: f64 = 0.25;
 /// Alert units per second a sounding alarm adds (scaled by the difficulty
-/// preset's `alert_gain`, exactly as `CALL_ALERT` is).
-pub const ALARM_ALERT_RATE: f64 = 2.6;
+/// preset's `alert_gain`, exactly as `CALL_ALERT` is). A sustained flood
+/// alarm is pressure with a deadline: it climbs the alert toward the
+/// lockdown band, but slowly enough that a run in progress can finish.
+pub const ALARM_ALERT_RATE: f64 = 0.9;
 /// How loud a sounding alarm is, as a noise intensity: above every archetype's
 /// `invest_noise`, and heard floor-wide (no distance gate).
 pub const ALARM_NOISE: f64 = 1.0;
 /// How loud a sparking short is, as a noise intensity (distance-gated like
 /// every other source).
 pub const SHORT_FLASH_NOISE: f64 = 0.8;
+/// How close (world units, body centre) the infiltrator stands to reach a
+/// zone's manual valve handle.
+pub const VALVE_DIST: f64 = 40.0;
+/// Seconds of held interact that turn a manual handle and release its zone.
+pub const VALVE_TURN_HOLD: f64 = 1.5;
 
 //## Moletaire hosting (a floor with a `MoleHostDef`).
 // Original addition — the companion module is a port, but hosting it on a
