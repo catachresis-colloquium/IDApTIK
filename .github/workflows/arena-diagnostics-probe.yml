@@ -1,0 +1,92 @@
+# TEMPORARY diagnostics probe for the Evil Weevil branch — delete before merge.
+# The authoring sandbox cannot reach Actions log storage, so rustfmt/clippy/
+# compiler output is emitted as workflow-command annotations, which the
+# check-runs annotations API exposes. No `uses:` reference; not a gate.
+name: Arena diagnostics probe
+
+on:
+  push:
+    branches: ["arena/cb226ff1-idaptik"]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Provision pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup show
+      - name: Collect diagnostics into annotations
+        run: |
+          set +e
+          mkdir -p .arena-diagnostics
+          cargo fmt --all -- --check > .arena-diagnostics/rustfmt.txt 2>&1
+          cargo test -p idaptik-evil-weevil --no-run > .arena-diagnostics/compile.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/compile.txt
+          cargo clippy -p idaptik-evil-weevil --all-targets -- -D warnings \
+            > .arena-diagnostics/clippy.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/clippy.txt
+          cargo test -p idaptik-net --no-run > .arena-diagnostics/net-compile.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/net-compile.txt
+          cargo test -p idaptik-evil-weevil > .arena-diagnostics/test-run.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/test-run.txt
+
+          emit() {
+            local title="$1" file="$2" part=0
+            # Annotation messages cap at 4096 chars. Base64 has no characters
+            # that workflow-command escaping would inflate, so a 3000-byte raw
+            # chunk stays under the cap as ~4000 base64 characters.
+            while true; do
+              local chunk
+              chunk=$(dd if="$file" bs=1 skip=$((part * 3000)) count=3000 2>/dev/null)
+              [ -z "$chunk" ] && break
+              local encoded
+              encoded=$(printf '%s' "$chunk" | base64 | tr -d '\n')
+              echo "::warning title=${title}-part-${part}::${encoded}"
+              part=$((part + 1))
+            done
+          }
+          # Text diffs compress ~8x, so gzip+base64 carries the whole rustfmt
+          # report in a couple of annotations instead of ten truncated ones.
+          emit_gzip() {
+            local title="$1" file="$2" part=0
+            gzip -cn9 "$file" | base64 -w0 | fold -w 3000 > .arena-diagnostics/gz.b64
+            # The `|| [ -n "$line" ]` guard keeps the final fragment when
+            # fold's last line has no trailing newline.
+            while IFS= read -r line || [ -n "$line" ]; do
+              echo "::warning title=${title}-part-${part}::${line}"
+              part=$((part + 1))
+            done < .arena-diagnostics/gz.b64
+          }
+          # Compact error-only compiler views first, so they survive even if
+          # the annotation cap is reached.
+          grep -E "error(\[|:)|warning:|-->|^exit=" .arena-diagnostics/compile.txt \
+            | head -120 > .arena-diagnostics/compile-errors.txt
+          grep -E "error(\[|:)|warning:|-->|^exit=" .arena-diagnostics/clippy.txt \
+            | head -120 > .arena-diagnostics/clippy-errors.txt
+          grep -E "error(\[|:)|warning:|-->|^exit=" .arena-diagnostics/net-compile.txt \
+            | head -120 > .arena-diagnostics/net-errors.txt
+          {
+            grep -E "test result|FAILED|^exit=" .arena-diagnostics/test-run.txt
+            grep -E -A4 "panicked" .arena-diagnostics/test-run.txt
+            grep -E "scenario EW|^  - " .arena-diagnostics/test-run.txt
+          } | head -120 > .arena-diagnostics/test-errors.txt
+          # Clean steps emit nothing, keeping the 10-annotation budget for
+          # whatever actually failed (and for the full rustfmt diff).
+          grep -qE "error|warning" .arena-diagnostics/compile-errors.txt \
+            && emit compile-errors .arena-diagnostics/compile-errors.txt || true
+          grep -qE "error|warning" .arena-diagnostics/clippy-errors.txt \
+            && emit clippy-errors .arena-diagnostics/clippy-errors.txt || true
+          emit test-errors .arena-diagnostics/test-errors.txt
+          emit_gzip rustfmt-gz .arena-diagnostics/rustfmt.txt
+          exit 0
