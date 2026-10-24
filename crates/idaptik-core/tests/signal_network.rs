@@ -609,32 +609,34 @@ fn a_pulse_interrupted_by_an_outage_finishes_when_power_returns() {
 }
 
 #[test]
-fn a_relay_that_goes_dark_mid_edge_does_not_pulse_on_power_up() {
+fn a_relay_that_goes_dark_mid_edge_remembers_no_edge() {
     // A relay computes `Q` from its cached edge bits, so a coil that dies on the
-    // tick it received an edge is holding a flag it never got to use. Power
-    // returning would then emit a pulse nobody asked for — a light blinking, a
-    // self-closing door opening, on a tick with no input at all.
+    // tick it received an edge is holding a flag it never got to use — and
+    // `Q` would rise again, unprompted, the moment the coil had current.
     //
-    // The invariant is about the boundary: whatever the light was doing before
-    // the outage, crossing back into supply must not change it, and the relay
-    // must come back remembering no edge.
+    // Two things must survive an outage: the *level* history (so a wire held
+    // high through the dark does not fire on restore) and the absence of any
+    // edge (because none was delivered). The state is asserted directly: the
+    // pulse a stale flag produces travels R.Q -> L.Toggle and is already tested
+    // for elsewhere.
     let mut s = relay_rig(Gate::Or);
     let on = high("T", OutPort::Compromised);
     s.step(&on);
+    assert!(
+        s.device("R").expect("a relay").a,
+        "the edge landed while the coil was live"
+    );
 
     let mut dark = on.clone();
     dark.unpower("R");
     run(&mut s, &dark, 3);
-    let relay = s.device("R").expect("a relay").clone();
-    assert!(!relay.a && !relay.b, "no edge was delivered while inert");
-    assert_ne!(relay.prev_in, 0, "but the input level was remembered");
-    let light_before = s.device("L").expect("a light").active;
 
-    let back = run(&mut s, &on, 20);
-    assert_eq!(
-        s.device("L").expect("a light").active,
-        light_before,
-        "nothing pulsed across the boundary: {back:?}"
+    let relay = s.device("R").expect("a relay").clone();
+    assert!(!relay.a, "no edge was delivered while inert, so none is kept");
+    assert!(!relay.b);
+    assert_ne!(
+        relay.prev_in, 0,
+        "but the input level was, so restore is not an edge"
     );
 }
 
