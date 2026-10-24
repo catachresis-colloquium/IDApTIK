@@ -124,7 +124,7 @@ pub fn finalize(
         harness.check(
             "observer:no-false-positives",
             true,
-            "no transport fault was classified as a violation".into(),
+            "no transport fault was classified as a violation".to_owned(),
         );
     }
     let limits_ok = harness.metrics().within_limits();

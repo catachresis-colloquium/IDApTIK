@@ -31,7 +31,7 @@ use idaptik_net::error::NetError;
 use idaptik_net::lockstep::{LockstepCore, ScriptFeed};
 use idaptik_tui::headless;
 use idaptik_tui::script::ScriptFile;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 

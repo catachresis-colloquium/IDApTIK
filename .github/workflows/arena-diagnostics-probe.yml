@@ -43,14 +43,15 @@ jobs:
 
           emit() {
             local title="$1" file="$2" part=0
-            # Annotation messages cap at 4096 chars after decoding, so keep
-            # each raw chunk comfortably under that.
+            # Annotation messages cap at 4096 chars. Base64 has no characters
+            # that workflow-command escaping would inflate, so a 3000-byte raw
+            # chunk stays under the cap as ~4000 base64 characters.
             while true; do
               local chunk
-              chunk=$(dd if="$file" bs=1 skip=$((part * 3500)) count=3500 2>/dev/null)
+              chunk=$(dd if="$file" bs=1 skip=$((part * 3000)) count=3000 2>/dev/null)
               [ -z "$chunk" ] && break
               local encoded
-              encoded=$(printf '%s' "$chunk" | jq -sRr @uri)
+              encoded=$(printf '%s' "$chunk" | base64 | tr -d '\n')
               echo "::warning title=${title}-part-${part}::${encoded}"
               part=$((part + 1))
             done
@@ -67,7 +68,6 @@ jobs:
             | head -80 > .arena-diagnostics/test-errors.txt
           emit compile-errors .arena-diagnostics/compile-errors.txt
           emit clippy-errors .arena-diagnostics/clippy-errors.txt
-          emit net-errors .arena-diagnostics/net-errors.txt
           emit test-errors .arena-diagnostics/test-errors.txt
           emit rustfmt .arena-diagnostics/rustfmt.txt
           exit 0
