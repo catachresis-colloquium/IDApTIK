@@ -552,7 +552,11 @@ mod tests {
         // A settled floor: the laundry camera is simply running, and says so.
         let running = sim.power_report("cam-2").expect("a load");
         assert!(running.operating);
-        assert!(running.explain().contains("running"), "{}", running.explain());
+        assert!(
+            running.explain().contains("running"),
+            "{}",
+            running.explain()
+        );
 
         // Switch it off from the room, then ask why. The answer names the device,
         // the rule that won, and the board it sits on.

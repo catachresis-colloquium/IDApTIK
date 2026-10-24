@@ -776,36 +776,39 @@ impl PowerState {
             });
         }
 
-        // 4. Supply that is gone for good.
-        let cut = def
-            .feed_index(&s.feed)
-            .and_then(|fi| self.feeds.get(fi))
-            .map(|f| f.cut)
-            .unwrap_or(false);
-        // A backup carrying the device *is* supply, however dead the feed is:
-        // the UPS window is exactly the time this rung must not fire.
-        if cut && !self.backup_delivering(def, &ldef.id) {
-            return Some(OffReason::Unavailable {
-                feed: s.feed.clone(),
-            });
-        }
+        // Rungs 4-6 are all questions about the feed, and a backup carrying the
+        // device answers them: the UPS window is precisely the time a dead feed,
+        // an open breaker or a severed conductor stops mattering.
+        if !self.backup_delivering(def, &ldef.id) {
+            // 4. Supply that is gone for good.
+            let cut = def
+                .feed_index(&s.feed)
+                .and_then(|fi| self.feeds.get(fi))
+                .map(|f| f.cut)
+                .unwrap_or(false);
+            if cut {
+                return Some(OffReason::Unavailable {
+                    feed: s.feed.clone(),
+                });
+            }
 
-        // 5. Its protection.
-        if let Some(bi) = def.breaker_of(&s.feed)
-            && let Some(b) = self.breakers.get(bi)
-            && b.open
-            && let Some(bdef) = def.breakers.get(bi)
-        {
-            return Some(OffReason::Isolated {
-                breaker: bdef.id.clone(),
-            });
-        }
+            // 5. Its protection.
+            if let Some(bi) = def.breaker_of(&s.feed)
+                && let Some(b) = self.breakers.get(bi)
+                && b.open
+                && let Some(bdef) = def.breakers.get(bi)
+            {
+                return Some(OffReason::Isolated {
+                    breaker: bdef.id.clone(),
+                });
+            }
 
-        // 6. Its supply, right now.
-        if !s.energized {
-            return Some(OffReason::Unpowered {
-                feed: s.feed.clone(),
-            });
+            // 6. Its supply, right now.
+            if !s.energized {
+                return Some(OffReason::Unpowered {
+                    feed: s.feed.clone(),
+                });
+            }
         }
 
         // 7. Its warm-up.
