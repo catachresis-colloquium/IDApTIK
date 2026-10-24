@@ -1,0 +1,259 @@
+{
+  "format": "idaptik-power/1",
+  "network_id": "ghost-lobby-power",
+  "name": "Envelope 001 — Ghost Lobby — power test floor",
+  "sources": [
+    {
+      "id": "mains-a",
+      "label": "Utility supply — plant",
+      "kind": "mains",
+      "start_on": true,
+      "startup_ticks": 0,
+      "room": "kitchen"
+    },
+    {
+      "id": "mains-b",
+      "label": "Utility supply — security",
+      "kind": "mains",
+      "start_on": true,
+      "startup_ticks": 0,
+      "room": "hall",
+      "node": "bms-bridge",
+      "remote": true
+    },
+    {
+      "id": "ups-hall",
+      "label": "Hall UPS",
+      "kind": "battery",
+      "start_on": true,
+      "startup_ticks": 0,
+      "backup": {
+        "runtime_ticks": 900,
+        "serves": [
+          "cam-0"
+        ],
+        "mode": "automatic"
+      },
+      "room": "hall"
+    }
+  ],
+  "feeds": [
+    {
+      "id": "feed-a",
+      "label": "Plant & lighting board",
+      "source": "mains-a",
+      "capacity": 20,
+      "breaker": "brk-a",
+      "room": "kitchen"
+    },
+    {
+      "id": "feed-b",
+      "label": "Security board",
+      "source": "mains-b",
+      "capacity": 14,
+      "breaker": "brk-b",
+      "room": "hall",
+      "node": "bms-bridge"
+    }
+  ],
+  "loads": [
+    {
+      "id": "light-kitchen",
+      "label": "Kitchen lighting",
+      "kind": "light",
+      "feed": "feed-a",
+      "draw": 2,
+      "signal": "light-kitchen",
+      "room": "kitchen",
+      "restart": "hold",
+      "start_on": true,
+      "node": "light-kitchen"
+    },
+    {
+      "id": "light-hall",
+      "label": "Hallway lighting",
+      "kind": "light",
+      "feed": "feed-a",
+      "draw": 2,
+      "signal": "light-hall",
+      "room": "hall",
+      "restart": "hold",
+      "start_on": true,
+      "node": "light-hall"
+    },
+    {
+      "id": "light-office",
+      "label": "Office lighting",
+      "kind": "light",
+      "feed": "feed-a",
+      "draw": 2,
+      "signal": "light-office",
+      "room": "office",
+      "restart": "hold",
+      "start_on": true,
+      "node": "light-office"
+    },
+    {
+      "id": "light-laundry",
+      "label": "Laundry lighting",
+      "kind": "light",
+      "feed": "feed-a",
+      "draw": 2,
+      "signal": "light-laundry",
+      "room": "laundry",
+      "restart": "hold",
+      "start_on": true,
+      "node": "light-laundry"
+    },
+    {
+      "id": "light-exit",
+      "label": "Exit lighting",
+      "kind": "light",
+      "feed": "feed-a",
+      "draw": 2,
+      "signal": "light-exit",
+      "room": "exit",
+      "restart": "hold",
+      "start_on": true,
+      "node": "light-exit"
+    },
+    {
+      "id": "fan-kitchen",
+      "label": "Kitchen extract",
+      "kind": "fan",
+      "feed": "feed-a",
+      "draw": 4,
+      "room": "kitchen",
+      "restart": "resume",
+      "start_on": true,
+      "restart_ticks": 180
+    },
+    {
+      "id": "pump-laundry",
+      "label": "Laundry pump",
+      "kind": "pump",
+      "feed": "feed-a",
+      "draw": 6,
+      "room": "laundry",
+      "restart": "resume",
+      "start_on": true,
+      "restart_ticks": 240
+    },
+    {
+      "id": "cam-0",
+      "label": "Hall camera",
+      "kind": "camera",
+      "feed": "feed-b",
+      "draw": 3,
+      "signal": "cam-0",
+      "room": "hall",
+      "restart": "resume",
+      "start_on": true,
+      "node": "cam-0"
+    },
+    {
+      "id": "cam-1",
+      "label": "Office camera",
+      "kind": "camera",
+      "feed": "feed-b",
+      "draw": 3,
+      "signal": "cam-1",
+      "room": "office",
+      "restart": "resume",
+      "start_on": true,
+      "node": "cam-1"
+    },
+    {
+      "id": "cam-2",
+      "label": "Laundry camera",
+      "kind": "camera",
+      "feed": "feed-b",
+      "draw": 3,
+      "signal": "cam-2",
+      "room": "laundry",
+      "restart": "resume",
+      "start_on": true,
+      "node": "cam-2"
+    },
+    {
+      "id": "door-d4",
+      "label": "Service exit mechanism",
+      "kind": "door",
+      "feed": "feed-b",
+      "draw": 4,
+      "signal": "door-d4",
+      "room": "exit",
+      "restart": "fail_safe",
+      "start_on": true,
+      "node": "door-d4"
+    }
+  ],
+  "breakers": [
+    {
+      "id": "brk-a",
+      "label": "Plant board main",
+      "feed": "feed-a",
+      "room": "kitchen"
+    },
+    {
+      "id": "brk-b",
+      "label": "Security board main",
+      "feed": "feed-b",
+      "remote": true,
+      "room": "hall",
+      "node": "bms-bridge"
+    }
+  ],
+  "interlocks": [
+    {
+      "id": "il-pump",
+      "label": "Laundry occupancy interlock",
+      "load": "pump-laundry",
+      "holds_when": {
+        "signal_active": "light-laundry"
+      }
+    }
+  ],
+  "hazards": [
+    {
+      "id": "haz-pump",
+      "label": "Exposed pump housing",
+      "feed": "feed-a",
+      "room": "laundry",
+      "x": [
+        920.0,
+        1000.0
+      ],
+      "live": "feed_energized",
+      "shock_ticks": 90
+    }
+  ],
+  "tuning": {
+    "infiltrator": {
+      "cut_busy_ticks": 120,
+      "cut_noise": 0.8,
+      "route_bandwidth": 0,
+      "route_busy_ticks": 90,
+      "isolate_bandwidth": 0,
+      "isolate_busy_ticks": 45,
+      "source_bandwidth": 0,
+      "source_busy_ticks": 30,
+      "command_bandwidth": 0,
+      "command_busy_ticks": 0
+    },
+    "hacker": {
+      "cut_busy_ticks": 0,
+      "cut_noise": 0.0,
+      "route_bandwidth": 8,
+      "route_busy_ticks": 0,
+      "isolate_bandwidth": 6,
+      "isolate_busy_ticks": 0,
+      "source_bandwidth": 5,
+      "source_busy_ticks": 0,
+      "command_bandwidth": 4,
+      "command_busy_ticks": 0
+    },
+    "restart_ticks": 120,
+    "trip_ticks": 45
+  }
+}
