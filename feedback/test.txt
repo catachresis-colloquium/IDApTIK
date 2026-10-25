@@ -1,0 +1,1128 @@
+   Compiling itoa v1.0.18
+   Compiling libc v0.2.186
+   Compiling bitflags v2.13.0
+   Compiling serde_core v1.0.229
+   Compiling memchr v2.8.3
+   Compiling linux-raw-sys v0.12.1
+   Compiling rustix v1.1.4
+   Compiling zmij v1.0.21
+   Compiling creusot-std v0.13.0
+   Compiling libm v0.2.16
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.4.3
+   Compiling cpufeatures v0.3.0
+   Compiling chacha20 v0.10.2
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling idaptik-kernel v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-kernel)
+   Compiling rand v0.10.2
+   Compiling idaptik-core v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-core)
+   Compiling wait-timeout v0.2.1
+   Compiling once_cell v1.21.4
+   Compiling fastrand v2.4.1
+   Compiling tempfile v3.27.0
+   Compiling fnv v1.0.7
+   Compiling quick-error v1.2.3
+   Compiling bit-vec v0.10.1
+   Compiling bit-set v0.11.1
+   Compiling rusty-fork v0.3.1
+   Compiling num-traits v0.2.19
+   Compiling rand_xorshift v0.5.0
+   Compiling regex-syntax v0.8.11
+   Compiling unarray v0.1.4
+   Compiling smallvec v1.15.2
+   Compiling core_detect v1.0.0
+   Compiling thiserror v2.0.18
+   Compiling equivalent v1.0.2
+   Compiling foldhash v0.2.0
+   Compiling allocator-api2 v0.2.21
+   Compiling log v0.4.33
+   Compiling mio v1.2.1
+   Compiling either v1.16.0
+   Compiling itertools v0.14.0
+   Compiling zerofrom v0.1.8
+   Compiling castaway v0.2.4
+   Compiling hashbrown v0.17.1
+   Compiling proptest v1.12.0
+   Compiling hashbrown v0.16.1
+   Compiling errno v0.3.14
+   Compiling static_assertions v1.1.0
+   Compiling unicode-width v0.2.0
+   Compiling ryu v1.0.23
+   Compiling stable_deref_trait v1.2.1
+   Compiling yoke v0.8.3
+   Compiling compact_str v0.9.1
+   Compiling unicode-truncate v2.0.1
+   Compiling signal-hook-registry v1.4.8
+   Compiling strum v0.28.0
+   Compiling kasuari v0.4.12
+   Compiling lru v0.18.3
+   Compiling critical-section v1.2.0
+   Compiling scopeguard v1.2.0
+   Compiling anstyle v1.0.14
+   Compiling lock_api v0.4.14
+   Compiling ratatui-core v0.1.2
+   Compiling signal-hook v0.3.18
+   Compiling parking_lot_core v0.9.12
+   Compiling utf8parse v0.2.2
+   Compiling powerfmt v0.2.0
+   Compiling time-core v0.1.9
+   Compiling num_threads v0.1.7
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling time v0.3.53
+   Compiling anstyle-parse v1.0.0
+   Compiling zerovec v0.11.6
+   Compiling parking_lot v0.12.5
+   Compiling signal-hook-mio v0.2.5
+   Compiling derive_more v2.1.1
+   Compiling line-clipping v0.3.7
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling anstream v1.0.0
+   Compiling ratatui-widgets v0.3.2
+   Compiling crossterm v0.29.0
+   Compiling clap_lex v1.1.0
+   Compiling clap_builder v4.6.7
+   Compiling ratatui-macros v0.7.2
+   Compiling ratatui-crossterm v0.1.2
+   Compiling clap v4.6.7
+   Compiling ratatui v0.30.2
+   Compiling tinystr v0.8.3
+   Compiling typenum v1.20.1
+   Compiling litemap v0.8.2
+   Compiling writeable v0.6.3
+   Compiling icu_locale_core v2.2.0
+   Compiling hybrid-array v0.4.13
+   Compiling zerotrie v0.2.4
+   Compiling potential_utf v0.1.5
+   Compiling utf8_iter v1.0.4
+   Compiling icu_collections v2.2.0
+   Compiling icu_provider v2.2.0
+   Compiling idaptik-tui v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-tui)
+   Compiling icu_normalizer_data v2.2.0
+   Compiling icu_properties_data v2.2.0
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling const-oid v0.10.2
+   Compiling bytes v1.12.1
+   Compiling digest v0.11.3
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling pin-project-lite v0.2.17
+   Compiling idna_adapter v1.2.2
+   Compiling sha1 v0.11.0
+   Compiling httparse v1.10.1
+   Compiling http v1.4.2
+   Compiling socket2 v0.6.5
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.34
+   Compiling futures-sink v0.3.34
+   Compiling futures-core v0.3.34
+   Compiling data-encoding v2.11.0
+   Compiling percent-encoding v2.3.2
+   Compiling form_urlencoded v1.2.2
+   Compiling tungstenite v0.30.0
+   Compiling futures-util v0.3.34
+   Compiling tokio v1.54.1
+   Compiling idna v1.1.0
+   Compiling predicates-core v1.0.10
+   Compiling termtree v0.5.1
+   Compiling regex-automata v0.4.15
+   Compiling url v2.5.8
+   Compiling difflib v0.4.0
+   Compiling tokio-tungstenite v0.30.0
+   Compiling burble-client v2.0.0 (https://github.com/metadatastician/burble?rev=ef6756cf1591406d434c5c04c3c018e935836e4c#ef6756cf)
+   Compiling idaptik-net v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-net)
+   Compiling predicates v3.1.4
+   Compiling bstr v1.12.3
+   Compiling predicates-tree v1.0.13
+   Compiling assert_cmd v2.2.2
+   Compiling idaptik-evil-weevil v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-evil-weevil)
+   Compiling idaptik-ffi v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-ffi)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3m 09s
+     Running unittests src/lib.rs (target/debug/deps/idaptik_core-ae1dd1d75b6a005b)
+
+running 166 tests
+test companion::definition::tests::regenerate_golden_json ... ignored, regenerates the committed golden; run manually
+test companion::definition::tests::canonical_definition_validates ... ok
+test device::tests::new_device_starts_uncompromised ... ok
+test device::tests::security_levels_are_ordered ... ok
+test companion::definition::tests::json_roundtrip ... ok
+test device::tests::ums_parity_kinds_have_stable_wire_tags ... ok
+test netsim::access::tests::identity_is_always_reachable ... ok
+test netsim::access::tests::single_hop_adjacency_permits_and_denies ... ok
+test netsim::addressing::tests::matches_by_prefix_and_leaves_public_unmatched ... ok
+test netsim::dns::tests::resolves_known_host_passes_through_ip_and_fails_unknown ... ok
+test netsim::effect::tests::cutting_power_cascades_to_dependents ... ok
+test netsim::effect::tests::holding_a_door_has_no_cascade ... ok
+test netsim::effect::tests::running_the_vacuum_has_no_cascade ... ok
+test netsim::graph::tests::graph_looks_up_nodes_and_segments_by_id ... ok
+test netsim::reach::tests::reachability_follows_the_current_segment ... ok
+test netsim::route::tests::a_registered_node_in_no_segment_is_external ... ok
+test netsim::route::tests::an_unregistered_ip_inside_a_known_segment_is_not_external ... ok
+test netsim::route::tests::traceroute_external_destination ... ok
+test netsim::route::tests::traceroute_from_non_router ... ok
+test netsim::route::tests::traceroute_is_deterministic_and_gated ... ok
+test netsim::route::tests::traceroute_unreachable ... ok
+test netsim::session::tests::a_pivot_suspends_your_ownership_of_your_own_segment ... ok
+test netsim::session::tests::a_session_round_trips_through_serde ... ok
+test netsim::session::tests::a_strong_node_advances_the_trace_four_times_a_weak_one ... ok
+test netsim::session::tests::acting_on_your_own_local_segment_leaves_no_trace ... ok
+test netsim::session::tests::locality_is_judged_from_the_active_host_not_the_home_vantage ... ok
+test netsim::session::tests::moving_the_vantage_drops_the_pivot_stack ... ok
+test netsim::session::tests::pivoting_opens_a_segment_that_was_out_of_reach ... ok
+test netsim::session::tests::reaching_off_your_own_segment_advances_the_trace ... ok
+test netsim::session::tests::sshing_back_into_your_own_entry_host_is_refused ... ok
+test netsim::session::tests::ums_parity_kinds_split_pivotable_as_ruled ... ok
+test netsim::topology::regen::regenerate_slice_json ... ignored, regenerates the committed golden; run manually
+test netsim::topology::tests::committed_json_is_serde_round_trip_stable ... ok
+test netsim::topology::tests::slice_loads_and_the_door_depends_on_the_substation ... ok
+test network::tests::hop_path_finds_shortest_route ... ok
+test network::tests::unreachable_returns_none ... ok
+test package::tests::wrong_profile_is_rejected_before_simulation ... ok
+test package::tests::a_dropped_taxonomy_term_cannot_reach_the_accepted_envelope ... ok
+test scenario::actor::tests::regenerate_actors_json ... ignored, regenerates the committed golden; run manually
+test scenario::agents::tests::a_cut_that_fells_nothing_reports_nothing ... ok
+test scenario::agents::tests::a_fallen_vacuum_cannot_be_run_again ... ok
+test package::tests::package_loader_and_replay_use_the_real_game_types ... ok
+test package::tests::accepted_envelope_matches_what_was_authored ... ok
+test scenario::agents::tests::agents_round_trip_through_serde ... ok
+test scenario::agents::tests::a_power_cut_reports_its_cascade_once_with_the_tally ... ok
+test scenario::agents::tests::an_unrecognised_node_id_is_a_no_op ... ok
+test scenario::agents::tests::an_unknown_start_room_falls_back_to_the_van ... ok
+test scenario::agents::tests::holding_a_door_routes_the_matching_scenario_door ... ok
+test scenario::agents::tests::cutting_the_substation_darkens_the_floor_and_kills_the_cameras ... ok
+test scenario::agents::tests::looping_a_camera_records_the_loop_and_the_intel_ping ... ok
+test scenario::agents::tests::reduced_motion_shortens_the_lights_out ... ok
+test scenario::agents::tests::the_two_agents_start_on_their_own_vantages ... ok
+test scenario::building::audit::tests::a_cut_does_not_get_blame_for_already_unreachable_rooms ... ok
+test scenario::building::audit::tests::a_cut_that_walls_off_a_side_room_is_only_an_advisory ... ok
+test scenario::building::audit::tests::a_lift_only_route_flags_the_stranding_cut_as_an_error ... ok
+test scenario::building::audit::tests::a_lock_no_network_grounds_is_an_error ... ok
+test scenario::building::exchange_house::regen::regenerate_exchange_house_json ... ignored, regenerates the committed golden; run manually
+test scenario::building::exchange_house::regen::regenerate_exchange_house_run_json ... ignored, regenerates the committed golden; run manually
+test scenario::building::audit::tests::a_walkable_building_audits_clean ... ok
+test scenario::command::tests::buttons_bitset ... ok
+test scenario::building::audit::tests::an_objective_behind_a_lock_is_an_advisory_not_an_error ... ok
+test scenario::command::tests::fold_persists_held_and_orders_edges ... ok
+test scenario::command::tests::the_net_view_verbs_round_trip_on_the_wire ... ok
+test scenario::command::tests::the_pivot_verbs_fold_into_immediates ... ok
+test scenario::command::tests::the_pivot_verbs_round_trip_on_the_wire ... ok
+test scenario::command::tests::the_mole_verb_round_trips_on_the_wire ... ok
+test scenario::event::tests::a_net_hack_action_has_no_log_line_but_a_denial_does ... ok
+test scenario::event::tests::a_power_cascade_reads_as_a_grid_report ... ok
+test scenario::event::tests::format_time_is_mm_ss ... ok
+test scenario::floor_graph::regen::regenerate_floor_graph_json ... ignored, regenerates the committed golden; run manually
+test scenario::floor_graph::regen::regenerate_ghost_lobby_floor_json ... ignored, regenerates the committed golden; run manually
+test scenario::event::tests::structural_events_have_no_log_line ... ok
+test scenario::floor_graph::tests::an_infiltrator_owns_their_own_room_and_nothing_else_locally ... ok
+test scenario::floor_graph::tests::cutting_the_substation_cascades_to_every_fixture ... ok
+test scenario::event::tests::logged_events_carry_tick_and_time ... ok
+test scenario::floor_graph::tests::every_door_and_camera_in_the_definition_has_a_node ... ok
+test scenario::floor_graph::tests::every_named_foothold_resolves_on_the_floor ... ok
+test scenario::floor_graph::tests::every_room_has_a_light_and_an_inside_vantage ... ok
+test scenario::floor_graph::tests::the_authored_json_is_serde_round_trip_stable ... ok
+test scenario::floor_graph::tests::the_two_lines_the_floor_offers_are_walkable_by_their_named_footholds ... ok
+test scenario::floor_graph::tests::the_embedded_golden_matches_the_authored_graph ... ok
+test scenario::ghost_lobby::tests::nickel_scenario_round_trips_and_validates ... ignored, needs /tmp/ghost_lobby_scenario_raw.json from nickel export; run via just config-check
+test scenario::ghost_lobby::tests::regenerate_golden_json ... ignored, regenerates the committed golden; run manually
+test scenario::floor_graph::tests::the_upstream_power_line_needs_two_pivots_from_the_van ... ok
+test scenario::floor_graph::tests::the_van_must_pivot_to_reach_any_fixture ... ok
+test scenario::infra::tests::release_is_idempotent_and_keeps_the_first_cause ... ok
+test scenario::infra::tests::a_dry_floor_observes_nothing ... ok
+test scenario::mathf::tests::approach_does_not_overshoot ... ok
+test scenario::mathf::tests::clamp_and_lerp ... ok
+test scenario::mathf::tests::js_round_is_half_to_plus_infinity ... ok
+test scenario::mathf::tests::sign_or_models_logical_or ... ok
+test scenario::power::sim::tests::a_power_op_resolves_its_own_namespace ... ok
+test scenario::power::sim::tests::the_ladder_reads_upstream_from_the_device ... ok
+test scenario::power::sim::tests::work_costs_are_per_seat_and_never_free_by_accident ... ok
+test scenario::power::test_floor::tests::both_feeds_start_inside_their_rating ... ok
+test scenario::power::test_floor::tests::the_exit_load_is_the_door_it_mechanises ... ok
+test scenario::power::test_floor::tests::the_floor_is_the_wired_lobby_with_power_on_top ... ok
+test scenario::power::test_floor::tests::the_test_floor_validates ... ok
+test scenario::power::test_floor::tests::two_feeds_are_independent_and_one_device_has_a_backup ... ok
+test scenario::power::tests::a_backup_may_not_drive_a_feed ... ok
+test scenario::power::tests::a_small_network_validates ... ok
+test scenario::power::tests::an_id_may_not_mean_two_things ... ok
+test scenario::power::tests::an_unprotected_feed_is_not_a_feed ... ok
+test scenario::power::tests::draw_is_a_connected_rating ... ok
+test scenario::power::tests::the_wire_format_round_trips ... ok
+test scenario::pump_house::tests::cutting_the_pump_cascades_from_the_substation ... ok
+test scenario::pump_house::tests::opening_the_valve_by_actuation_releases_the_zone ... ok
+test scenario::pump_house::tests::the_valve_and_pump_are_one_pivot_deep_from_the_van ... ok
+test scenario::pump_house::tests::it_validates ... ok
+test scenario::pump_house::tests::it_hosts_the_infrastructure_and_the_companion ... ok
+test scenario::rooftop::tests::the_canonical_floor_has_no_outside ... ok
+test scenario::rooftop::tests::it_validates_and_starts_on_the_roof_outside ... ok
+test scenario::rooftop::tests::billys_clock_waits_until_the_infiltrator_is_inside ... ok
+test scenario::rooftop::tests::the_hatch_drops_you_into_its_room_with_a_noise ... ok
+test scenario::sim::infra::tests::heard_sources_inside_the_arrival_distance_do_not_restart_investigation ... ok
+test scenario::rooftop::tests::the_roof_holds_you_up_and_in ... ok
+test scenario::rooftop::tests::abseil_down_then_the_front_door_is_locked_until_picked ... ok
+test scenario::sim::power::tests::a_command_cannot_make_an_unpowered_device_run ... ok
+test scenario::sim::power::tests::a_second_hazard_cannot_shorten_a_stun ... ok
+test scenario::sim::power::tests::a_shock_stops_the_body_on_the_tick_it_lands ... ok
+test scenario::sim::power::tests::a_stale_open_signal_cannot_reopen_an_unpowered_door ... ok
+test scenario::sim::power::tests::an_unpowered_floor_has_no_power_state_at_all ... ok
+test scenario::rooftop::tests::the_rope_climbs_back_up ... ok
+test scenario::sim::power::tests::inspecting_a_device_explains_which_rule_won ... ok
+test scenario::sim::power::tests::the_exit_door_stays_shut_while_its_mechanism_is_dead ... ok
+test scenario::sim::power::tests::the_hacker_cannot_cut_a_cable_but_can_work_the_remote_board ... ok
+test scenario::sim::power::tests::the_hands_are_one_pair ... ok
+test scenario::sim::power::tests::the_roof_is_not_the_room_below_it ... ok
+test scenario::sim::signal::tests::a_dark_room_blinds_its_camera ... ok
+test scenario::sim::signal::tests::an_unwired_floor_offers_no_access_and_no_readout ... ok
+test scenario::sim::signal::tests::pivoting_onto_the_bridge_lets_the_hacker_wire_a_door_open ... ok
+test scenario::sim::signal::tests::the_infiltrator_reaches_the_kitchen_and_the_hacker_only_the_bridge_from_the_van ... ok
+test scenario::sim::signal::tests::wiring_by_hand_keeps_the_infiltrator_busy ... ok
+test scenario::sim::tests::a_cooldown_denial_does_not_swallow_a_later_route_denial ... ok
+test scenario::sim::tests::a_missing_fixture_does_not_swallow_the_cooldown_gate ... ok
+test scenario::sim::tests::a_route_denial_spends_neither_bandwidth_nor_cooldown ... ok
+test scenario::sim::tests::action_kind_of_node_classifies_by_identity_not_position ... ok
+test scenario::sim::tests::driving_a_fallen_vacuum_still_charges_but_denies_the_effect ... ok
+test scenario::sim::power::tests::the_laundry_lights_interlock_holds_the_pump ... ok
+test scenario::sim::tests::each_action_resolves_to_a_node_the_floor_actually_carries ... ok
+test scenario::sim::tests::net_hack_on_a_camera_node_delegates_to_the_existing_uplink_economy ... ok
+test scenario::sim::power::tests::the_vacuum_keeps_its_order_through_an_outage ... ok
+test scenario::sim::tests::net_hack_on_an_unreachable_node_denies_with_no_route ... ok
+test scenario::sim::tests::net_hack_on_the_substation_is_a_new_direct_capability ... ok
+test scenario::sim::tests::net_ssh_opens_a_reachable_pivotable_node_by_index ... ok
+test scenario::sim::tests::net_ssh_out_of_range_index_is_a_no_op ... ok
+test scenario::sim::tests::net_ssh_denies_an_unreachable_node_and_reports_why ... ok
+test scenario::sim::tests::the_lights_escalation_sizes_itself_on_the_use_it_is_charging_for ... ok
+test scenario::sim::tests::repeated_net_hack_denials_collapse_to_one_event ... ok
+test scenario::sim::tests::the_net_view_commands_reach_the_sim_through_a_tick ... ok
+test scenario::vsm::tests::a_clear_winner_beats_declaration_order ... ok
+test scenario::vsm::tests::a_tie_resolves_to_the_declared_first_target ... ok
+test scenario::vsm::tests::attention_is_bounded_and_traceable ... ok
+test scenario::vsm::tests::evidence_fixture_preserves_unknown_and_conflict ... ok
+test scenario::vsm::tests::evidence_fixture_supports_usb_then_note_revision ... ok
+test scenario::vsm::tests::evidence_updates_operator_team_and_trace ... ok
+test scenario::vsm::tests::ghost_lobby_deception_loop_reallocates_patrol_attention ... ok
+test scenario::vsm::tests::ledger_can_hold_a_rational_but_wrong_usb_hypothesis ... ok
+test scenario::vsm::tests::ghost_lobby_events_feed_the_evidence_ledger ... ok
+test scenario::vsm::tests::policy_rejects_stale_or_over_limit_proposals ... ok
+test scenario::vsm::tests::repeated_confident_tactic_proposes_bounded_intervention ... ok
+test scenario::vsm::tests::repeated_sabotage_escalates_through_the_bounded_proposal_path ... ok
+test scenario::vsm::tests::sabotage_counts_as_a_tactic_but_a_pump_failure_is_not_one ... ok
+test scenario::vsm::tests::supervisor_consumes_tick_events_without_mutating_simulation ... ok
+test tests::demo_network_is_connected_and_pivotable ... ok
+test scenario::sim::power::tests::the_backup_camera_carries_on_then_stops ... ok
+
+test result: ok. 157 passed; 0 failed; 9 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/acceptance_endings.rs (target/debug/deps/acceptance_endings-2df88bf1af94db56)
+
+running 7 tests
+test caught_ending ... ok
+test ended_is_terminal_no_further_events ... ok
+test laundry_chute_extraction ... ok
+test lockdown_ending ... ok
+test partition_ending ... ok
+test service_exit_extraction ... ok
+test natural_crisis_then_extract ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/acceptance_misdirect_pickpocket.rs (target/debug/deps/acceptance_misdirect_pickpocket-fb81b95ab7195237)
+
+running 3 tests
+test misdirection_throw_then_note_extract_debrief ... ok
+test pickpocket_lights_out_then_extract_debrief ... ok
+test fail_score_usb_term_keys_on_interest_not_possession ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/actor_registry.rs (target/debug/deps/actor_registry-c2a6459e5141e796)
+
+running 18 tests
+test a_high_value_signal_decoy_draws_belief ... ok
+test a_non_finite_stat_is_a_typed_error ... ok
+test a_value_signal_outside_the_unit_interval_is_a_typed_error ... ok
+test a_wrong_format_tag_is_a_typed_error ... ok
+test an_empty_registry_is_a_typed_error ... ok
+test an_unprofiled_object_is_inert_not_a_panic ... ok
+test base_plus_two_modifiers_composes_to_the_expected_stats ... ok
+test an_archetype_keyed_by_another_id_is_a_typed_error ... ok
+test belief_ties_resolve_to_the_earlier_entry ... ok
+test billy_archetype_matches_the_ported_constants ... ok
+test canonical_registry_validates_clean ... ok
+test committed_golden_parses_back_to_the_canonical_registry ... ok
+test composing_unknown_ids_is_a_typed_error_not_a_panic ... ok
+test composition_is_deterministic_and_order_sensitive ... ok
+test the_actor_pack_loader_accepts_the_canonical_payload ... ok
+test registry_round_trips_through_json_unchanged ... ok
+test unobserved_interest_decays_unless_pinned ... ok
+test the_actor_pack_loader_refuses_garbage_and_invalid_payloads ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/agent_fusion.rs (target/debug/deps/agent_fusion-4fccb8f90ed6d122)
+
+running 14 tests
+test a_looped_camera_does_not_detect ... ok
+test a_pivot_costs_the_link_only_while_the_hacker_stands_on_it ... ok
+test a_tripped_trace_ends_the_run_as_traced ... ok
+test each_difficulty_carries_its_own_trace_threshold ... ok
+test an_unpowered_camera_does_not_detect ... ok
+test the_infiltrator_can_reach_the_van_by_pivoting ... ok
+test the_hacker_can_pop_a_door_remotely_under_trace ... ok
+test the_infiltrator_opens_the_same_door_locally_for_free ... ok
+test the_infiltrators_tripped_trace_ends_the_run_too ... ok
+test reaching_deeper_frays_support ... ok
+test the_infiltrators_vantage_follows_them_across_rooms ... ok
+test the_upstream_power_line_is_a_winnable_strategy ... ok
+test the_parked_agent_is_squarely_in_the_hall_cameras_cone ... ok
+test the_two_routes_the_floor_offers_cost_the_link_differently ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/arrival_clock.rs (target/debug/deps/arrival_clock-e553c3db241dde8f)
+
+running 3 tests
+test the_canonical_floor_sends_billy_on_the_run_clock ... ok
+test leaving_the_kitchen_starts_the_clock_and_billy_then_comes ... ok
+test the_played_floor_holds_billy_while_you_learn_the_controls ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/billy_doors.rs (target/debug/deps/billy_doors-1cc1d51b642ba63e)
+
+running 2 tests
+test the_badge_wait_resets_when_billy_no_longer_wants_through ... ok
+test billy_badges_through_a_closed_door_on_his_patrol ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/building_audit.rs (target/debug/deps/building_audit-60d519f3e4f4fba6)
+
+running 5 tests
+test a_disconnected_objective_fails_the_audit_with_an_error ... ok
+test the_infra_free_canonical_floor_audits_exactly_as_before ... ok
+test a_door_crossing_floors_is_an_advisory_and_a_stair_is_clean ... ok
+test the_pump_house_floor_validates_and_audits_clean ... ok
+test dangling_infrastructure_references_are_refused_not_rendered ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/building_runtime.rs (target/debug/deps/building_runtime-ccdba31dfe316149)
+
+running 27 tests
+test a_dangling_portal_endpoint_is_a_typed_error ... ok
+test a_drifted_scenario_floor_is_a_typed_error ... ok
+test a_dead_controller_cannot_unlock_its_portal ... ok
+test a_duplicate_portal_id_is_a_typed_error ... ok
+test a_missing_billy_floor_is_a_typed_error ... ok
+test a_negative_travel_time_is_a_typed_error ... ok
+test a_stranded_room_is_a_typed_error ... ok
+test a_room_in_two_zones_is_a_typed_error ... ok
+test every_room_is_reachable_ignoring_locks_and_power ... ok
+test a_wrong_format_tag_is_a_typed_error ... ok
+test load_building_refuses_non_building_json ... ok
+test locks_and_power_prune_the_reachable_set ... ok
+test load_building_accepts_the_committed_payload ... ok
+test load_building_gates_on_the_payload_format ... ok
+test shortest_path_prefers_the_stairs_when_the_lifts_are_dead ... ok
+test the_exchange_house_is_genuinely_multi_floor ... ok
+test the_committed_golden_is_serde_round_trip_stable ... ok
+test the_committed_golden_matches_the_authored_building ... ok
+test the_exchange_house_validates_clean ... ok
+test snapshots_restore_exactly_and_gate_on_format ... ok
+test the_scenario_doors_project_into_the_floor_portals ... ok
+test the_ghost_lobby_loads_as_the_billy_floor_and_drives_one_ending ... ok
+test the_script_hits_the_lock_the_controller_and_the_dead_lift ... ok
+test zones_map_onto_netsim_segments_and_power_cascades ... ok
+test the_run_is_deterministic ... ok
+test the_parity_fixture_is_serde_round_trip_stable ... ok
+test the_scripted_run_replays_the_committed_parity_fixture ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/challenge_set.rs (target/debug/deps/challenge_set-9e766ee959e3e520)
+
+running 5 tests
+test solution_one_physical_access_takes_the_roof_line_and_outruns_the_shift ... ok
+test the_challenge_floor_is_the_canonical_rooftop_plus_infrastructure ... ok
+test solution_two_hacker_control_opens_the_valve_and_walks_the_doors ... ok
+test solution_four_emergent_cascade_floods_by_consequence_not_by_script ... ok
+test solution_three_cooperative_decoys_walk_the_guard_to_the_exit ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/consoles.rs (target/debug/deps/consoles-ea493a3d41633fc4)
+
+running 7 tests
+test cold_from_the_van_the_deck_shows_no_building ... ok
+test a_routed_door_reads_as_routing_on_the_screen ... ok
+test pivoting_onto_the_bridge_brings_the_floor_onto_the_screen ... ok
+test the_office_pc_shows_building_systems_but_no_cameras_and_cannot_act ... ok
+test the_canonical_floor_has_no_consoles_and_logs_nothing ... ok
+test a_door_passage_becomes_a_fix_that_blurs_with_time ... ok
+test walking_to_the_office_pc_sitting_down_and_standing_up_again ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden_reset.rs (target/debug/deps/golden_reset-1d8df4fe6ab163a3)
+
+running 5 tests
+test operator_draws_thirteen_via_short_circuit ... ok
+test operator_penalty_matches_floor_pick ... ok
+test operator_snack_differs_from_standard ... ok
+test story_and_standard_draw_exactly_nine ... ok
+test standard_seed_123456_init_fixture ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/grounded_slice.rs (target/debug/deps/grounded_slice-550b2fe05db6ebb4)
+
+running 5 tests
+test base_vantage_reaches_raw_public_ips_through_the_isp ... ok
+test identical_command_sequences_are_deterministic ... ok
+test inside_vantage_opens_the_door_locally ... ok
+test wide_area_power_line_disables_the_maglock_door ... ok
+test van_must_pivot_through_the_bridge_to_reach_the_building ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/infra_boundaries.rs (target/debug/deps/infra_boundaries-0bed9f2f12dd3366)
+
+running 13 tests
+test hearing_requires_strictly_nearer_and_strictly_louder_sources ... ok
+test alarms_bypass_distance_but_still_require_the_actors_hearing_threshold ... ok
+test initial_infrastructure_is_dry_silent_and_independent ... ok
+test absent_infrastructure_and_empty_rooms_are_total ... ok
+test notice_identity_is_kind_and_room_not_position_or_strength ... ok
+test noise_stops_when_filling_and_sparking_finish_but_alarms_continue ... ok
+test room_lookup_honours_offset_half_open_spans_and_empty_floors ... ok
+test rereleasing_a_zone_preserves_its_entire_progress ... ok
+test visible_changes_are_local_and_do_not_require_hearing ... ok
+test valve_and_pump_effect_order_keeps_one_release_and_the_first_cause ... ok
+test wading_begins_at_the_threshold_and_applies_only_in_the_wet_room ... ok
+test only_fail_open_pump_power_loss_releases_water ... ok
+test water_depth_uses_only_released_positive_zones_in_the_actors_room ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/infra_observations.rs (target/debug/deps/infra_observations-f5981ddd392ddd55)
+
+running 10 tests
+test a_companion_diversion_expires_even_without_infrastructure ... ok
+test a_nearly_full_zone_clamps_at_full_depth_and_shorts_only_once ... ok
+test an_infra_free_floor_carries_no_infra_state_and_denies_the_mole_verb ... ok
+test stale_alarm_latches_clear_when_their_trip_condition_is_absent ... ok
+test a_dry_pump_house_offers_nothing_to_observe ... ok
+test guard_notices_survive_restore_and_an_ended_episode_can_be_noticed_again ... ok
+test the_hosted_companion_denies_orders_it_cannot_take ... ok
+test wading_through_the_flood_slows_and_betrayes_the_wader ... ok
+test the_flood_reaches_billy_as_observations_and_pulls_him_to_the_noise ... ok
+test a_mid_flood_snapshot_restores_and_replays_identically ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/infra_validation.rs (target/debug/deps/infra_validation-6a398ce23dfff2cc)
+
+running 7 tests
+test an_unknown_room_also_makes_its_zone_unaddressable ... ok
+test duplicate_zone_and_alarm_ids_have_distinct_diagnostics ... ok
+test alarms_need_a_real_room_and_a_real_watched_node ... ok
+test omitted_fail_open_and_mole_options_keep_the_documented_defaults ... ok
+test mole_spawns_include_world_endpoints_and_reject_nonfinite_positions ... ok
+test fill_time_must_be_positive_and_finite ... ok
+test manual_valve_placement_uses_a_half_open_room_span ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/infrastructure.rs (target/debug/deps/infrastructure-d1dfe81141d3330f)
+
+running 8 tests
+test commands_that_cannot_apply_are_denied_not_ignored ... ok
+test every_fixture_validates_and_declares_its_model ... ok
+test fixtures_round_trip_through_the_wire_format ... ok
+test ember_ignites_only_while_equipment_is_live ... ok
+test ventilation_fixture_clears_haze_and_loads_a_filter ... ok
+test combined_fixture_couples_water_air_and_power_through_one_trip ... ok
+test water_fixture_is_conservative_and_causal ... ok
+test snapshot_round_trip_preserves_the_run ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/interp.rs (target/debug/deps/interp-e89b5b9f882b06fa)
+
+running 17 tests
+test a_stationary_sim_renders_stationary ... ok
+test a_stationary_value_does_not_jitter ... ok
+test alpha_endpoints_are_bit_exact ... ok
+test alpha_is_clamped_not_extrapolated ... ok
+test buffers_are_inline_fixed_size_storage ... ok
+test channel_table_matches_the_implemented_behaviour ... ok
+test commit_shifts_curr_into_prev ... ok
+test computing_the_endpoint_would_be_inexact ... ok
+test facing_snaps_and_never_passes_through_zero ... ok
+test midpoint_is_between_the_ticks ... ok
+test door_openness_maps_by_index ... ok
+test interpolating_two_real_ticks_stays_between_them ... ok
+test poses_track_the_simulation ... ok
+test prime_seeds_both_ticks ... ok
+test snap_after_commit_leaves_nothing_to_interpolate ... ok
+test snap_alone_would_lose_the_fresh_state ... ok
+test interpolation_never_touches_simulation_state ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/json_roundtrip.rs (target/debug/deps/json_roundtrip-1e69c06279664186)
+
+running 5 tests
+test actions_are_projected_from_constants ... ok
+test scoring_and_spawn_are_projected_from_constants ... ok
+test tuning_is_projected_from_constants ... ok
+test committed_golden_parses_equal ... ok
+test definition_round_trips_through_json ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mechanics_b.rs (target/debug/deps/mechanics_b-08f68fe27fb830d9)
+
+running 6 tests
+test cooldown_denial_is_throttled_but_stats_still_count ... ok
+test a_route_denial_charges_no_cooldown ... ok
+test bandwidth_regen_and_alert_decay_run_in_quiet ... ok
+test reduced_motion_shortens_lights_flicker ... ok
+test the_hacker_cannot_act_before_pivoting_and_can_after ... ok
+test crisis_entry_transitions_billy_and_can_catch_the_idle_agent ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mole_host.rs (target/debug/deps/mole_host-f3107d784fd11532)
+
+running 8 tests
+test an_unupgraded_synth_cannot_create_a_diversion ... ok
+test every_order_on_a_floor_without_a_mole_is_explicitly_denied ... ok
+test dead_and_missing_restored_companions_have_distinct_denials ... ok
+test hosting_a_companion_does_not_advance_the_runs_rng_stream ... ok
+test digging_and_sabotage_require_strictly_more_than_the_minimum_depth ... ok
+test resetting_clears_diversions_and_rebuilds_the_companion_from_the_seed ... ok
+test synth_denials_and_successes_are_checked_per_order_at_the_fitted_limit ... ok
+test paused_and_ended_runs_ignore_orders_without_mutating_the_snapshot ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/moletaire.rs (target/debug/deps/moletaire-61e8cbfce4af8c56)
+
+running 97 tests
+test above_ground_speed_is_25_and_skateboard_55 ... ok
+test all_equipment_count_is_7 ... ok
+test all_types_count_is_5 ... ok
+test audio_sound_count_ladder ... ok
+test behaviour_bands ... ok
+test body_colors_match_archive_palette ... ok
+test body_rect_matches_archive ... ok
+test can_carry_fragile_at_enhanced_or_better ... ok
+test can_detect_vault_weak_points_only_overclocked ... ok
+test can_mimic_voice_only_overclocked ... ok
+test carry_capacity_base_is_1 ... ok
+test carry_capacity_rucksack_is_3 ... ok
+test coprocessor_names_non_empty ... ok
+test crush_command_kills_without_mole_died_event_archive_parity ... ok
+test dead_mole_ignores_items_and_glider ... ok
+test delivery_emits_delivered_or_eaten_by_seeded_roll ... ok
+test dig_trap_completes_after_4_seconds ... ok
+test drain_events_empty_initially ... ok
+test determinism_same_seed_same_script_identical_logs ... ok
+test distraction_expires_back_to_idle ... ok
+test drop_item_not_carried_is_false ... ok
+test drop_item_success ... ok
+test eat_chance_multiplier_ladder ... ok
+test emit_and_drain_collects_and_clears ... ok
+test equip_replaces_existing ... ok
+test equip_sets_equipment ... ok
+test equipment_codec_round_trips_all ... ok
+test equipment_descriptions_all_non_empty ... ok
+test equipment_from_code ... ok
+test equipment_from_code_empty_is_none ... ok
+test equipment_from_code_legacy_flash_camera ... ok
+test equipment_from_code_legacy_miniglider ... ok
+test equipment_from_code_unknown_is_none ... ok
+test equipment_name_plasma_cutter ... ok
+test equipment_name_skateboard ... ok
+test equipment_serde_uses_codec_with_legacy_aliases ... ok
+test equipment_to_code ... ok
+test feed_resets_hunger ... ok
+test give_item_capacity_full_rejected ... ok
+test give_item_rucksack_allows_3 ... ok
+test give_item_success ... ok
+test glider_requires_equipment_and_completes ... ok
+test hunger_colors ... ok
+test hunger_default_config ... ok
+test hunger_display_strings ... ok
+test hunger_hard_config ... ok
+test hunger_rate_accelerates_with_hunger ... ok
+test hunger_rate_moving ... ok
+test hunger_rate_stationary ... ok
+test hunger_ravenous_config ... ok
+test hunger_resistance_episodes_emit_transitions ... ok
+test hunger_thresholds ... ok
+test level_display_names ... ok
+test level_values ... ok
+test make_bay_all_stock ... ok
+test make_correct_defaults ... ok
+test mole_died_event_carries_dead_state_archive_quirk ... ok
+test move_arrives_and_reaches_destination ... ok
+test music_constants ... ok
+test music_pattern_lengths ... ok
+test music_pattern_notes ... ok
+test music_scheduler_emits_step_zero_pair_then_advances ... ok
+test objective_at_risk_bands ... ok
+test order_dig_trap_surface_rejected ... ok
+test order_dig_trap_underground ... ok
+test order_move_to_above_ground ... ok
+test order_move_to_dead_mole_ignored ... ok
+test order_move_to_underground ... ok
+test path_efficiency_ladder ... ok
+test periodic_scan_emits_vibration_and_scan_events ... ok
+test play_synth_sound_respects_ladder ... ok
+test pull_capped_at_200 ... ok
+test pull_direction_left ... ok
+test pull_direction_right ... ok
+test pull_high_hunger_stronger ... ok
+test pull_zero_hunger_near_zero ... ok
+test sabotage_completes_with_cable_id ... ok
+test scans_only_underground ... ok
+test sensor_range_ladder ... ok
+test snapshot_rejects_wrong_format_tag ... ok
+test stabilisation_core_overclocked_makes_marginal_roll_a_delivery ... ok
+test state_ordinals_and_labels ... ok
+test total_pull_consumed_ignored ... ok
+test snapshot_round_trips_and_resumes_identically ... ok
+test total_pull_no_edibles ... ok
+test total_pull_one_edible ... ok
+test tuning_constants_match_archive ... ok
+test underground_speed_is_200_after_dive ... ok
+test unequip_rucksack_sheds_excess_items ... ok
+test upgrade_overclocked_cap ... ok
+test upgrade_stock_to_basic ... ok
+test upgrade_to_enhanced ... ok
+test use_flash_requires_flash_camera ... ok
+test vibration_quality_ladder ... ok
+test view_state_projection ... ok
+test will_eat_objective_bands ... ok
+test wire_distraction_gates ... ok
+
+test result: ok. 97 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/no_panic_fuzz.rs (target/debug/deps/no_panic_fuzz-2690480ec068f149)
+
+running 1 test
+test random_streams_never_panic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/phase_asymmetry.rs (target/debug/deps/phase_asymmetry-b0ab6f9b6b0e67ec)
+
+running 3 tests
+test immediate_crisis_billy_moves_same_tick ... ok
+test crisis_sets_alert_floor ... ok
+test timer_crisis_billy_moves_next_tick ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/power_network.rs (target/debug/deps/power_network-f7e74e7054d1c683)
+
+running 29 tests
+test a_command_never_beats_a_dead_supply ... ok
+test a_disconnected_device_draws_nothing_until_it_is_wired_back_in ... ok
+test a_cable_cut_is_hand_work_and_rewiring_is_not ... ok
+test a_cut_conductor_trips_the_protection_and_never_clears ... ok
+test a_dumb_load_cannot_be_switched_by_the_hacker ... ok
+test a_dumb_load_has_no_remote_panel ... ok
+test a_local_board_is_not_a_remote_board ... ok
+test a_one_tick_backup_still_delivers_its_one_tick ... ok
+test a_second_breaker_on_a_feed_is_a_definition_error ... ok
+test a_settled_floor_runs_its_devices ... ok
+test a_rewire_cannot_skip_the_authored_warm_up ... ok
+test an_unprotected_or_circular_network_is_rejected ... ok
+test an_interlock_watching_a_missing_signal_is_a_floor_error ... ok
+test a_snapshot_restores_the_run_exactly ... ok
+test exposed_power_is_live_only_where_it_is_authored_and_only_while_fed ... ok
+test an_overload_trips_the_protection_and_only_a_clear_fault_resets_it ... ok
+test losing_one_feed_does_not_touch_the_other ... ok
+test reconnecting_a_disconnected_load_needs_no_change_of_feed ... ok
+test rewiring_a_disconnected_device_reconnects_it ... ok
+test the_backup_carries_a_load_until_its_primary_feed_returns ... ok
+test the_committed_golden_matches_the_derived_network ... ok
+test restart_behaviour_is_stated_per_device_not_discovered ... ok
+test the_floor_has_two_independent_feeds_and_one_backup_powered_device ... ok
+test the_snapshot_format_is_not_negotiable ... ok
+test the_ums_seam_gates_on_the_format_tag ... ok
+test the_whole_definitions_tuning_is_readable ... ok
+test the_wire_form_names_one_namespace_per_verb ... ok
+test every_rung_of_the_ladder_can_be_seen ... ok
+test the_backup_runs_for_its_stated_runtime_and_then_stops ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/replay_determinism.rs (target/debug/deps/replay_determinism-c62d14bc7d9c96f8)
+
+running 2 tests
+test event_log_is_stable_under_reserialisation ... ok
+test two_runs_produce_identical_event_json ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rng_vectors.rs (target/debug/deps/rng_vectors-1572502499c2d4db)
+
+running 4 tests
+test seed_123456_f64_vector ... ok
+test seed_123456_u32_vector ... ok
+test edge_seeds_stay_in_unit_interval ... ok
+test state_serializes_and_resumes_the_sequence ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/scoring_grades.rs (target/debug/deps/scoring_grades-56931cb614eacc0c)
+
+running 5 tests
+test grade_bands_success_and_fail ... ok
+test js_round_is_half_to_plus_infinity ... ok
+test golden_chute_score_adds_bonus ... ok
+test golden_service_exit_score_at_t0 ... ok
+test operator_multiplier_scales_score ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/session_relay_fixture.rs (target/debug/deps/session_relay_fixture-3124a8081be40832)
+
+running 4 tests
+test command_fixture_covers_the_whole_alphabet ... ok
+test event_fixture_exercises_the_pivot_events ... ok
+test relayed_commands_round_trip_unchanged ... ok
+test relayed_events_round_trip_unchanged ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/signal_network.rs (target/debug/deps/signal_network-07f3eb0b02061f65)
+
+running 26 tests
+test a_disabled_camera_cannot_trip_the_interlock ... ok
+test a_latch_flips_on_each_rising_edge_not_each_tick ... ok
+test a_pulse_holds_a_door_for_the_routed_hold_duration ... ok
+test a_pulse_interrupted_by_an_outage_finishes_when_power_returns ... ok
+test a_relay_that_goes_dark_mid_edge_remembers_no_edge ... ok
+test a_seat_wires_only_what_it_can_touch_at_the_receiving_end ... ok
+test a_snapshot_with_the_wrong_format_is_refused ... ok
+test a_wire_into_a_port_the_device_lacks_is_refused ... ok
+test a_wire_into_the_vacuum_asks_the_host_to_route_it ... ok
+test an_inverted_wire_carries_the_negation ... ok
+test billy_in_pursuit_locks_the_service_exit ... ok
+test both_seats_can_wire_but_they_pay_differently ... ok
+test every_gate_computes_its_truth_table ... ok
+test edge_inputs_fire_once_however_long_the_wire_is_held ... ok
+test every_node_the_fixture_names_exists_in_the_grounded_network ... ok
+test hardwired_wires_cannot_be_cut_and_the_budget_is_shared ... ok
+test only_the_hacker_can_reprogram_a_relay ... ok
+test only_the_hacker_wires_into_a_hacker_only_device ... ok
+test signals_cross_one_wire_per_tick ... ok
+test a_restored_snapshot_continues_identically ... ok
+test a_run_is_a_pure_function_of_its_commands ... ok
+test the_committed_golden_is_serde_round_trip_stable ... ok
+test the_committed_golden_matches_the_derived_network ... ok
+test the_fixture_covers_every_ghost_lobby_door_camera_and_room ... ok
+test the_fixture_loads_through_the_ums_seam ... ok
+test the_validator_names_every_authoring_mistake ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/snapshot_equivalence.rs (target/debug/deps/snapshot_equivalence-6ab4bae48909f751)
+
+running 4 tests
+test restore_refuses_a_foreign_snapshot_format ... ok
+test paused_snapshot_restores_paused ... ok
+test snapshot_round_trips_through_json ... ok
+test snapshot_restore_continues_identically ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/supervised_coverage.rs (target/debug/deps/supervised_coverage-66ee0b2bfb0196a9)
+
+running 4 tests
+test unsupervised_run_keeps_supervision_inert ... ok
+test supervision_announces_allocation_once_per_change ... ok
+test supervised_snapshot_restore_continues_identically ... ok
+test supervised_run_shifts_billy_patrol_toward_decoy_target ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/validate_ghost_lobby.rs (target/debug/deps/validate_ghost_lobby-7d6f2de6ba2fdbf4)
+
+running 18 tests
+test arrival_inverted ... ok
+test camera_range_inverted ... ok
+test canonical_definition_validates_clean ... ok
+test difficulty_missing ... ok
+test door_off_room_boundary ... ok
+test duplicate_door_id ... ok
+test duplicate_room_id ... ok
+test negative_action_cost ... ok
+test no_extraction_room ... ok
+test objective_room_missing ... ok
+test object_spawn_out_of_bounds ... ok
+test empty_rooms_reports_only_empty_rooms ... ok
+test reachable_props_stay_within_a_body_height_of_the_floor ... ok
+test player_spawn_out_of_bounds ... ok
+test rooms_not_contiguous ... ok
+test support_out_of_range ... ok
+test too_many_cameras_fails_validation_without_panicking ... ok
+test too_many_doors_in_one_room_fails_validation_without_panicking ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/idaptik_evil_weevil-caccea67d2ab83cd)
+
+running 26 tests
+test agent::tests::every_intent_carries_the_versioned_schema_and_dummy_owner ... ok
+test agent::tests::phases_follow_the_fixed_transition_table ... ok
+test agent::tests::the_budget_is_a_hard_stop ... ok
+test enforce::tests::local_protective_is_operator_only ... ok
+test enforce::tests::non_operator_principals_cannot_terminate ... ok
+test limits::tests::a_clean_profile_is_within_limits ... ok
+test limits::tests::every_crossed_limit_is_named ... ok
+test observer::tests::faults_never_classify_as_hostile ... ok
+test enforce::tests::observe_only_logs_everything_and_acts_on_nothing ... ok
+test observer::tests::host_coped_denials_stay_benign ... ok
+test observer::tests::no_recommendation_can_retaliate ... ok
+test observer::tests::violations_are_flagged_without_missed_detections ... ok
+test policy::tests::dummy_identities_are_disposable_and_seat_typed ... ok
+test policy::tests::the_adversary_only_proposes ... ok
+test policy::tests::the_harness_cannot_grant_itself_an_escape_hatch ... ok
+test policy::tests::the_observer_is_read_only ... ok
+test relay_model::tests::non_object_commands_and_untagged_events_are_rejected ... ok
+test relay_model::tests::relayed_frames_have_seq_stripped ... ok
+test relay_model::tests::role_misrouting_is_rejected ... ok
+test relay_model::tests::stale_and_duplicate_seq_are_dropped_not_relayed ... ok
+test relay_model::tests::the_known_signal_drift_is_pinned_not_silently_assumed_away ... ok
+test relay_model::tests::unknown_games_and_roles_are_refused_at_join ... ok
+test report::tests::a_report_without_secrets_redacts_nothing ... ok
+test telemetry::tests::faults_and_violations_are_disjoint_sets ... ok
+test telemetry::tests::host_coped_denials_are_neither_fault_nor_violation ... ok
+test report::tests::planted_secrets_are_redacted_and_dummy_values_survive ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/evil_weevil.rs (target/debug/deps/idaptik_evil_weevil-aa204c0e2a1f21e9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/corpus.rs (target/debug/deps/corpus-f63573321f0780d8)
+
+running 6 tests
+test every_scenario_declares_the_full_evidence_contract ... ok
+test every_corpus_scenario_passes_and_holds_its_invariant ... FAILED
+test the_corpus_stays_inside_strict_limits ... ok
+test the_observer_has_zero_false_positives_and_zero_false_negatives ... ok
+test the_redacted_artifact_carries_no_secrets_and_keeps_dummy_evidence ... ok
+test the_corpus_is_deterministic_across_runs ... ok
+
+failures:
+
+---- every_corpus_scenario_passes_and_holds_its_invariant stdout ----
+
+thread 'every_corpus_scenario_passes_and_holds_its_invariant' (12892) panicked at crates/idaptik-evil-weevil/tests/corpus.rs:19:9:
+scenario EW-06-infrastructure-orders-and-observations failed:
+  - guard-observed-the-diversion: the synth diversion came back as an UnusualNoise observation event
+  - perception-contract-lists-the-noise: observations at billy.x=-90.0: [] — computed from canonical state at the actor's own position
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    every_corpus_scenario_passes_and_holds_its_invariant
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p idaptik-evil-weevil --test corpus`
+     Running tests/regression.rs (target/debug/deps/regression-d533b7094caeecdd)
+
+running 8 tests
+test faults_are_never_hostile_and_enforcement_has_no_remote_arm ... ok
+test permission_realms_are_not_interchangeable ... ok
+test forged_command_tags_and_shapeless_frames_never_decode ... ok
+test the_relay_drift_remains_a_documented_finding ... ok
+test a_resync_cannot_be_self_issued ... ok
+test the_relay_model_stops_role_misrouting_and_duplicate_seq ... ok
+test stale_frame_after_a_commit_is_rejected_by_the_host ... ok
+test out_of_graph_targets_are_no_ops_that_never_panic ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/idaptik_ffi-d11c52ce43478313)
+
+running 5 tests
+test tests::demo_network_roundtrips_through_the_abi ... ok
+test tests::null_is_handled ... ok
+test tests::ghost_lobby_bad_arguments_become_error_sentinels_not_ub ... ok
+test tests::ghost_lobby_startup_events_arrive_on_the_first_tick ... ok
+test tests::ghost_lobby_full_run_over_the_abi_matches_an_in_process_run ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/idaptik_net-b59be1ede9831519)
+
+running 16 tests
+test deployment::tests::all_three_topologies_allow_gsa_present_or_absent_without_merging_axes ... ok
+test deployment::tests::every_state_class_has_explicit_owner_storage_cache_consistency_partition_and_recovery ... ok
+test deployment::tests::hosted_profile_without_gsa_keeps_server_authority_and_local_durability ... ok
+test deployment::tests::federation_partition_is_fail_closed_and_same_authority_recovery_is_fenced ... ok
+test deployment::tests::peer_administration_and_replica_identity_are_independent_axes ... ok
+test deployment::tests::peer_profile_has_no_central_storage_or_authority_dependency ... ok
+test deployment::tests::rejects_crossed_authority_and_administration_axes ... ok
+test error::tests::burble_adapter_error_recovers_closed_and_timeout_semantics ... ok
+test error::tests::unknown_burble_adapter_error_remains_a_transport_error ... ok
+test lockstep::tests::staggered_delivery_still_matches_the_reference ... ok
+test lockstep::tests::peer_lockstep_runs_without_central_services ... ok
+test seat::tests::schedules_respect_the_role_table ... ok
+test seat::tests::split_and_merge_reproduces_expand ... ok
+test seat::tests::lockstep_run_matches_reference_run ... ok
+test lockstep::tests::death_and_resync_reconstruct_the_reference_run ... ok
+test lockstep::tests::pump_house_mole_orders_lockstep_with_the_reference ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/bin/loopback_seat.rs (target/debug/deps/idaptik_loopback_seat-5f0d1bdaff65547c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/netplay.rs (target/debug/deps/idaptik_netplay-25cbd9d96c4ab034)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/deployment_contract.rs (target/debug/deps/deployment_contract-f9d22f7b6b052753)
+
+running 10 tests
+test blank_peer_owner_or_replica_is_rejected_even_when_cardinality_is_sufficient ... ok
+test hosted_identity_epoch_and_exact_authority_match_are_required ... ok
+test federation_requires_two_servers_with_nonblank_owners_and_a_configured_fenced_authority ... ok
+test only_documented_combinations_of_topology_administration_and_authority_are_supported ... ok
+test peer_owners_and_replicas_each_require_at_least_two_distinct_identities ... ok
+test recovery_accepts_first_and_last_available_sequences_but_never_wraps ... ok
+test recovery_checks_session_and_both_authority_fields_before_sequence_arithmetic ... ok
+test routing_never_substitutes_a_reachable_server_or_changes_the_authority_stamp ... ok
+test state_class_inventory_has_no_omissions_or_duplicates ... ok
+test state_storage_and_recovery_follow_the_adr0015_policy_table ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/evil_weevil_relay.rs (target/debug/deps/evil_weevil_relay-fb74dfd1186fd794)
+
+running 3 tests
+test relay_duplicate_seq_is_dropped_and_role_misrouting_rejected ... ignored, requires the throwaway local burble from scripts/evil_weevil_relay_check.sh
+test relay_join_rejects_unknown_role_and_game ... ignored, requires the throwaway local burble from scripts/evil_weevil_relay_check.sh
+test relay_role_table_rejects_misrouted_and_unknown_commands ... ignored, requires the throwaway local burble from scripts/evil_weevil_relay_check.sh
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mole_routing.rs (target/debug/deps/mole_routing-968ce195babf2e19)
+
+running 2 tests
+test all_mole_operations_belong_to_the_infiltrator_and_survive_relay_metadata ... ok
+test splitting_and_recombining_a_mole_script_preserves_each_ticks_input ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/idaptik_tui-ed5cca49a48be406)
+
+running 13 tests
+test input::tests::enhanced_terminals_hold_until_release ... ok
+test input::tests::non_enhanced_release_still_clears_immediately_if_reported ... ok
+test input::tests::non_enhanced_opposing_keys_do_not_latch_into_paralysis ... ok
+test input::tests::non_enhanced_repeat_refreshes_the_fallback_hold ... ok
+test input::tests::non_enhanced_terminals_release_stale_held_keys ... ok
+test keymap::tests::pause_answers_to_tab_now_that_p_pivots ... ok
+test keymap::tests::the_pivot_keys_map_to_the_footholds_they_name ... ok
+test render::tests::a_hint_does_not_evict_the_key_bindings ... ok
+test render::tests::the_footer_teaches_the_pivot_keys ... ok
+test render::tests::the_panel_names_every_series_it_draws ... ok
+test render::tests::the_footer_survives_a_narrow_terminal ... ok
+test render::tests::the_uplink_panel_follows_the_hacker_in_and_back_out ... ok
+test render::tests::the_uplink_readout_keeps_its_count_in_a_narrow_terminal ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/debug/deps/idaptik_tui-41498f50e350f3d5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/headless_smoke.rs (target/debug/deps/headless_smoke-0497c853cc7042a2)
+
+running 5 tests
+test export_debrief_after_script ... ok
+test export_definition_has_format_tag ... ok
+test headless_caught_reports_failure ... ok
+test headless_clean_extract_prints_json_and_exits_zero ... ok
+test replay_verifies_determinism ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/infra_script.rs (target/debug/deps/infra_script-57db6e66b942b8be)
+
+running 6 tests
+test malformed_mole_tokens_do_not_become_commands ... ok
+test expansion_fires_mole_orders_once_and_preserves_same_tick_order ... ok
+test mole_tokens_preserve_order_parameters_and_normalise_case ... ok
+test unknown_scenarios_return_an_error_instead_of_silently_running_ghost_lobby ... ok
+test a_headless_pump_house_script_delivers_its_mole_order_to_the_host ... ok
+test scenario_selection_preserves_defaults_and_selects_each_named_floor ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/net_smoke.rs (target/debug/deps/net_smoke-f3197cba16510a2f)
+
+running 4 tests
+test inside_vantage_hack_door_reports_effect ... ok
+test van_vantage_ssh_pivots_to_bridge ... ok
+test the_upstream_line_must_be_walked_one_hop_at_a_time ... ok
+test the_pivot_key_opens_the_building_line_for_the_uplinks ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests idaptik_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests idaptik_evil_weevil
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests idaptik_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests idaptik_net
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests idaptik_tui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p idaptik-evil-weevil --test corpus`
+test exit: 101
