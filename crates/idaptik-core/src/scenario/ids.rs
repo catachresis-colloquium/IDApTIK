@@ -58,6 +58,20 @@ id_newtype!(
     "Stable id of a device in a signal network (door, relay, console, ...)."
 );
 id_newtype!(
+    PowerSourceId,
+    "Stable id of an electrical source (mains, generator, battery)."
+);
+id_newtype!(
+    FeedId,
+    "Stable id of a distribution feed: the power module's circuit."
+);
+id_newtype!(
+    LoadId,
+    "Stable id of a load: a device that draws from a feed."
+);
+id_newtype!(BreakerId, "Stable id of a protective breaker on a feed.");
+id_newtype!(HazardId, "Stable id of an authored exposed-power hazard.");
+id_newtype!(
     CompartmentId,
     "Stable id of an infrastructure compartment: `floor/room`, or `exterior/<name>`."
 );
