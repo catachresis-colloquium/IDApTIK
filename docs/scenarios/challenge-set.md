@@ -129,14 +129,16 @@ finish — never inside the chute's 260 px of hearing.
 No water, no network: the companion stages the guard across the floor and
 back again. From the counter hide, as the guard moves on his patrol, one
 staged sequence of underground runs (200 px/s) carries the mole — and its
-refreshed synth decoy, every 30 ticks — from the pump hall to the sluice
-exit: legs at 560, 760, 960 and 1150, each waiting at its endpoint until
-the guard closes to within 45 px (the turn-back fires once he is within
-145 px of the sluice exit — committed far enough that the gallery is
-safe), because one continuous run outruns his 260 px hearing while he
-badges a door. The guard follows the sound the whole
-way, badging every door behind him. Once he is pinned east, staged legs back
-west (900, 700, 500, 390) park him at the pump hall's west door. Meanwhile the body leaves the
+refreshed synth decoy, every 30 ticks — from the pump hall to the gallery:
+legs at 560, 760 and 960, each waiting at its endpoint until the guard
+closes to within 45 px (the turn-back fires once he is within 145 px of
+the gallery's east end — committed far enough that the canteen and the
+roof line are safe), because one continuous run outruns his 260 px
+hearing while he badges a door. The east turn deliberately stops short of
+the service exit: the chase asks the guard to badge only the doors his
+FSM demonstrably badges. He follows the sound the whole way, badging
+every door behind him. Once he is pinned east, staged legs back west
+(800, 640, 500, 390) park him at the pump hall's west door. Meanwhile the body leaves the
 counter, climbs back to the roof, and **walks** it east — walked, never
 sprinted: `noise_invest` has no room check, and a sprint on the roof would
 pull the guard off the decoy. The hatch drop lands only once he is beyond
