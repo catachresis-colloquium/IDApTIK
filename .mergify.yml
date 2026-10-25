@@ -1,103 +1,22 @@
-merge_protections_settings:
-  # Routine dependency updates may enter the queue automatically. Human-authored
-  # work requires an explicit merge decision after GitHub's protected-branch
-  # checks have passed.
-  #
-  # ── THAT COMMENT DESCRIBED AN INTENTION THIS FILE DID NOT IMPLEMENT ─────────
-  # Until 2026-09-27 the whole of `auto_merge_conditions` was one line:
-  #
-  #     - author = dependabot[bot]
-  #
-  # No check condition of any kind. "After GitHub's protected-branch checks have
-  # passed" was a claim in a comment, not a condition in the config, and the
-  # difference was measured on PR #148 within three minutes of PR #147 landing:
-  #
-  #     actions.lock is in sync with the workflow YAML   failure
-  #     fixtures-and-must (shell suites + then-active legacy Mustfile...)   failure
-  #     build  (GitHub Pages)                            failure
-  #     abi-model, test-ghost, session-loopback,
-  #     supply-chain, bevy-frontend, config-scenario...  in_progress
-  #     CodeQL Security Analysis                         startup_failure
-  #
-  # Mergify merged it anyway, with three checks red, seven still running, and
-  # one that never started. PR #148 was Dependabot bumping
-  # `github/codeql-action` from v4.38.1 to v4.38.2 in codeql.yml without
-  # touching .github/workflows/actions.lock -- which Dependabot cannot do,
-  # because it edits the workflow file it found a release for and has no idea
-  # that this repository also pins those refs in a lockfile. The result was
-  # exactly the failure PR #147 had just fixed: an unrecorded ref makes GitHub
-  # refuse the workflow at startup, zero jobs are created, no log exists, and
-  # `code_scanning` -- a required rule on main -- renders no verdict at all.
-  #
-  # The gate built in PR #147 caught it. The gate was then overridden, because a
-  # check nobody is required to wait for is a suggestion. This file is what makes
-  # it a condition.
-  #
-  # The estate-wide version of this failure is hyperpolymath/standards#968: 39
-  # repositories with silently dead CI from Dependabot/lockfile desync. IDApTIK
-  # became #40 twice in four days, and the second time it happened *while a fix
-  # for the first was on main*.
-  auto_merge_conditions:
-    - author = dependabot[bot]
-
-    # Cargo bumps only. A `github_actions` bump can NEVER satisfy the lockfile
-    # condition below, because regenerating actions.lock is not something
-    # Dependabot does. Auto-merging one is therefore guaranteed to merge a
-    # desynchronised lockfile, i.e. guaranteed to break CI in a way that
-    # produces no log. Those pull requests now wait for a human to run
-    # `gh actions-lock --no-migrate-local-actions --no-narrow`, review the diff,
-    # and push -- or to close the bump. That is a few minutes of work per week
-    # and it is the only arrangement in which the lockfile means anything.
-    #
-    # This repository has exactly two Dependabot ecosystems: `cargo` and
-    # `github-actions` (.github/dependabot.yml). The `mix` ecosystem that used
-    # to be here pointed at a `/server` directory retired under issue #74 and
-    # was removed on 2026-09-27; it had been failing its weekly update for a
-    # year. If an ecosystem is added, add it to this pattern deliberately --
-    # the default must stay closed.
-    - head ~= ^dependabot/cargo/
-
-    # Nothing failing, nothing ambiguous. `check-neutral` is included because a
-    # neutral conclusion is also not a pass, and treating it as one is how a
-    # skipped or timed-out check becomes a silent approval.
-    - "#check-failure = 0"
-    - "#check-neutral = 0"
-
-    # The lockfile gate must have POSITIVELY SUCCEEDED, not merely not-failed.
-    # This is not redundant with `#check-failure = 0` and the distinction is the
-    # whole point: when GitHub refuses a workflow at startup it creates zero
-    # jobs, so there is no check run to fail -- the check is simply ABSENT. On
-    # PR #148 the CodeQL run concluded `startup_failure` and contributed no
-    # check to any count. A condition phrased as "nothing failed" is satisfied
-    # by a check that never ran; a condition phrased as "this one succeeded" is
-    # not. Verified against the check runs GitHub recorded for f4b2013.
-    - check-success = actions.lock is in sync with the workflow YAML
-
-    # DELIBERATELY ABSENT: `#check-pending = 0`.
-    #
-    # It looks like the obvious completion of the set above, and omitting it is a
-    # judgement rather than an oversight. Third-party checks on this repository
-    # (Codeac, Semgrep, GitGuardian, CodeRabbit) report through the statuses API
-    # and were still `pending` when PR #148 merged. A third-party service that
-    # stalls would then block every routine cargo bump indefinitely, and the
-    # failure would present as "Dependabot stopped working" -- a quiet stall in
-    # the opposite direction from the one being fixed here. Waiting for required
-    # checks is branch protection's job, and the organisation-level
-    # `Estate Baseline` and `Branch-Floor` rulesets own that; they are not
-    # readable or writable from this repository's token, so this file does not
-    # duplicate them.
-    #
-    # If cargo bumps ever start merging with checks still running, the fix is to
-    # add `#check-pending = 0` here together with a `checks_timeout` so a
-    # stalled third party cannot wedge the queue forever. Adding one without the
-    # other trades a loud failure for a silent one.
-    #
-    # ⚠ THIS FILE IS A MITIGATION, NOT THE FIX — see
-    # docs/decisions-pending/DR-0004-required-status-checks.adoc. These
-    # conditions constrain Mergify. They do not constrain a maintainer clicking
-    # "Merge", another automation, or an admin override. Only GitHub's own
-    # required-status-check list does that, and it is not readable with this
-    # repository's token (`GET /branches/main/protection` returns 403), so
-    # whether the lock-sync gate is on it is an open owner ruling. A green build
-    # here means the one merge path this repository controls is configured
-    # correctly; it does NOT mean the gate is enforced.
+# SPDX-License-Identifier: MPL-2.0
+# This constrains Mergify only. Manual merges need the strict repository rule
+# in .github/rulesets/rust-integration.json applied by an administrator.
+# See docs/verification/issue-171-electrical-ids.md and DR-0004.
+{
+  merge_protections_settings: {
+    auto_merge_conditions: [
+      "author = dependabot[bot]",
+      # Actions updates need a reviewed actions.lock regeneration first.
+      "head ~= ^dependabot/cargo/",
+      "#check-failure = 0",
+      "#check-neutral = 0",
+      # A passing old head is insufficient after another PR changes main (#171).
+      "#commits-behind = 0",
+      # Positive results catch missing, skipped, pending and startup-failed jobs.
+      # Do not wait for every optional third-party check with #check-pending = 0.
+      "check-success = actions.lock is in sync with the workflow YAML",
+      "check-success = test-ghost (core/tui/ffi + clippy + fmt)",
+      "check-success = fixtures-and-must (shell suites + Mustfile probes)",
+    ],
+  },
+}

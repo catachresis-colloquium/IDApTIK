@@ -129,9 +129,7 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(
-        &self,
-    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
+    pub fn list_sessions(&self) -> Result<Vec<SessionListEntry>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
@@ -180,13 +178,13 @@ impl Store {
         {
             let mut sessions = txn.open_table(SESSIONS)?;
             let mut rec = read_session(&sessions, id)?;
-            if let Some(last) = rec.last_seq {
-                if seq <= last {
-                    return Err(PersistError::SeqRegression {
-                        last,
-                        attempted: seq,
-                    });
-                }
+            if let Some(last) = rec.last_seq
+                && seq <= last
+            {
+                return Err(PersistError::SeqRegression {
+                    last,
+                    attempted: seq,
+                });
             }
             let batch = CommandBatch {
                 epoch,
@@ -517,14 +515,14 @@ impl Store {
                 issues.push(VerifyIssue::NonZeroStart { first: seq });
             }
             expected = Some(seq.saturating_add(1));
-            if let Some(prev) = last_epoch {
-                if batch.epoch < prev {
-                    issues.push(VerifyIssue::EpochRegressed {
-                        seq,
-                        from: prev,
-                        to: batch.epoch,
-                    });
-                }
+            if let Some(prev) = last_epoch
+                && batch.epoch < prev
+            {
+                issues.push(VerifyIssue::EpochRegressed {
+                    seq,
+                    from: prev,
+                    to: batch.epoch,
+                });
             }
             last_epoch = Some(batch.epoch);
         }

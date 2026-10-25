@@ -10,6 +10,8 @@ elixir = "1.19.5-otp-28"
 # FFI, configuration, and task runner
 zig = "0.14.0"
 just = "1.46.0"
+"aqua:mikefarah/yq" = "4.53.3"
+jq = "1.8.1"
 "aqua:nickel-lang/nickel" = "1.16.0"
 "aqua:trufflesecurity/trufflehog" = "3.96.0"
 
