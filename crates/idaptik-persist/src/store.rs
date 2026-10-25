@@ -14,6 +14,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// One row of [`Store::list_sessions`]: the id, and the record or the reason it
+/// could not be decoded. The inner `Result` lets one unreadable session be
+/// reported without hiding the rest.
+pub type SessionListing = (SessionId, Result<SessionRecord, String>);
+
 /// A durable store. Cheap to keep alive; every method opens its own redb
 /// transaction.
 ///
@@ -66,10 +71,9 @@ impl Store {
             let _blobs = txn.open_table(BLOBS)?;
 
             let mut meta = txn.open_table(META)?;
-            let existing = match meta.get(schema::SCHEMA_KEY)? {
-                None => None,
-                Some(guard) => Some(guard.value().to_vec()),
-            };
+            let existing = meta
+                .get(schema::SCHEMA_KEY)?
+                .map(|guard| guard.value().to_vec());
             match existing {
                 None => {
                     let bytes = serde_json::to_vec(&SCHEMA_VERSION)?;
@@ -125,9 +129,7 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(
-        &self,
-    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
+    pub fn list_sessions(&self) -> Result<Vec<SessionListing>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();

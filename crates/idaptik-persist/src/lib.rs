@@ -106,7 +106,7 @@ pub use record::{
     CheckpointRecord, CommandBatch, FlushPolicy, Resume, SessionId, SessionRecord, SessionStatus,
     SimKind, VerifyIssue, VerifyReport,
 };
-pub use store::Store;
+pub use store::{SessionListing, Store};
 
 /// The persist-schema version. Bumped only when the *layout* changes.
 ///
