@@ -1,0 +1,79 @@
+   Compiling idaptik-ffi v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-ffi)
+   Compiling idaptik-evil-weevil v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-evil-weevil)
+    Finished `test` profile [optimized + debuginfo] target(s) in 12.43s
+     Running unittests src/lib.rs (target/debug/deps/idaptik_evil_weevil-d2fdd77c6caea550)
+
+running 26 tests
+test agent::tests::every_intent_carries_the_versioned_schema_and_dummy_owner ... ok
+test agent::tests::phases_follow_the_fixed_transition_table ... ok
+test agent::tests::the_budget_is_a_hard_stop ... ok
+test enforce::tests::local_protective_is_operator_only ... ok
+test enforce::tests::non_operator_principals_cannot_terminate ... ok
+test enforce::tests::observe_only_logs_everything_and_acts_on_nothing ... ok
+test limits::tests::a_clean_profile_is_within_limits ... ok
+test limits::tests::every_crossed_limit_is_named ... ok
+test observer::tests::faults_never_classify_as_hostile ... ok
+test observer::tests::host_coped_denials_stay_benign ... ok
+test observer::tests::no_recommendation_can_retaliate ... ok
+test observer::tests::violations_are_flagged_without_missed_detections ... ok
+test policy::tests::dummy_identities_are_disposable_and_seat_typed ... ok
+test policy::tests::the_adversary_only_proposes ... ok
+test policy::tests::the_harness_cannot_grant_itself_an_escape_hatch ... ok
+test policy::tests::the_observer_is_read_only ... ok
+test relay_model::tests::non_object_commands_and_untagged_events_are_rejected ... ok
+test relay_model::tests::relayed_frames_have_seq_stripped ... ok
+test relay_model::tests::role_misrouting_is_rejected ... ok
+test relay_model::tests::stale_and_duplicate_seq_are_dropped_not_relayed ... ok
+test relay_model::tests::the_known_signal_drift_is_pinned_not_silently_assumed_away ... ok
+test relay_model::tests::unknown_games_and_roles_are_refused_at_join ... ok
+test report::tests::a_report_without_secrets_redacts_nothing ... ok
+test report::tests::planted_secrets_are_redacted_and_dummy_values_survive ... ok
+test telemetry::tests::faults_and_violations_are_disjoint_sets ... ok
+test telemetry::tests::host_coped_denials_are_neither_fault_nor_violation ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/evil_weevil.rs (target/debug/deps/idaptik_evil_weevil-2c5244787f2d304c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/corpus.rs (target/debug/deps/corpus-c8f068cc0efcee7f)
+
+running 6 tests
+test every_scenario_declares_the_full_evidence_contract ... ok
+test the_corpus_stays_inside_strict_limits ... ok
+test every_corpus_scenario_passes_and_holds_its_invariant ... ok
+test the_observer_has_zero_false_positives_and_zero_false_negatives ... ok
+test the_redacted_artifact_carries_no_secrets_and_keeps_dummy_evidence ... ok
+test the_corpus_is_deterministic_across_runs ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/regression.rs (target/debug/deps/regression-d2080e3114019528)
+
+running 8 tests
+test faults_are_never_hostile_and_enforcement_has_no_remote_arm ... ok
+test permission_realms_are_not_interchangeable ... ok
+test forged_command_tags_and_shapeless_frames_never_decode ... ok
+test a_resync_cannot_be_self_issued ... ok
+test out_of_graph_targets_are_no_ops_that_never_panic ... ok
+test the_relay_model_stops_role_misrouting_and_duplicate_seq ... ok
+test the_signal_relay_drift_remains_a_documented_finding ... ok
+test stale_frame_after_a_commit_is_rejected_by_the_host ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/idaptik_ffi-d11c52ce43478313)
+
+running 5 tests
+test tests::demo_network_roundtrips_through_the_abi ... ok
+test tests::null_is_handled ... ok
+test tests::ghost_lobby_startup_events_arrive_on_the_first_tick ... ok
+test tests::ghost_lobby_bad_arguments_become_error_sentinels_not_ub ... ok
+test tests::ghost_lobby_full_run_over_the_abi_matches_an_in_process_run ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+test-other exit: 0
