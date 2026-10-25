@@ -1,5 +1,6 @@
 //! The store itself: open, append, checkpoint, resume, verify.
 
+use crate::SCHEMA_VERSION;
 use crate::digest::digest_hex;
 use crate::error::PersistError;
 use crate::record::{
@@ -7,7 +8,6 @@ use crate::record::{
     VerifyReport,
 };
 use crate::schema::{self, BLOBS, CHECKPOINTS, COMMANDS, META, SESSIONS};
-use crate::SCHEMA_VERSION;
 use idaptik_core::scenario::{Buttons, Command, RuntimeSnapshot, fold};
 use redb::{Database, ReadableTable};
 use std::collections::BTreeMap;
@@ -76,7 +76,8 @@ impl Store {
                     meta.insert(schema::SCHEMA_KEY, bytes.as_slice())?;
                 }
                 Some(bytes) => {
-                    let found: u32 = serde_json::from_slice(&bytes).map_err(PersistError::Decode)?;
+                    let found: u32 =
+                        serde_json::from_slice(&bytes).map_err(PersistError::Decode)?;
                     if found != SCHEMA_VERSION {
                         return Err(PersistError::SchemaMismatch {
                             found,
@@ -124,14 +125,19 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(&self) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
+    pub fn list_sessions(
+        &self,
+    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
         for entry in sessions.iter()? {
             let (k, v) = entry?;
             let id = SessionId::new(k.value());
-            out.push((id, serde_json::from_slice(v.value()).map_err(|e| e.to_string())));
+            out.push((
+                id,
+                serde_json::from_slice(v.value()).map_err(|e| e.to_string()),
+            ));
         }
         Ok(out)
     }
@@ -327,9 +333,8 @@ impl Store {
 
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
-        let range = commands.range(
-            (id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX),
-        )?;
+        let range = commands
+            .range((id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
