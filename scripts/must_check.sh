@@ -24,6 +24,8 @@ fi
 # Parse the deliberately one-line clause records. Commands are selected by the
 # host-side case statement below; no contract text is evaluated as shell.
 if ! awk '
+  # Return the quoted value after the first key = " marker, or an empty
+  # string if the marker or closing quote is missing. Escapes are not decoded.
   function field(line, key,    pos, rest, end) {
     pos = index(line, key " = \"")
     if (!pos) return ""
@@ -61,6 +63,8 @@ if ! awk '
   exit 2
 fi
 
+# Run the repository check selected by probe ID ($1). Return zero on success,
+# a nonzero check status on failure, or 2 for an unknown ID.
 run_probe() {
   local id="$1"
   case "$id" in
