@@ -62,4 +62,4 @@ jobs:
           git checkout -b arena/feedback
           git add -A feedback
           git commit --no-verify -m "chore: build feedback for ${GITHUB_SHA}"
-          git push --no-verify --force origin HEAD:refs/heads/arena/feedback
+          git push --no-verify --force origin HEAD:refs/heads/arena/feedback-e86a742d
