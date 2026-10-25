@@ -106,7 +106,7 @@ fn rejected(mutate: impl FnOnce(&mut InfrastructureDefinition)) -> InfraValidati
 /// catalogue. That is what `validate_with_rules` is for, and why these tests
 /// mutate rules rather than `infra.rules`.
 fn rejected_rule(mutate: impl FnOnce(&mut Vec<RuleDef>)) -> InfraValidationError {
-    let mut rules = idaptik_core::scenario::infrastructure::catalogue::rule_catalogue();
+    let mut rules = idaptik_core::scenario::infrastructure::catalogue::RULE_CATALOGUE.to_vec();
     mutate(&mut rules);
     sump()
         .infra
