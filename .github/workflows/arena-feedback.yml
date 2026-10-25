@@ -78,20 +78,49 @@ jobs:
             echo '```'
           } >> "$DIGEST"
           exit "$status"
-      - name: test (core)
+      - name: clippy (core/tui/net/weevil, -D warnings, short)
         continue-on-error: true
         run: |
           output=$(mktemp)
           status=0
-          cargo test -p idaptik-core > "$output" 2>&1 || status=$?
-          cat "$output"
+          cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil \
+            --all-targets --message-format short -- -D warnings > "$output" 2>&1 || status=$?
           {
-            echo '## cargo test -p idaptik-core'
+            echo '## cargo clippy (core/tui/net/evil-weevil --all-targets -D warnings) — short'
             echo "Exit status: $status"
             echo '```'
-            grep -E "^test result:|^warning: .*generated|panicked" "$output" | head -60
+            grep -E "error|warning" "$output" | grep -v "^ " | head -80
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: test (core/tui/ffi/net/weevil)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil'
+            echo "Exit status: $status"
+            echo '```'
+            grep -E "^test result:|panicked|error(\[|:)" "$output" | head -80
             echo '--- failure details ---'
-            sed -n '/^failures:$/,$p' "$output" | head -400
+            sed -n '/^failures:$/,$p' "$output" | head -300
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: evil-weevil-check (corpus gates)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          bash scripts/evil_weevil_check.sh > "$output" 2>&1 || status=$?
+          {
+            echo '## just evil-weevil-check (deterministic adversarial corpus)'
+            echo "Exit status: $status"
+            echo '```'
+            tail -40 "$output"
             echo '```'
           } >> "$DIGEST"
           exit "$status"
