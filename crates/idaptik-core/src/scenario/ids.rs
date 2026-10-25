@@ -52,6 +52,15 @@ id_newtype!(
     "Stable id of a building portal (door/stair/lift/ladder/vent)."
 );
 id_newtype!(CircuitId, "Stable id of a building power circuit.");
+// The electrical ids, defined once, here.
+//
+// `scenario::power` and `scenario::sim::power` import all five from this
+// module. They must be *defined*: the power work once landed its modules while
+// these types existed only as imports, so `main` failed with five `E0432`s and
+// no test could run to say so. Two later repairs then each added their own set,
+// which is the same mistake from the other side — a name declared three times
+// is a tree that does not build either. There is one home for them, and this is
+// it.
 id_newtype!(
     PowerSourceId,
     "Stable id of a power source: mains or backup."
@@ -65,20 +74,6 @@ id_newtype!(
     SignalId,
     "Stable id of a device in a signal network (door, relay, console, ...)."
 );
-id_newtype!(
-    PowerSourceId,
-    "Stable id of an electrical source (mains, generator, battery)."
-);
-id_newtype!(
-    FeedId,
-    "Stable id of a distribution feed: the power module's circuit."
-);
-id_newtype!(
-    LoadId,
-    "Stable id of a load: a device that draws from a feed."
-);
-id_newtype!(BreakerId, "Stable id of a protective breaker on a feed.");
-id_newtype!(HazardId, "Stable id of an authored exposed-power hazard.");
 id_newtype!(
     CompartmentId,
     "Stable id of an infrastructure compartment: `floor/room`, or `exterior/<name>`."
@@ -105,28 +100,6 @@ id_newtype!(DamperId, "Stable id of a duct damper.");
 id_newtype!(FilterId, "Stable id of a duct filter.");
 id_newtype!(EquipmentId, "Stable id of a powered equipment fixture.");
 id_newtype!(TraceSourceId, "Stable id of a scent or noise source.");
-
-// --- power ------------------------------------------------------------------
-//
-// The power module (`scenario::power`, `scenario::sim::power`) imports these
-// five from `crate::scenario::ids`, so they have to be *defined* here. They
-// were not: the power work landed its module, its events and its tests while
-// the id types it names were only ever imported. `main` therefore did not
-// compile — `cargo check -p idaptik-core` failed with five `E0432`
-// unresolved-import errors — and no test could run, so the gap could not
-// report itself.
-//
-// The definitions are deliberately the plain `id_newtype!` ones: nothing in
-// the power module needs anything more than a string id, and inventing a
-// richer type here would be a second decision taken in the wrong file.
-id_newtype!(HazardId, "Stable id of an authored hazard in a powered room.");
-id_newtype!(LoadId, "Stable id of a powered load on a circuit.");
-id_newtype!(FeedId, "Stable id of a circuit feed (the thing that cuts it).");
-id_newtype!(BreakerId, "Stable id of a breaker on a power feed.");
-id_newtype!(
-    PowerSourceId,
-    "Stable id of an authored power source: grid, generator or battery."
-);
 
 /// Resolves content ids to `Vec` indices once, so the simulation can index
 /// directly. Built at [`crate::scenario::GhostLobbySim`] construction and after
