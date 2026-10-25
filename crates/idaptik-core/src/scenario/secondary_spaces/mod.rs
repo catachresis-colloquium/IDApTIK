@@ -25,7 +25,7 @@ pub mod model;
 pub mod topology;
 
 pub use access::{route_accessibility, RouteAccess};
-pub use model::SecondaryEvent;
+pub use events::SecondaryEvent;
 pub use host::{AccessPointDebug, MoleDebug, RouteDebugEntry, RouteDebugView};
 pub use model::{
     ActorBody, ActorClass, ActorClassSet, CableId, CableState, Clearance, EvidenceKind,

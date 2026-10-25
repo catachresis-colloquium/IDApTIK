@@ -18,12 +18,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::scenario::secondary_spaces::access::{route_accessibility, RouteAccess};
 use crate::scenario::secondary_spaces::model::{
-    AccessPointId, AccessPointKind, AccessPointSpec, ActorClass, CableState, Clearance, CableId,
+    AccessPointId, AccessPointKind, AccessPointSpec, ActorClass, CableState, Clearance,
     EntryRefusalReason, EvidenceKind, ObstructionReason, RouteId, RouteSpec, RouteState,
-    SabotageRefusalReason, SecondarySpec, SecondaryState,
+    SabotageRefusalReason, SecondarySpec, SecondaryState, SpaceKind,
 };
 use crate::scenario::secondary_spaces::topology::{self, RouteNetwork};
-use crate::scenario::secondary_spaces::SecondaryEvent;
+use crate::scenario::secondary_spaces::events::SecondaryEvent;
 
 /// Mirrors [`crate::companion::definition::moletaire().tuning.dig_min_depth`]:
 /// the mole can only chew or dig while underground. Kept as a named constant
@@ -161,7 +161,7 @@ impl GhostLobbySim {
             });
             return;
         }
-        if s.is_underground() {
+        if st.mole.is_underground() {
             self.events.push(Event::Secondary {
                 secondary: SecondaryEvent::EntryRefused {
                     route_id: None,
@@ -266,7 +266,7 @@ impl GhostLobbySim {
         if !s.alive {
             return;
         }
-        if !s.is_underground() {
+        if !st.mole.is_underground() {
             self.events.push(Event::Secondary {
                 secondary: SecondaryEvent::SabotageRefused {
                     reason: SabotageRefusalReason::NotUnderground,
@@ -313,9 +313,10 @@ impl GhostLobbySim {
             return;
         }
         let s = st.mole.state();
+        let network = RouteNetwork { spec: net, state: st };
         let entry_x = st
             .mole_entry_ap
-            .and_then(|id| net.access_point(&id))
+            .and_then(|id| network.access_point(&id))
             .map(|ap| ap.x)
             .unwrap_or(s.x);
         st.mole.order_move_to(entry_x, true);
@@ -374,13 +375,13 @@ impl GhostLobbySim {
         let st = self.state.secondary.as_ref();
         let mole_route = st.and_then(|s| s.mole_route.as_ref());
         let mole = st.map(|s| {
-            let ms = s.state();
+            let ms = s.mole.state();
             MoleDebug {
                 x: ms.x,
                 depth: ms.depth,
                 hunger: ms.hunger,
                 state: format!("{:?}", ms.state),
-                underground: s.is_underground(),
+                underground: s.mole.is_underground(),
             }
         });
         let routes = net
@@ -565,7 +566,9 @@ fn secondary_transit(
             let network = RouteNetwork { spec: net, state: st };
             let at_ap = network.route(&route_id).is_some_and(|route| {
                 route.access_points.iter().any(|id| {
-                    network.access_point(id).is_some_and(|ap| (ap.x - s.x).abs() <= ENTRY_REACH)
+                    network
+                        .access_point(id)
+                        .is_some_and(|ap| (ap.x - s.x).abs() <= ENTRY_REACH)
                 })
             });
             if at_ap {
@@ -591,9 +594,10 @@ fn secondary_transit(
     // egress, so a fresh `None -> Some` heading back toward the entry counts.
     if let Some(route_id) = &st.mole_route {
         let target = s.target_x;
+        let network = RouteNetwork { spec: net, state: st };
         let entry_x = st
             .mole_entry_ap
-            .and_then(|id| net.access_point(id))
+            .and_then(|id| network.access_point(&id))
             .map(|ap| ap.x)
             .unwrap_or(s.x);
         let entry_dir = (entry_x - s.x).signum();
@@ -718,15 +722,17 @@ fn secondary_transit(
 /// point on a route whose span covers `x`.
 fn entry_route_at<'a>(
     net: &'a SecondarySpec,
-    state: &SecondaryState,
+    _state: &SecondaryState,
     x: f64,
 ) -> Option<(&'a RouteSpec, &'a AccessPointSpec)> {
-    let network = RouteNetwork { spec: net, state };
-    let route = network.route_covering(x)?;
+    let route = net
+        .routes
+        .iter()
+        .find(|r| x >= r.geometry.x_range.0 && x <= r.geometry.x_range.1)?;
     let ap = route.access_points.iter().find_map(|id| {
-        network
-            .access_point(id)
-            .filter(|ap| (ap.x - x).abs() <= ENTRY_REACH)
+        net.access_points
+            .iter()
+            .find(|ap| &ap.id == id && (ap.x - x).abs() <= ENTRY_REACH)
     })?;
     Some((route, ap))
 }
@@ -759,6 +765,7 @@ mod tests {
             .secondary
             .as_ref()
             .expect("secondary state present")
+            .mole
             .state()
     }
 

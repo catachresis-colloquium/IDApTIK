@@ -16,7 +16,7 @@ pub enum RouteAccess {
     Denied { reason: AccessDenial },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AccessDenial {
     RouteSealed,
     RouteCollapsed,
