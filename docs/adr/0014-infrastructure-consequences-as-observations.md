@@ -187,9 +187,12 @@ coarse water system, which moves the building's water between rooms — one owns
 "this room is flooding", the other owns "where the building's water goes". The
 perception contract (`actor_observations`) is the seam the neighbours should
 consume: power failures already land in the same canonical `Event` log, and
-surfacing them to Billy as `equipment_failure`/`darkness` observations — and
-`actor_observations` to the weevil's fault-vs-hostility observer — is named
-follow-up work, not a redesign.
+surfacing them to Billy as `equipment_failure`/`darkness` observations is
+named follow-up work, not a redesign. The weevil corpus carries the
+observation trail today: scenario EW-06 asserts that an accepted companion
+order returns to the player-visible log only as `GuardObserved`
+observations, and evaluates the `observations()` contract where the guard
+stands.
 
 **Alternatives considered.** Giving guards direct reads of infrastructure
 state (rejected: omniscience — the brief, and the game, is about perception).

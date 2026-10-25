@@ -52,9 +52,12 @@ impl RelayVerdict {
 ///
 /// Source of truth (pinned burble rev): `server/lib/burble/games/idaptik.ex`.
 /// Keep this table in lockstep with that file; the profile test below fails
-/// on drift. Note the known, demonstrated gap recorded in ADR-0013: the relay
-/// profile has no `Signal` entry, so a `Command::Signal` frame is refused as
-/// an unknown command even though the client routing table knows the verb.
+/// on drift. Note the known, demonstrated gaps: the relay profile has no
+/// `Signal` entry (ADR-0012), and — since ADR-0014 and the electrical
+/// infrastructure — no `Mole` or `Power` entry, so those frames are refused
+/// as unknown commands even though the client routing table knows the verbs.
+/// `Power` additionally carries its seat per-op, which this tag-keyed table
+/// cannot express without splitting the verb.
 #[derive(Debug, Clone)]
 pub struct IdaptikProfile;
 
@@ -201,11 +204,13 @@ impl RelayModel {
     /// Tags the client's own routing table knows but the relay profile does
     /// not carry — cross-repository drift, surfaced rather than hidden.
     ///
-    /// At the pinned revision this returns `["Signal"]`: ADR-0012's signal
-    /// verbs exist in `idaptik-core`/`idaptik-net` but burble's
-    /// `command_roles()` was never extended, so the live relay rejects them.
-    /// Every other client-routed tag is asserted present so a second drift
-    /// cannot arrive silently.
+    /// At the pinned revision this returns `["Signal", "Mole", "Power"]`:
+    /// ADR-0012's signal verbs, ADR-0014's companion orders and the
+    /// electrical infrastructure's power verbs exist in
+    /// `idaptik-core`/`idaptik-net` but burble's `command_roles()` was never
+    /// extended, so the live relay rejects them — which fails closed, the
+    /// safe direction. Every other client-routed tag is asserted present so
+    /// a further drift cannot arrive silently.
     pub fn client_tags_missing_from_relay() -> Vec<&'static str> {
         let profile = IdaptikProfile;
         // Exercise the non-signal Command variants the client table routes.
@@ -257,7 +262,11 @@ impl RelayModel {
         // `Command::Signal` is not constructible without a SignalOp; assert
         // its absence directly so the finding does not depend on sample data.
         assert!(profile.sender_for("Signal").is_none());
-        vec!["Signal"]
+        // ADR-0014's companion orders and the electrical verbs: client-routed,
+        // relay-absent. Asserted directly for the same reason.
+        assert!(profile.sender_for("Mole").is_none());
+        assert!(profile.sender_for("Power").is_none());
+        vec!["Signal", "Mole", "Power"]
     }
 }
 
@@ -335,7 +344,10 @@ mod tests {
     fn the_known_signal_drift_is_pinned_not_silently_assumed_away() {
         // If burble adds the Signal entry, this test changes and the ADR-0013
         // defect entry must be re-evaluated rather than staying stale.
-        assert_eq!(RelayModel::client_tags_missing_from_relay(), vec!["Signal"]);
+        assert_eq!(
+            RelayModel::client_tags_missing_from_relay(),
+            vec!["Signal", "Mole", "Power"]
+        );
         let profile = IdaptikProfile;
         assert_eq!(profile.command_roles().len(), 14);
         assert!(profile.sender_for("Signal").is_none());
