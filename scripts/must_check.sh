@@ -91,17 +91,19 @@ run_probe() {
         && grep -q 'elixir' "$REPO_DIR/mise.toml"
       ;;
     rust-toolchain-pinned)
-      grep -q 'channel = "1.95.0"' "$REPO_DIR/rust-toolchain.toml" \
-        && grep -q ':rust-toolchain "1.95.0"' "$REPO_DIR/IDApTIK_chora.deed"
+      grep -q 'channel = "1.97.1"' "$REPO_DIR/rust-toolchain.toml" \
+        && grep -q ':rust-toolchain "1.97.1"' "$REPO_DIR/IDApTIK_chora.deed"
       ;;
     engine-license-agpl)
       grep -q 'license = "AGPL-3.0-or-later"' "$REPO_DIR/Cargo.toml"
       ;;
     crates-workspace)
-      test -d "$REPO_DIR/crates/idaptik-core" \
+      test -d "$REPO_DIR/crates/idaptik-kernel" \
+        && test -d "$REPO_DIR/crates/idaptik-core" \
         && test -d "$REPO_DIR/crates/idaptik-ffi" \
         && test -d "$REPO_DIR/crates/idaptik-tui" \
         && test -d "$REPO_DIR/crates/idaptik-net" \
+        && test -d "$REPO_DIR/crates/idaptik-evil-weevil" \
         && test -d "$REPO_DIR/crates/idaptik-bevy"
       ;;
     server-and-config)
@@ -112,7 +114,7 @@ run_probe() {
       test -f "$REPO_DIR/docs/adr/0001-toolchain-and-runtime-management.md" \
         && test -f "$REPO_DIR/docs/adr/0007-versioned-ums-package-boundary.md" \
         && test -f "$REPO_DIR/docs/adr/0008-select-bevy-and-retire-fyrox.md" \
-        && test -f "$REPO_DIR/docs/adr/0013-deployment-topologies-and-state-ownership.md"
+        && test -f "$REPO_DIR/docs/adr/0014-deployment-topologies-and-state-ownership.md"
       ;;
     rust-formatted)
       (cd "$REPO_DIR" && cargo fmt --all -- --check)
@@ -168,7 +170,7 @@ run_probe() {
       ;;
     deployment-contract-recorded)
       test -f "$REPO_DIR/crates/idaptik-net/src/deployment.rs" \
-        && test -f "$REPO_DIR/docs/adr/0013-deployment-topologies-and-state-ownership.md"
+        && test -f "$REPO_DIR/docs/adr/0014-deployment-topologies-and-state-ownership.md"
       ;;
     deployment-mode-cross-product)
       grep -q 'all_three_topologies_allow_gsa_present_or_absent_without_merging_axes' \
@@ -182,9 +184,9 @@ run_probe() {
           "$REPO_DIR/crates/idaptik-net/src/deployment.rs"
       ;;
     snif-boundary-recorded)
-      grep -qi 'SNIF' "$REPO_DIR/docs/adr/0013-deployment-topologies-and-state-ownership.md" \
-        && grep -qi 'buffer' "$REPO_DIR/docs/adr/0013-deployment-topologies-and-state-ownership.md" \
-        && grep -qi 'database' "$REPO_DIR/docs/adr/0013-deployment-topologies-and-state-ownership.md"
+      grep -qi 'SNIF' "$REPO_DIR/docs/adr/0014-deployment-topologies-and-state-ownership.md" \
+        && grep -qi 'buffer' "$REPO_DIR/docs/adr/0014-deployment-topologies-and-state-ownership.md" \
+        && grep -qi 'database' "$REPO_DIR/docs/adr/0014-deployment-topologies-and-state-ownership.md"
       ;;
     coordination-k9-v1-2)
       bash "$REPO_DIR/scripts/coordination_k9_check.sh"

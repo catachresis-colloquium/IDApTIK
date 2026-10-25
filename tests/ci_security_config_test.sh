@@ -127,7 +127,7 @@ expect_fail() { # $1 description, $2 expected output, rest = command
   shift 2
   if out="$("$@" 2>&1)"; then
     fail "expected failure: $desc (a mutant that no longer mutates reads as a pass)"
-  elif ! printf '%s' "$out" | grep -qF "$want"; then
+  elif ! grep -qF "$want" <<< "$out"; then
     printf '  FAIL: %s failed for the wrong reason (wanted %s):\n%s\n' "$desc" "$want" "$out" >&2
     annotate error "ci-security-config: $desc failed for the wrong reason (wanted: $want) -- got: $(printf '%s' "$out" | tail -c 600)"
     failures=$((failures + 1))

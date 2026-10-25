@@ -144,7 +144,7 @@ carries the session frames.
 **For this Phoenix transport path, the relay is the rendezvous point.** Both
 clients dial *out* to a reachable server; no client ever needs an inbound path
 to the other. This is a structural choice for the existing relay path, not a
-claim that every deployment must use a relay. ADR-0013 specifies an optional
+claim that every deployment must use a relay. ADR-0014 specifies an optional
 direct-peer topology; it does not promise automatic NAT traversal, and the
 current client has no direct-peer transport.
 
@@ -351,7 +351,7 @@ canonical client for the existing game-session WebSocket lane.
 The current `game:<id>` Phoenix path remains a relay: both client processes
 run `GhostLobbySim`, and the loopback gate proves relay-backed lockstep,
 peer-loss handling, and resync—not server-authoritative simulation. The §3
-rendezvous language describes that transport path only. ADR-0013 defines the
+rendezvous language describes that transport path only. ADR-0014 defines the
 separate peer-to-peer and federated deployment contracts; neither direct peer
 transport nor a hosted authority/federation runtime is implemented in this
 checkout.

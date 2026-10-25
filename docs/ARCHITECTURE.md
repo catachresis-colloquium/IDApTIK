@@ -7,7 +7,7 @@ communication platform, estate ruling 2026-08-04). Simulation authority is a
 separate deployment choice: peer replicas for cooperative lockstep, or one
 server authority per hosted/federated session. The current client runtime only
 implements the relay-only slice; see
-[ADR-0013](adr/0013-deployment-topologies-and-state-ownership.md) for the
+[ADR-0014](adr/0014-deployment-topologies-and-state-ownership.md) for the
 contract and implementation status.
 
 For the reasoning behind each choice, see the ADRs in [`docs/adr/`](adr/).
@@ -19,11 +19,13 @@ The proposed cross-repository epistemic state-machine seam is documented in
 ```
 .
 ├── crates/            # Rust/Crusoe Cargo workspace (edition 2024, AGPL-3.0-or-later)
-│   ├── idaptik-core/  #   engine-agnostic sim: netsim + scenario + Moletaire companion
+│   ├── idaptik-kernel/  #   float-free proof-oriented primitives (Creusot)
+│   ├── idaptik-core/    #   engine-agnostic sim: netsim + scenario + Moletaire companion
 │   ├── idaptik-ffi/   #   C ABI surface (JSON in / JSON out) over the core
 │   ├── idaptik-tui/   #   ratatui/crossterm frontend + --headless/--replay/--export verifier
 │   ├── idaptik-bevy/  #   selected Bevy side-on 2.5D frontend (ADR-0008)
-│   └── idaptik-net/   #   Phoenix Channels client over burble game-session fabric (ADR-0006)
+│   ├── idaptik-net/   #   Phoenix Channels client over burble game-session fabric (ADR-0006)
+│   └── idaptik-evil-weevil/  # sans-IO deterministic adversarial testing adapter (ADR-0013)
 ├── config/            # Nickel typed config: scenario-schema.ncl + fixtures (incl. bad_*.ncl)
 ├── docs/adr/          # Architecture Decision Records
 ├── fixtures/          # cross-language wire fixtures
@@ -88,15 +90,29 @@ Both seats currently run the deterministic simulation. The player-hosted
 launcher starts a local relay, so this is not direct peer transport and not a
 server-authoritative hosted game. Federated authority, direct peer transport,
 and the optional GSA control plane are specified—but not yet wired—in
-[ADR-0013](adr/0013-deployment-topologies-and-state-ownership.md).
+[ADR-0014](adr/0014-deployment-topologies-and-state-ownership.md).
+
+The `idaptik-evil-weevil` crate (ADR-0013) exercises these acceptance rules
+adversarially: a sans-IO, deterministic five-scenario corpus drives raw,
+unsanitised frames through the unchanged production validators, with four
+permission-separated realms (adversary, harness, read-only defensive
+observer, operator-only local enforcement). It opens no sockets; the relay
+rules are modelled in-process and separately confirmed against a throwaway
+local burble. See `docs/security/evil-weevil-corpus.md`.
 
 ## Build & toolchain
 
 `just` orchestrates `cargo` (Rust), `mix` (Elixir), and `nickel` (config).
 Rust/Crusoe toolchains are pinned via `mise.toml` and `rust-toolchain.toml`. Key gates:
 
-- `just test-ghost` — `cargo test` (core/tui/ffi/net) + `cargo clippy -D warnings` +
-  `cargo fmt --check`.
+- `just test-ghost` — `cargo test` (core/tui/ffi/net/evil-weevil) +
+  `cargo clippy -D warnings` + `cargo fmt --check`.
+- `just evil-weevil-check` — the ADR-0013 offline adversarial corpus:
+  tests, clippy, redacted JSON artifacts, secret-shape and byte-identical
+  determinism gates. `just evil-weevil-relay-check` adds the optional
+  throwaway-burble leg (needs Elixir + a sibling burble checkout).
+- `just machine-readable-check` — pinned DEED/K9/Nickel conformance and the
+  coordination protocol's project-specific structural checks.
 - `just config-scenario-check` — exports the Nickel scenario, round-trips it
   through the Rust validator, and asserts every `bad_*.ncl` fixture is rejected.
 

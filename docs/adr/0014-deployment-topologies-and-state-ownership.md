@@ -1,4 +1,4 @@
-# ADR-0013: Deployment topologies, simulation authority, and state ownership
+# ADR-0014: Deployment topologies, simulation authority, and state ownership
 
 - Status: Accepted (architecture contract; runtime implementation is partial)
 - Date: 2026-10-24

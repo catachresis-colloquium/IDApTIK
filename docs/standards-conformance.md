@@ -23,6 +23,6 @@ The published K9 contract defines component envelopes and Nickel semantics. The 
 
 ## Retired metadata
 
-The former A2ML manifests, state files, contractile files, and embedded launcher metadata were classified rather than suffix-renamed. Descriptive facts were consolidated into the project deed; policy clauses moved to the six K9 components; agent instructions moved to root `coordination.k9`. The old A2ML files, k9iser wrapper, parser/generation recipes, and active discovery instructions are removed. The prior WSLg Copy Mode recovery material remains in the existing troubleshooting, player-flow, and launcher-manual sources.
+The migration completed on 2026-10-25. The former A2ML manifests, state files, contractile files, and embedded launcher metadata were classified rather than suffix-renamed. Descriptive facts were consolidated into the project deed; policy clauses moved to the six K9 components; agent instructions moved to root `coordination.k9`. The old A2ML files, k9iser wrapper, parser/generation recipes, and active discovery instructions are removed. The prior WSLg Copy Mode recovery material remains in the existing troubleshooting, player-flow, and launcher-manual sources.
 
 When the standards repository publishes a newer normative grammar, contract, validator, or coordination parser, update this pin, this document, and the conformance checks together.

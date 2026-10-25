@@ -60,7 +60,7 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
 - **Current relay/session coordination:** Elixir/OTP in Burble — **Bandit** +
   **Phoenix Channels**, not LiveView ([ADR-0002](docs/adr/0002-multiplayer-transport.md));
   simulation authority is a separate deployment choice
-  ([ADR-0013](docs/adr/0013-deployment-topologies-and-state-ownership.md)).
+  ([ADR-0014](docs/adr/0014-deployment-topologies-and-state-ownership.md)).
 - **FFI / ABI policy:** **Zig unified-api-adapter APIs/FFIs** for the adapter and **Idris2** for ABI
   contracts. The C ABI is still exported directly from Rust/Crusoe, the Idris2 ABI
   model exists (`crates/idaptik-ffi/abi`, gated by `just abi-model-check`), and the Zig
@@ -74,7 +74,7 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
 - **Toolchains:** pinned in `mise.toml` + `rust-toolchain.toml`; `just` runs tasks. On a fresh Debian/Ubuntu/WSL2 clone run `./install.sh` (also `just install`): it installs rustup, the pinned Rust, the mise tools and Bevy's system libraries (asks for `sudo`), builds the Bevy frontend, and ends with the runtime doctor. Otherwise provision with `just setup` (or `just bootstrap` for a fast, prebuilt-only bring-up), and check with `just doctor`.
 
 The deployment contract is recorded in
-[ADR-0013](docs/adr/0013-deployment-topologies-and-state-ownership.md). Direct
+[ADR-0014](docs/adr/0014-deployment-topologies-and-state-ownership.md). Direct
 peer transport, a server-authoritative hosted runtime, and federated session
 routing are not implemented yet. Still open: long-term player-save
 compatibility/retention and the Rust↔Elixir wire encoding.
@@ -101,6 +101,7 @@ crates/idaptik-ffi      Rust-exported C ABI + Idris2 ABI model (abi/) + Zig adap
 crates/idaptik-tui      ratatui/crossterm evaluation frontend + --headless/--replay/--export verifier over core (ADR-0004)
 crates/idaptik-bevy     selected Bevy rendering frontend (ADR-0008)
 crates/idaptik-net      Phoenix Channels client over burble game-session fabric (ADR-0006)
+crates/idaptik-evil-weevil  sans-IO deterministic adversarial testing adapter over the multiplayer acceptance rules (ADR-0013)
 config/                    Nickel — typed, schema-checked game/network config
 docs/adr/                  architecture decision records
 ```
@@ -109,7 +110,10 @@ docs/adr/                  architecture decision records
 `just loopback-check`, `just config-check`); toolchains are pinned in
 `mise.toml` + `rust-toolchain.toml`. The loopback gate starts a throwaway
 server from the sibling `metadatastician/burble` checkout; IDApTIK no longer
-contains its own relay server.
+contains its own relay server. `just evil-weevil-check` runs the offline
+adversarial corpus (no sockets, no Elixir); `just evil-weevil-relay-check`
+adds the optional real-relay leg against that same throwaway local burble —
+see `docs/security/evil-weevil-corpus.md`.
 
 ## UMS-authored package proof
 

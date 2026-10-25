@@ -1,4 +1,4 @@
-//! Deployment axes and state-placement contract (ADR-0013).
+//! Deployment axes and state-placement contract (ADR-0014).
 //!
 //! This is a declarative architecture model, not a server launcher, network
 //! directory, persistence adapter, or GSA client. The current live runtime is
@@ -150,7 +150,7 @@ impl DeploymentAxes {
 }
 
 /// State classes whose owner, storage, consistency, partition, and recovery
-/// rules are specified in ADR-0013.
+/// rules are specified in ADR-0014.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StateClass {
     MembershipAndPresence,

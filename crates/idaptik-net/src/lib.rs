@@ -18,7 +18,7 @@
 //! - [`seat`] — splits one headless script across the two seats and rebuilds
 //!   the merged per-tick input identically on both sides.
 //! - [`deployment`] — declarative topology/administration/authority axes and
-//!   per-state-class placement contracts (ADR-0013); not a runtime server.
+//!   per-state-class placement contracts (ADR-0014); not a runtime server.
 //! - [`session`] — the seat state machine: join → hello → stream/collect →
 //!   deterministic run → digest cross-check, with the ADR-0006 §3 loss states
 //!   (`WaitingForPeer` → `Live` → `PeerLost` → clean `Ended`).

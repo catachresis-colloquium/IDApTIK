@@ -24,9 +24,9 @@ project:
 
 build_commands:
   - command: "just test-ghost"
-    purpose: "Run the Rust core, TUI, FFI, and network suites, clippy, and the Rust formatter check."
+    purpose: "Run the Rust core, TUI, FFI, network, and Evil Weevil suites, clippy, and the Rust formatter check."
   - command: "just fixture-tests"
-    purpose: "Run the repository's deterministic shell fixture and configuration-security tests."
+    purpose: "Run offline shell, toolchain-parity, coordination, migration-layout, and configuration-security fixtures."
   - command: "just machine-readable-check"
     purpose: "Validate DEED, K9 components and Nickel runners against the pinned current standards."
   - command: "just config-check"
@@ -87,7 +87,7 @@ protected:
     reason: "Deterministic gameplay authority and replay contract."
   - path: crates/idaptik-net/src/deployment.rs
     reason: "Declarative model of independent deployment axes and state-placement policy."
-  - path: docs/adr/0013-deployment-topologies-and-state-ownership.md
+  - path: docs/adr/0014-deployment-topologies-and-state-ownership.md
     reason: "Current topology, GSA, SNIF, and per-state-class storage contract."
   - path: docs/MULTIPLAYER-TROUBLESHOOTING.md
     reason: "Existing multiplayer and WSLg Copy Mode recovery guidance."
