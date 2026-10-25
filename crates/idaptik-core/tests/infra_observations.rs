@@ -356,49 +356,107 @@ fn a_mid_flood_snapshot_restores_and_replays_identically() {
 #[test]
 fn wading_through_the_flood_slows_and_betrayes_the_wader() {
     // Two identical runs, same seed and inputs; one floods the hall before
-    // the walk, one does not. The flooded walk must cover less ground and
-    // register more noise — from canonical state, never a render quantity.
-    fn drop_in_and_walk_left(flood: bool) -> (f64, f64) {
+    // the walk, one does not. Both enter the pump hall the legitimate way —
+    // rope down, picked front door, and a routed hold on D1 (the closed
+    // interior doors stop everyone; the network opens the one nearest the
+    // body, and the walk blocks at the door until the hold lands). The
+    // flooded walk must cover less ground and register more noise — from
+    // canonical state, never a render quantity.
+    fn enter_hall_and_walk_west(flood: bool) -> (f64, f64) {
         let mut sim = GhostLobbySim::new(pump_house(), RunConfig::standard(), 21).expect("valid");
         let mut log = sim.drain_events();
+        // Tick one: pivot onto the bridge — the wet run hacks the derived
+        // valve node in the same breath (the remote release); the dry run
+        // carries the identical pivot so both twins hold the same reach.
+        let def = sim.definition().clone();
+        let index = floor_graph(&def)
+            .nodes
+            .iter()
+            .position(|n| n.id == valve_node_id(HALL_SUMP))
+            .expect("valve node") as u32;
+        let mut opening = vec![Command::Pivot {
+            target: PivotTarget::Bridge,
+        }];
         if flood {
-            let def = sim.definition().clone();
-            let index = floor_graph(&def)
-                .nodes
-                .iter()
-                .position(|n| n.id == valve_node_id(HALL_SUMP))
-                .expect("valve node") as u32;
-            log.extend(sim.tick(&cmds(&[
-                Command::Pivot {
-                    target: PivotTarget::Bridge,
-                },
-                Command::NetHack {
-                    node: NetNodeIndex(index),
-                },
-            ])));
-        } else {
-            log.extend(sim.tick(&TickInput::default()));
+            opening.push(Command::NetHack {
+                node: NetNodeIndex(index),
+            });
         }
-        // Roof walk east to the hatch over the sump gallery.
-        let hatch_x = sim.definition().exterior.as_ref().unwrap().hatches[0].x;
-        for _ in 0..900 {
+        log.extend(sim.tick(&cmds(&opening)));
+        // Roof walk west to the rope, and down to the street.
+        let rope_x = sim.definition().exterior.as_ref().unwrap().rope.top_x;
+        for _ in 0..600 {
             let cx = sim.state().player.x + sim.definition().player.w / 2.0;
-            if (cx - hatch_x).abs() <= 4.0 {
+            if (cx - rope_x).abs() <= 4.0 {
                 break;
             }
-            log.extend(sim.tick(&hold(&[Button::Right])));
+            log.extend(sim.tick(&hold(&[Button::Left])));
         }
         log.extend(sim.tick(&press_interact()));
         assert!(
-            log.iter().any(|e| matches!(e, Event::HatchDropped { .. })),
-            "the hatch never dropped: {log:?}"
+            log.iter().any(|e| matches!(e, Event::RopeTaken { down: true })),
+            "the rope never took: {log:?}"
         );
-        // Walk west toward the pump hall, measuring ground covered and
-        // noise. The window is short enough that neither run reaches the
-        // west wall clamp, so the distance difference is the flood's.
+        let mut landed = false;
+        for _ in 0..400 {
+            log.extend(sim.tick(&TickInput::default()));
+            if sim.state().player.place == idaptik_core::scenario::state::Place::Floor
+                && sim.infiltrator_outside()
+            {
+                landed = true;
+                break;
+            }
+        }
+        assert!(landed, "never reached the street");
+        // Approach the locked front door and pick it (the rooftop suite's
+        // proven sequence: press against the door, then hold interact).
+        for _ in 0..240 {
+            log.extend(sim.tick(&hold(&[Button::Right])));
+        }
+        let mut picked = false;
+        for _ in 0..330 {
+            log.extend(sim.tick(&hold(&[Button::Interact])));
+            if log.iter().any(|e| matches!(e, Event::FrontDoorPicked)) {
+                picked = true;
+                break;
+            }
+        }
+        assert!(picked, "the lock never gave");
+        let mut inside = false;
+        for _ in 0..120 {
+            log.extend(sim.tick(&hold(&[Button::Right])));
+            if !sim.infiltrator_outside() {
+                inside = true;
+                break;
+            }
+        }
+        assert!(inside, "never got inside");
+        // East toward the hall; at the kitchen's east end order the routed
+        // hold on the nearest door (D1) and keep walking into it.
+        let mut uplinked = false;
+        let mut arrived = false;
+        for _ in 0..900 {
+            let cx = sim.state().player.x + sim.definition().player.w / 2.0;
+            if (cx - 450.0).abs() <= 4.0 {
+                arrived = true;
+                break;
+            }
+            if !uplinked && cx >= 240.0 {
+                uplinked = true;
+                log.extend(sim.tick(&cmds(&[Command::Uplink {
+                    kind: idaptik_core::scenario::tuning::ActionKind::Door,
+                }])));
+                continue;
+            }
+            log.extend(sim.tick(&hold(&[Button::Right])));
+        }
+        assert!(uplinked && arrived, "the hall never opened to the routed hold");
+        // The measured window: 60 ticks due west from the sump wheel —
+        // short enough that the wet run never reaches the door behind it
+        // and the dry run's extra ground is the flood's own doing.
         let start_x = sim.state().player.x;
         let mut loudest = 0.0f64;
-        for _ in 0..300 {
+        for _ in 0..60 {
             log.extend(sim.tick(&hold(&[Button::Left])));
             loudest = loudest.max(sim.state().player.noise);
         }
@@ -406,8 +464,8 @@ fn wading_through_the_flood_slows_and_betrayes_the_wader() {
         (start_x - sim.state().player.x, loudest)
     }
 
-    let (dry_dx, dry_noise) = drop_in_and_walk_left(false);
-    let (wet_dx, wet_noise) = drop_in_and_walk_left(true);
+    let (dry_dx, dry_noise) = enter_hall_and_walk_west(false);
+    let (wet_dx, wet_noise) = enter_hall_and_walk_west(true);
     assert!(dry_dx > 100.0, "the dry walk covered nothing: {dry_dx}");
     assert!(
         wet_dx < dry_dx - 10.0,
