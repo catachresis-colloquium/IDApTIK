@@ -24,7 +24,7 @@ project:
 
 build_commands:
   - command: "just test-ghost"
-    purpose: "Run the Rust core, TUI, FFI, network, and Evil Weevil suites, clippy, and the Rust formatter check."
+    purpose: "Run the Rust core, TUI, FFI, network, Evil Weevil and persistence suites, clippy, and the Rust formatter check."
   - command: "just fixture-tests"
     purpose: "Run offline shell, toolchain-parity, coordination, migration-layout, and configuration-security fixtures."
   - command: "just machine-readable-check"

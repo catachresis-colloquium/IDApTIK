@@ -102,6 +102,8 @@ crates/idaptik-tui      ratatui/crossterm evaluation frontend + --headless/--rep
 crates/idaptik-bevy     selected Bevy rendering frontend (ADR-0008)
 crates/idaptik-net      Phoenix Channels client over burble game-session fabric (ADR-0006)
 crates/idaptik-evil-weevil  sans-IO deterministic adversarial testing adapter over the multiplayer acceptance rules (ADR-0017)
+crates/idaptik-weevil   thin host adapter over the Evil Weevil native C ABI, plus its headless replay driver
+crates/idaptik-persist  durable session storage — command log, checkpoints, replay-safe resume (redb)
 config/                    Nickel — typed, schema-checked game/network config
 docs/adr/                  architecture decision records
 ```
