@@ -41,6 +41,64 @@ const CHECK_IDS: [&str; 6] = [
 ];
 
 #[test]
+fn a_door_crossing_floors_is_an_advisory_and_a_stair_is_clean() {
+    use idaptik_core::scenario::{AuditSeverity, PortalDef, PortalKind};
+
+    let mut building = building_with(pump_house());
+    let mut upper = building.floors[0].clone();
+    upper.id = "upper".into();
+    upper.level = 1;
+    upper.kind = FloorKind::Standard;
+    upper.scenario = None;
+    upper.rooms.truncate(1);
+    building.floors.push(upper);
+    building.portals.push(PortalDef {
+        id: "upstairs".into(),
+        kind: PortalKind::Door,
+        label: "Upstairs".into(),
+        from: RoomRef::new("ground", "kitchen"),
+        to: RoomRef::new("upper", "kitchen"),
+        travel_time: 1.0,
+        lock: None,
+        circuit: None,
+    });
+    assert!(building.validate().passed());
+    let report = building.audit();
+    assert!(report.passed(), "an advisory must not fail the audit");
+    assert!(report.errors().is_empty());
+    let advisories = report.advisories();
+    assert_eq!(advisories.len(), 1);
+    assert_eq!(advisories[0].id, "refs.door_crosses_floors");
+    assert_eq!(advisories[0].severity, AuditSeverity::Advisory);
+    building.portals.last_mut().unwrap().kind = PortalKind::Stair;
+    assert!(building.validate().passed());
+    assert!(building.audit().advisories().is_empty());
+}
+
+#[test]
+fn a_disconnected_objective_fails_the_audit_with_an_error() {
+    use idaptik_core::scenario::AuditSeverity;
+
+    let mut building = building_with(pump_house());
+    // Keep the note's kitchen reachable and isolate the exit objective.
+    building
+        .portals
+        .retain(|p| p.from.room.as_str() != "exit" && p.to.room.as_str() != "exit");
+    let report = building.audit();
+    assert!(!report.passed());
+    let errors = report.errors();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].id, "routes.objectives_reachable");
+    assert_eq!(errors[0].severity, AuditSeverity::Error);
+    assert!(report.advisories().is_empty());
+    let encoded = serde_json::to_string(&report).unwrap();
+    assert_eq!(
+        serde_json::from_str::<AuthoringReport>(&encoded).unwrap(),
+        report
+    );
+}
+
+#[test]
 fn the_pump_house_floor_validates_and_audits_clean() {
     let scenario = pump_house();
     // The scenario itself validates first — the infrastructure block

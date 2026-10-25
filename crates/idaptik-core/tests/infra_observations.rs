@@ -20,6 +20,155 @@ use idaptik_core::scenario::floor_graph::{floor_graph, valve_node_id};
 use idaptik_core::scenario::infra::ObservationKind;
 use idaptik_core::scenario::{GhostLobbySim, HALL_SUMP, RunConfig, ghost_lobby, pump_house};
 
+#[test]
+fn a_nearly_full_zone_clamps_at_full_depth_and_shorts_only_once() {
+    use idaptik_core::scenario::infra::ReleaseCause;
+    use idaptik_core::scenario::mathf::TICK_DT;
+
+    let def = pump_house();
+    let fill_time = def.infra.as_ref().unwrap().water_zones[0].fill_time;
+    let mut snapshot = GhostLobbySim::new(def.clone(), RunConfig::standard(), 7)
+        .unwrap()
+        .snapshot();
+    let infra = snapshot.state.infra.as_mut().unwrap();
+    infra.release(HALL_SUMP, ReleaseCause::Valve);
+    infra.zones.get_mut(HALL_SUMP).unwrap().level = 1.0 - TICK_DT / (2.0 * fill_time);
+    let mut sim = GhostLobbySim::restore(def, snapshot).unwrap();
+    let mut log = Vec::new();
+    for _ in 0..5 {
+        log.extend(sim.tick(&TickInput::default()));
+        assert_eq!(
+            sim.state().infra.as_ref().unwrap().zones[HALL_SUMP].level,
+            1.0
+        );
+    }
+    assert_eq!(
+        log.iter()
+            .filter(|e| matches!(e, Event::InfraShorted { zone, .. } if zone == HALL_SUMP))
+            .count(),
+        1
+    );
+    assert_eq!(log.iter().filter(|e| matches!(e, Event::AlarmChanged { alarm, sounding: true, .. } if alarm == "flood-alarm")).count(), 1);
+    assert_eq!(
+        sim.state().infra.as_ref().unwrap().zones[HALL_SUMP].cause,
+        Some(ReleaseCause::Valve)
+    );
+}
+
+#[test]
+fn stale_alarm_latches_clear_when_their_trip_condition_is_absent() {
+    let def = pump_house();
+    let mut snapshot = GhostLobbySim::new(def.clone(), RunConfig::standard(), 7)
+        .unwrap()
+        .snapshot();
+    for sounding in snapshot.state.infra.as_mut().unwrap().alarms.values_mut() {
+        *sounding = true;
+    }
+    let mut sim = GhostLobbySim::restore(def, snapshot).unwrap();
+    let events = sim.tick(&TickInput::default());
+    let cleared: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::AlarmChanged {
+                alarm,
+                sounding: false,
+                ..
+            } => Some(alarm.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cleared, ["flood-alarm", "sump-tamper"]);
+    assert!(
+        sim.state()
+            .infra
+            .as_ref()
+            .unwrap()
+            .alarms
+            .values()
+            .all(|on| !on)
+    );
+    assert!(
+        !sim.tick(&TickInput::default())
+            .iter()
+            .any(|e| matches!(e, Event::AlarmChanged { .. }))
+    );
+}
+
+#[test]
+fn guard_notices_survive_restore_and_an_ended_episode_can_be_noticed_again() {
+    use idaptik_core::scenario::Phase;
+    use idaptik_core::scenario::state::DiversionState;
+
+    let def = pump_house();
+    let mut snapshot = GhostLobbySim::new(def.clone(), RunConfig::standard(), 7)
+        .unwrap()
+        .snapshot();
+    snapshot.state.phase = Phase::Crisis;
+    snapshot.state.billy.mode = BillyMode::Assess;
+    snapshot.state.billy.x = 400.0;
+    snapshot.state.billy.stun = 10.0;
+    let diversion = DiversionState {
+        x: 430.0,
+        t: 2.0,
+        intensity: 1.0,
+    };
+    snapshot.state.diversion = Some(diversion.clone());
+    let mut sim = GhostLobbySim::restore(def.clone(), snapshot).unwrap();
+    let notice = Event::GuardObserved {
+        kind: ObservationKind::UnusualNoise,
+        room: "hall".into(),
+    };
+    let events = sim.tick(&TickInput::default());
+    assert_eq!(events.iter().filter(|e| **e == notice).count(), 1);
+    assert!(!sim.tick(&TickInput::default()).contains(&notice));
+
+    // Include the JSON boundary used by saves/resynchronisation.
+    let snapshot = serde_json::from_str(&serde_json::to_string(&sim.snapshot()).unwrap()).unwrap();
+    let mut sim = GhostLobbySim::restore(def.clone(), snapshot).unwrap();
+    assert!(!sim.tick(&TickInput::default()).contains(&notice));
+    let mut snapshot = sim.snapshot();
+    snapshot.state.diversion = None;
+    let mut sim = GhostLobbySim::restore(def.clone(), snapshot).unwrap();
+    assert!(!sim.tick(&TickInput::default()).contains(&notice));
+    assert!(sim.state().guard_noticed.is_empty());
+    let mut snapshot = sim.snapshot();
+    snapshot.state.diversion = Some(diversion);
+    let mut sim = GhostLobbySim::restore(def, snapshot).unwrap();
+    assert!(sim.tick(&TickInput::default()).contains(&notice));
+}
+
+#[test]
+fn a_companion_diversion_expires_even_without_infrastructure() {
+    use idaptik_core::scenario::mathf::TICK_DT;
+    use idaptik_core::scenario::state::DiversionState;
+
+    let mut def = pump_house();
+    def.infra = None;
+    let mut snapshot = GhostLobbySim::new(def.clone(), RunConfig::standard(), 7)
+        .unwrap()
+        .snapshot();
+    snapshot.state.diversion = Some(DiversionState {
+        x: 430.0,
+        t: 1.5 * TICK_DT,
+        intensity: 1.0,
+    });
+    let mut sim = GhostLobbySim::restore(def, snapshot).unwrap();
+    sim.tick(&TickInput::default());
+    assert!(sim.state().diversion.as_ref().is_some_and(|d| d.t > 0.0));
+    assert!(
+        sim.actor_observations(400.0)
+            .iter()
+            .any(|o| o.kind == ObservationKind::UnusualNoise && o.x == 430.0)
+    );
+    sim.tick(&TickInput::default());
+    assert!(sim.state().diversion.is_none());
+    assert!(
+        !sim.actor_observations(400.0)
+            .iter()
+            .any(|o| o.kind == ObservationKind::UnusualNoise && o.x == 430.0)
+    );
+}
+
 fn hold(buttons: &[Button]) -> TickInput {
     let mut b = Buttons::default();
     for x in buttons {
