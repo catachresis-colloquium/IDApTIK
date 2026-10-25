@@ -435,7 +435,8 @@ LOCK
   done
   expect_pass 'KYAML flow syntax preserves lock coverage' "$fixture"
   sed -i 's/erlef\/setup-beam@v1.24.1/erlef\/setup-beam@v0.0.0/' "$fixture/ci.yml"
-  expect_fail 'KYAML cannot hide a stale workflow ref' 'not recorded' "$fixture"
+  expect_fail 'KYAML cannot hide a stale workflow ref' \
+    'step-level refs missing from the lockfile' "$fixture"
 
   fixture="$(new_case bump-without-lock)"
   sed -i 's/erlef\/setup-beam@v1\.24\.1/erlef\/setup-beam@v1.25.0/' "$fixture/ci.yml"
