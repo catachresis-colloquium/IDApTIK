@@ -47,10 +47,22 @@ use idaptik_net::lockstep::{LockstepCore, ScriptFeed};
 
 const ID: &str = "EW-06-infrastructure-orders-and-observations";
 
-/// The tick the diversion is played on. Late enough that the mole has walked
-/// from its spawn (390) into the guard's hearing at 240: 150 units at the
-/// companion's 200 px/s underground is 0.75 s, and `TICK_DT` is 1/60.
+/// The tick the first diversion beat is played on. The mole order at
+/// `MOVE_AT` walks it from its spawn (390) to 240 — 150 units at the
+/// companion's 200 px/s underground is 0.75 s, and `TICK_DT` is 1/60 — so it
+/// has arrived well before this beat. The diversion then repeats every
+/// `SYNTH_EVERY` ticks: a single shot has to land on the one tick where the
+/// guard is both on shift and within earshot of the decoy, and `begin_crisis`
+/// parks Billy at `CRISIS_BILLY_X` for a 1.1 s `Entering` dwell first — the
+/// heartbeat removes that timing gamble.
 const SYNTH_AT: u64 = 52;
+
+/// Heartbeat period for the diversion, in ticks: 0.5 s at 60 Hz.
+const SYNTH_EVERY: u64 = 30;
+
+/// Cap on the beats the heartbeat may play (~9.5 s of run), inside the
+/// raised fixture horizon below.
+const SYNTH_BEATS: u64 = 19;
 
 /// The tick the scene is set on. Not tick 1: a commit *through* `n` advances
 /// the peer watermark to `n + 1`, so the opening `feed_commit(.., 1)` in this
@@ -58,9 +70,14 @@ const SYNTH_AT: u64 = 52;
 /// Tick 2 is the first the watermark permits.
 const SCENE_AT: u64 = 2;
 
-/// The peer watermark committed before the run is driven. Past the synth, so
-/// the tick the diversion plays on is provably uncommitted until now and then
-/// executed.
+/// The tick the mole order executes on. Deliberately not the crisis tick:
+/// the walk gets its own clean tick after the crisis entry has applied, so
+/// the movement order can never interact with the scene change in one tick.
+const MOVE_AT: u64 = 8;
+
+/// The peer watermark committed before the run is driven. Past the first
+/// beat, so the tick the diversion plays on is provably uncommitted until now
+/// and then executed. Later beats carry their own commits.
 const HORIZON: u64 = SYNTH_AT + 4;
 
 /// The fixed, bounded input sequence. Every frame is pre-declared; nothing
@@ -93,8 +110,8 @@ fn inputs() -> Vec<InputSpec> {
         InputSpec {
             step: 4,
             intent: "three frontier scene frames for the infiltrator seat: force the \
-                     crisis at tick 1, walk the mole underground to 240, and schedule \
-                     the synth for tick 52"
+                     crisis at tick 2, walk the mole underground to 240 at tick 8, and \
+                     play the first synth beat at tick 52"
                 .into(),
             expected: "all accepted: the guard is on shift and the diversion is inside \
                        his hearing rather than 364 units outside it"
@@ -102,11 +119,13 @@ fn inputs() -> Vec<InputSpec> {
         },
         InputSpec {
             step: 5,
-            intent: "commit the infiltrator horizon through SYNTH_AT + 4, sample the hacker \
-                     seat's own schedule, and advance in rounds"
+            intent: "commit the infiltrator horizon through SYNTH_AT + 4, then heartbeat: \
+                     a fresh synth frame every 30 ticks with its own commit, advancing in \
+                     rounds and sampling the hacker seat's own schedule"
                 .into(),
-            expected: "the ordered ticks execute: the sim applies the synth and the guard \
-                       announces the noise he actually heard"
+            expected: "the ordered ticks execute: a beat lands inside the guard's \
+                       hearing, the sim applies the synth, and the guard announces the \
+                       noise he actually heard"
                 .into(),
         },
         InputSpec {
@@ -134,10 +153,12 @@ impl Scenario for InfraOrdersScenario {
             bounded_inputs: inputs(),
             expectation: "Both relay refusals are recorded as role violations; the frontier \
                           Mole order applies on the pump-house floor (a typed companion \
-                          event, no denial); with the guard on shift and the mole walked \
-                          into earshot, Billy's own senses turn the synth diversion into a \
-                          GuardObserved(UnusualNoise) event and the same observations list \
-                          it; the stale order never re-enters the input set.",
+                          event, no denial); the diversion heartbeats every half second \
+                          until a beat lands inside the guard's hearing — with Billy on \
+                          shift and the mole walked in, his own senses turn it into a \
+                          GuardObserved(UnusualNoise) event and the same \
+                          actor_observations() contract lists it at his position; the \
+                          stale order never re-enters the input set.",
             topology: TopologyMode::SingleRendezvousRelay,
             game_server_admin_present: false,
             evidence: EvidenceStatus::Demonstrated,
@@ -166,7 +187,7 @@ impl Scenario for InfraOrdersScenario {
         //   so the provenance is still the shared fixture, not a private copy.
         let mut script = crate::harness::load_live_script();
         script.scenario = Some("pump-house".to_owned());
-        script.max_ticks = 90;
+        script.max_ticks = 640;
         script.commands.retain(|line| line.at < 5 || line.at == 26);
         // The local seat is the hacker; the infiltrator is the peer whose
         // frames the adversary forges.
@@ -311,12 +332,13 @@ impl Scenario for InfraOrdersScenario {
         //   noise would exist, and no observation would ever reach the guard.
         //   240 is 214 units from Billy and 150 from the spawn: 0.75 s of
         //   underground travel at the companion's 200 px/s, which is why the
-        //   synth below is not played at the frontier.
+        //   mole walks first — on its own tick, after the crisis entry — and
+        //   the synth below heartbeats instead of firing one frontier shot.
         for (seq, at, cmd) in [
             (4, SCENE_AT, Command::ForceCrisis),
             (
                 5,
-                SCENE_AT,
+                MOVE_AT,
                 Command::Mole {
                     op: MoleOp::MoveTo {
                         x: 240.0,
@@ -348,55 +370,150 @@ impl Scenario for InfraOrdersScenario {
             .feed_commit(&mut target, Role::Infiltrator, HORIZON)
             .expect("horizon commit accepted");
 
-        // Run the ready steps, collecting events; on the tick the synth plays,
-        // read the perception contract where Billy stands. Sampling the seat's
-        // own script horizon first is what lets the run proceed: advance stops
-        // at either watermark, and the sampling horizon only moves in
-        // pump_outgoing -- the same rounds the observations scenario runs. The
-        // loop ratchets towards SYNTH_AT two ticks at a time and stops as soon
-        // as the diversion has been heard.
+        // The decoy heartbeat. A single pre-scheduled synth has to land on
+        // the one tick where the guard is on shift AND the decoy is inside
+        // his hearing: `begin_crisis` parks Billy at `CRISIS_BILLY_X` for a
+        // 1.1 s `Entering` dwell first, and a diversion only lives
+        // `MOLE_SYNTH_DURATION`. Beats ride the same production validator
+        // path as the scene frames — scenario choreography, not adversarial
+        // intents, so the weevil's proposal budget stays on the declared
+        // sequence. Each beat commits just behind its frame, then pumps and
+        // advances past it: sampling the seat's own script horizon in
+        // pump_outgoing is what lets the run proceed, because advance stops
+        // at either watermark. The capture refreshes per beat and the loop
+        // breaks the moment the watch record announces.
         let mut feed = ScriptFeed::new(&script, Role::Hacker);
         let mut events: Vec<Event> = Vec::new();
-        let mut obs_at_billy: Option<(f64, Vec<ObservationKind>)> = None;
+        let mut obs_at_billy: Option<(f64, Option<f64>, Vec<ObservationKind>)> = None;
         let mut guard_on_shift = false;
-        for _round in 0..200 {
-            if obs_at_billy.is_some() || target.finished() {
+        let mut beat = 0u64;
+        loop {
+            if target.finished() {
                 break;
             }
-            let _ = target.pump_outgoing(&mut feed);
-            target.advance_with(|sim, fresh| {
-                events.extend(fresh.iter().cloned());
-                let synth_now = fresh.iter().any(|e| {
-                    matches!(
-                        e,
-                        Event::Mole {
-                            mole: MoleEvent::SynthSoundPlayed { .. }
-                        }
-                    )
-                });
-                if synth_now && obs_at_billy.is_none() {
-                    let st = sim.state();
-                    guard_on_shift = st.billy.mode != BillyMode::Offsite;
-                    // The detector the watcher itself uses: canonical
-                    // observations at the actor's own position, including the
-                    // companion's noise. Sampling it through the sim rather
-                    // than re-deriving it here is what stops this assertion
-                    // drifting away from `system_infra_watch` again.
-                    obs_at_billy = Some((
-                        st.billy.x,
-                        sim.actor_observations(st.billy.x)
-                            .into_iter()
-                            .map(|o| o.kind)
-                            .collect(),
-                    ));
+            let at = SYNTH_AT + beat * SYNTH_EVERY;
+            if beat > 0 {
+                let frame = wire::with_seq(
+                    wire::typed_command(
+                        at,
+                        &Command::Mole {
+                            op: MoleOp::Synth {
+                                index: (beat % 3) as u8,
+                            },
+                        },
+                    ),
+                    6 + beat,
+                );
+                let outcome = harness.feed_raw_to_validator(&mut target, &frame);
+                assert!(
+                    matches!(outcome, ValidatorOutcome::Accepted),
+                    "beat {beat} frame at tick {at} was not accepted"
+                );
+                harness
+                    .feed_commit(&mut target, Role::Infiltrator, at)
+                    .expect("beat commit accepted");
+            }
+            for _round in 0..40 {
+                if target.step() > at {
+                    break;
                 }
-            });
+                let _ = target.pump_outgoing(&mut feed);
+                target.advance_with(|sim, fresh| {
+                    events.extend(fresh.iter().cloned());
+                    let synth_now = fresh.iter().any(|e| {
+                        matches!(
+                            e,
+                            Event::Mole {
+                                mole: MoleEvent::SynthSoundPlayed { .. }
+                            }
+                        )
+                    });
+                    // Refresh on every beat: the early beats can play while
+                    // Billy is still in his crisis-entry dwell; the last
+                    // reading — taken once he is on shift and the decoy is
+                    // inside his hearing — is the evidence.
+                    if synth_now {
+                        let st = sim.state();
+                        if obs_at_billy.is_none() {
+                            guard_on_shift = st.billy.mode != BillyMode::Offsite;
+                        }
+                        // The detector the watcher itself uses: canonical
+                        // observations at the actor's own position, with the
+                        // sim folding the companion's diversion in as the
+                        // extra noise source the free observations()
+                        // contract never sees. Sampling it through the sim
+                        // rather than re-deriving it here is what stops this
+                        // assertion drifting away from
+                        // `system_infra_watch` again.
+                        obs_at_billy = Some((
+                            st.billy.x,
+                            st.mole.as_ref().map(|m| m.state.x.round()),
+                            sim.actor_observations(st.billy.x)
+                                .into_iter()
+                                .map(|o| o.kind)
+                                .collect(),
+                        ));
+                    }
+                });
+            }
+            if events.iter().any(|e| {
+                matches!(
+                    e,
+                    Event::GuardObserved {
+                        kind: ObservationKind::UnusualNoise,
+                        ..
+                    }
+                )
+            }) {
+                break;
+            }
+            beat += 1;
+            if beat >= SYNTH_BEATS {
+                break;
+            }
         }
+
+        // Diagnostics as evidence: the run's own counters, so any future
+        // failure of the checks below names the mechanism instead of
+        // inviting a guess.
+        let denied = events
+            .iter()
+            .filter(|e| matches!(e, Event::MoleDenied { .. }))
+            .count();
+        let mole_events = events
+            .iter()
+            .filter(|e| matches!(e, Event::Mole { .. }))
+            .count();
+        let paused_events = events.iter().filter(|e| matches!(e, Event::Paused)).count();
+        let guard_events = events
+            .iter()
+            .filter(|e| matches!(e, Event::GuardObserved { .. }))
+            .count();
+        let run_trace = format!(
+            "step={} watermark={} finished={} events={} mole={} denied={} paused={} \
+             guard_obs={} beats={}",
+            target.step(),
+            target.peer_watermark(),
+            target.finished(),
+            events.len(),
+            mole_events,
+            denied,
+            paused_events,
+            guard_events,
+            beat,
+        );
+        harness.check(
+            "heartbeat-drove-the-run-past-the-first-beat",
+            target.step() > SYNTH_AT,
+            format!("the advance rounds ran past the first beat's tick: {run_trace}"),
+        );
         harness.check(
             "guard-on-shift-when-the-synth-plays",
             guard_on_shift,
-            "the diversion has to be played where the guard can hear it; an \
-             off-site Billy is not a witness to anything",
+            format!(
+                "the diversion has to be played where the guard can hear it; an \
+                 off-site Billy is not a witness to anything: {run_trace}"
+            ),
         );
 
         let applied = events.iter().any(|e| {
@@ -410,7 +527,9 @@ impl Scenario for InfraOrdersScenario {
         harness.check(
             "mole-order-applied-by-sim",
             applied,
-            "the accepted order reached the hosted companion as a typed event",
+            format!(
+                "the accepted order reached the hosted companion as a typed event: {run_trace}"
+            ),
         );
         harness.check(
             "no-denial-for-legitimate-order",
@@ -433,20 +552,22 @@ impl Scenario for InfraOrdersScenario {
         harness.check(
             "guard-observed-the-diversion",
             observed,
-            "the synth diversion came back as an UnusualNoise observation event",
+            format!(
+                "the synth diversion came back as an UnusualNoise observation event: {run_trace}"
+            ),
         );
         let contract_lists_noise = obs_at_billy
             .as_ref()
-            .is_some_and(|(_, kinds)| kinds.contains(&ObservationKind::UnusualNoise));
+            .is_some_and(|(_, _, kinds)| kinds.contains(&ObservationKind::UnusualNoise));
         harness.check(
             "perception-contract-lists-the-noise",
             contract_lists_noise,
             match &obs_at_billy {
-                Some((x, kinds)) => format!(
-                    "observations at billy.x={x:.1}: {kinds:?} — computed from canonical \
-                     state at the actor's own position"
+                Some((x, mx, kinds)) => format!(
+                    "observations at billy.x={x:.1} (mole.x={mx:?}): {kinds:?} — computed \
+                     from canonical state at the actor's own position: {run_trace}"
                 ),
-                None => "the run never reached the tick the synth played".to_owned(),
+                None => format!("the run never reached a tick a synth played: {run_trace}"),
             },
         );
 
@@ -498,9 +619,19 @@ impl Scenario for InfraOrdersScenario {
              fails closed, which is the safe direction."
                 .into(),
             "The observation evidence is the player-visible pair: Event::GuardObserved in the \
-             canonical log (rendered as Billy's own words) and the observations() contract \
-             evaluated at Billy's position with the archetype's hearing — the guard reacts to \
-             what it perceives, never to the hidden Mole order."
+             canonical log (rendered as Billy's own words) and the actor_observations() \
+             contract evaluated at Billy's position with the archetype's hearing — the same \
+             detector system_infra_watch uses, folding the companion's diversion in as an \
+             extra noise source. The guard reacts to what it perceives, never to the hidden \
+             Mole order."
+                .into(),
+            "The heartbeat is load-bearing: begin_crisis parks Billy at CRISIS_BILLY_X for a \
+             1.1 s Entering dwell and a diversion only lives MOLE_SYNTH_DURATION (2.2 s), so \
+             a single pre-scheduled synth gambles on one tick landing inside the window \
+             where he is on shift and the decoy is within NOISE_INVEST_DIST. Beats every \
+             0.5 s from tick 52 — with the capture refreshed per beat — make the evidence \
+             the reading taken when the noise is actually heard, and the mole order at \
+             tick 8 gives its 150-unit walk ~44 ticks of margin before the first beat."
                 .into(),
             "The run still rides the shared live-seat fixture, with its scenario field \
              pointed at pump-house; it is not a private copy. Two fields are adjusted in \

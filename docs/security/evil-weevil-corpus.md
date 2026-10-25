@@ -200,8 +200,11 @@ actually fires.
   tick 1; a `Mole` synth order from the hacker seat through the model relay;
   a `Power` inspect order from the same seat through the relay; the identical
   `Mole` order at the frontier on the infiltrator peer path, direct to the
-  production validator; commit the horizon through tick 3 and advance (the
-  order applies, the guard observes); a `Mole` order below the watermark.
+  production validator; three scene frames (crisis at tick 2, the mole walked
+  underground to 240 at tick 8, first synth beat at tick 52) and then a decoy
+  heartbeat — a fresh synth frame every 30 ticks, each with its own commit —
+  advancing in rounds until the guard announces what it heard; a `Mole` order
+  below the watermark.
 - **Expected / observed:**
   - `mole-order-refused-at-relay` — the pinned burble profile carries no
     `Mole` tag; the refusal fails closed and is recorded as a role violation.
@@ -210,15 +213,26 @@ actually fires.
   - `frontier-mole-order-accepted` — the lockstep validator accepts the
     frontier order for the peer seat on the pump-house floor; the horizon
     commit then lets the run execute it.
+  - `scene-frame-accepted-at-*` — the crisis, walk and first-beat frames
+    schedule at the frontier for the infiltrator seat: the crisis is the
+    only exit from `Offsite`, and the walk moves the decoy from 364 units
+    away to 214 — inside the 260-unit hearing gate.
+  - `heartbeat-drove-the-run-past-the-first-beat` /
+    `guard-on-shift-when-the-synth-plays` — the per-beat commits keep the
+    run advancing and a beat plays while Billy is on shift; both checks
+    carry the run's own trace (step, watermark, event counters, beats) so a
+    future failure names the mechanism instead of inviting a guess.
   - `mole-order-applied-by-sim` / `no-denial-for-legitimate-order` — the
     order reaches the hosted companion as a typed `SynthSoundPlayed` event;
     no `MoleDenied`.
   - `guard-observed-the-diversion` — Billy's own senses turn the diversion
     into a `GuardObserved(UnusualNoise)` event: the player-visible evidence
     for the observation principle.
-  - `perception-contract-lists-the-noise` — `observations()` at Billy's
-    position, with the archetype's hearing, lists the same noise from
-    canonical state alone.
+  - `perception-contract-lists-the-noise` — `actor_observations()` at
+    Billy's position, with the archetype's hearing, lists the same noise
+    from canonical state alone: the same detector `system_infra_watch`
+    uses, folding the companion's diversion in as an extra noise source
+    the free `observations()` contract never sees.
   - `stale-mole-order-rejected` — below the watermark the new verbs are
     refused like any other.
   - `relay-accounting` — two refusals, zero relays, zero drops.
