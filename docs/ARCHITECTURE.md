@@ -7,7 +7,7 @@ communication platform, estate ruling 2026-08-04). Simulation authority is a
 separate deployment choice: peer replicas for cooperative lockstep, or one
 server authority per hosted/federated session. The current client runtime only
 implements the relay-only slice; see
-[ADR-0014](adr/0014-deployment-topologies-and-state-ownership.md) for the
+[ADR-0015](adr/0015-deployment-topologies-and-state-ownership.md) for the
 contract and implementation status.
 
 For the reasoning behind each choice, see the ADRs in [`docs/adr/`](adr/).
@@ -90,7 +90,7 @@ Both seats currently run the deterministic simulation. The player-hosted
 launcher starts a local relay, so this is not direct peer transport and not a
 server-authoritative hosted game. Federated authority, direct peer transport,
 and the optional GSA control plane are specified—but not yet wired—in
-[ADR-0014](adr/0014-deployment-topologies-and-state-ownership.md).
+[ADR-0015](adr/0015-deployment-topologies-and-state-ownership.md).
 
 The `idaptik-evil-weevil` crate (ADR-0013) exercises these acceptance rules
 adversarially: a sans-IO, deterministic five-scenario corpus drives raw,

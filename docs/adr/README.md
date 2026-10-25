@@ -20,7 +20,8 @@ asserted in the README and quietly contradicted later.
 | [0013-water](0013-water-gas-airflow.md) | Water, gas and airflow are three coarse building systems, not a fluid solver | Proposed |
 | [0013-electrical](0013-electrical-infrastructure.md) | Electrical infrastructure in `idaptik-core` | Proposed |
 | [0013-evil-weevil](0013-evil-weevil-adversarial-testing-adapter.md) | Evil Weevil deterministic adversarial testing adapter | Proposed |
-| [0014](0014-deployment-topologies-and-state-ownership.md) | Deployment topologies, simulation authority, and state ownership | Accepted (contract; runtime partial) |
+| [0014](0014-infrastructure-consequences-as-observations.md) | Infrastructure consequences are canonical-sim facts that reach actors only as observations | Proposed |
+| [0015](0015-deployment-topologies-and-state-ownership.md) | Deployment topologies, simulation authority, and state ownership | Accepted (contract; runtime partial) |
 
 New ADRs: copy the format of an existing one, take the next number, and add a row
 above.

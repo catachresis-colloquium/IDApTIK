@@ -60,7 +60,7 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
 - **Current relay/session coordination:** Elixir/OTP in Burble — **Bandit** +
   **Phoenix Channels**, not LiveView ([ADR-0002](docs/adr/0002-multiplayer-transport.md));
   simulation authority is a separate deployment choice
-  ([ADR-0014](docs/adr/0014-deployment-topologies-and-state-ownership.md)).
+  ([ADR-0015](docs/adr/0015-deployment-topologies-and-state-ownership.md)).
 - **FFI / ABI policy:** **Zig unified-api-adapter APIs/FFIs** for the adapter and **Idris2** for ABI
   contracts. The C ABI is still exported directly from Rust/Crusoe, the Idris2 ABI
   model exists (`crates/idaptik-ffi/abi`, gated by `just abi-model-check`), and the Zig
@@ -74,7 +74,7 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
 - **Toolchains:** pinned in `mise.toml` + `rust-toolchain.toml`; `just` runs tasks. On a fresh Debian/Ubuntu/WSL2 clone run `./install.sh` (also `just install`): it installs rustup, the pinned Rust, the mise tools and Bevy's system libraries (asks for `sudo`), builds the Bevy frontend, and ends with the runtime doctor. Otherwise provision with `just setup` (or `just bootstrap` for a fast, prebuilt-only bring-up), and check with `just doctor`.
 
 The deployment contract is recorded in
-[ADR-0014](docs/adr/0014-deployment-topologies-and-state-ownership.md). Direct
+[ADR-0015](docs/adr/0015-deployment-topologies-and-state-ownership.md). Direct
 peer transport, a server-authoritative hosted runtime, and federated session
 routing are not implemented yet. Still open: long-term player-save
 compatibility/retention and the Rust↔Elixir wire encoding.

@@ -18,7 +18,7 @@ rendering.
    with no dependency on Bevy or Fyrox. This holds the network/topology model,
    simulation, movement rules, and state transitions. The process allowed to
    commit a session's simulation state is a separate topology-specific choice
-   (ADR-0014); current Elixir/Burble wiring coordinates and relays sessions
+   (ADR-0015); current Elixir/Burble wiring coordinates and relays sessions
    (ADR-0002). The core is `no_render` and unit-testable in isolation.
 2. **Treat Bevy and Fyrox as interchangeable frontends** over that core, each in
    its own crate (`idaptik-bevy`, `idaptik-fyrox`), during an evaluation

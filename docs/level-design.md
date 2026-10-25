@@ -200,7 +200,7 @@ these validated load points.
   fans byte-preserving `command`/`event` wire enums between the two seats and reads
   only the routing tag. Determinism (ADR-0004) makes lockstep sound for this
   cooperative vertical slice, so it does not need a host authority; this does
-  not rule out hosted/federated authorities specified in ADR-0014.
+  not rule out hosted/federated authorities specified in ADR-0015.
 - **Host + transport (ADR-0006, design-accepted, deferred).** The plan wraps the
   Bevy frontend in the **gossamer** desktop shell (a webview host, *not* Tauri) and
   carries the Phoenix socket over **burble** transport for the two-player windowed

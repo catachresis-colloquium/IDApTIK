@@ -42,7 +42,7 @@ K9!
       { id = "engine-license-intact", severity = "critical", description = "Engine code remains AGPL-3.0-or-later; content remains CC-BY-SA-4.0 and governance material remains separately licensed.", scope = "repository license layers", evidence = "Cargo.toml, LICENSE, LICENSES/, and SPDX headers" },
       { id = "trust-deny-areas", severity = "advisory", description = "Sensitive areas require explicit human approval before modification.", scope = "LICENSE, LICENSES/, docs/adr/, .machine_readable/contractiles/, .github/CODEOWNERS, and crates/idaptik-core", evidence = ".github/CODEOWNERS and coordination.k9" },
       { id = "dependency-lock-integrity", severity = "critical", description = "Keep dependency lockfiles and supply-chain policy aligned with reviewed manifests.", scope = "Cargo.lock and deny.toml", evidence = "supply-chain CI gate" },
-      { id = "authority-is-not-discovery", severity = "critical", description = "Discovery, clustering, and cache replication do not grant simulation authority or provide consensus.", scope = "multiplayer and federation", evidence = "ADR-0014 and deployment tests" },
+      { id = "authority-is-not-discovery", severity = "critical", description = "Discovery, clustering, and cache replication do not grant simulation authority or provide consensus.", scope = "multiplayer and federation", evidence = "ADR-0015 and deployment tests" },
     ],
   },
 }

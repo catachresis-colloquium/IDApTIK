@@ -9,7 +9,7 @@ IDApTIK is an asymmetric two-player game: an infiltrator and a hacker share
 one logical world. Rust owns deterministic game semantics; Elixir/OTP provides
 the current multiplayer transport and relay/session coordination. The process
 that may commit a session's simulation state is a separate, topology-specific
-decision (ADR-0014). The open question here was how the Elixir side should serve
+decision (ADR-0015). The open question here was how the Elixir side should serve
 real-time traffic: **Bandit**, **Phoenix LiveView**, or something else, and where
 **hex** fits.
 

@@ -9,7 +9,7 @@ Issue #5 asks the Elixir session layer (ADR-0002) to carry the Ghost Lobby
 scenario's typed `Command`/`Event` stream between the two asymmetric roles,
 with `idaptik-core` defining the sole game semantics. Which process commits
 simulation state is a separate, topology-specific authority decision
-(ADR-0014). Two topologies were on the table:
+(ADR-0015). Two topologies were on the table:
 
 1. **Rust-authoritative host** — a headless Rust process runs `GhostLobbySim`
    per session; Elixir relays each role's `Command`s to it and broadcasts the
@@ -61,7 +61,7 @@ commands instead of relaying them.
 
 Option 1 remains the better end state for a **server-authoritative hosted
 session**, and the issue is right to prefer it for a shipped hosted game. It is
-not the only supported deployment topology: ADR-0014 separately defines
+not the only supported deployment topology: ADR-0015 separately defines
 cooperative peer replicas and independently operated federated servers.
 
 - **Cheating.** In relay-only, each client computes its own truth; a modified

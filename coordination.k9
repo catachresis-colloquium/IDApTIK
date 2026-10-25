@@ -87,7 +87,7 @@ protected:
     reason: "Deterministic gameplay authority and replay contract."
   - path: crates/idaptik-net/src/deployment.rs
     reason: "Declarative model of independent deployment axes and state-placement policy."
-  - path: docs/adr/0014-deployment-topologies-and-state-ownership.md
+  - path: docs/adr/0015-deployment-topologies-and-state-ownership.md
     reason: "Current topology, GSA, SNIF, and per-state-class storage contract."
   - path: docs/MULTIPLAYER-TROUBLESHOOTING.md
     reason: "Existing multiplayer and WSLg Copy Mode recovery guidance."

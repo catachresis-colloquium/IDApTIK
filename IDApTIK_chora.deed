@@ -66,7 +66,7 @@
     :network-architecture "Peer-to-peer, hosted, and federated profiles are modeled separately from the live relay path."
     :storage-policy "Choose hot state, durability, disposable cache, consistency, partition behavior, and recovery per state class and topology; no single store is imposed."
     :snif-boundary "SNIF guests perform bounded computation over host-marshalled values and buffers; network and database I/O remain outside the guest."
-    :state-contract-source "docs/adr/0014-deployment-topologies-and-state-ownership.md"
+    :state-contract-source "docs/adr/0015-deployment-topologies-and-state-ownership.md"
     :game-config "Nickel schemas and config files under config/ are the typed configuration source.")
 
   (deployment-contract
@@ -80,7 +80,7 @@
     :state-classes (membership-and-presence pending-inputs active-simulation committed-history federation-directory operator-configuration operations-catalog game-content derived-cache media-playout)
     :storage-options (rust-process-memory beam-process-ets local-lmdb-journal versioned-package-files optional-verisimdb optional-dragonfly)
     :cache-policy "ETS or Dragonfly is optional derived cache only; it is not authoritative state or consensus."
-    :evidence "crates/idaptik-net/src/deployment.rs and docs/adr/0014-deployment-topologies-and-state-ownership.md")
+    :evidence "crates/idaptik-net/src/deployment.rs and docs/adr/0015-deployment-topologies-and-state-ownership.md")
 
   (component-status
     (component :name "idaptik-kernel" :state live-partial :path "crates/idaptik-kernel/" :role "Float-free types and operations held to Creusot proof boundaries.")
@@ -125,7 +125,7 @@
     (adr :id "ADR-0013" :path "docs/adr/0013-water-gas-airflow.md" :title "Water, gas, and airflow as coarse building systems" :status proposed)
     (adr :id "ADR-0013" :path "docs/adr/0013-electrical-infrastructure.md" :title "Electrical infrastructure in idaptik-core" :status proposed)
     (adr :id "ADR-0013" :path "docs/adr/0013-evil-weevil-adversarial-testing-adapter.md" :title "Evil Weevil adversarial testing adapter" :status proposed)
-    (adr :id "ADR-0014" :path "docs/adr/0014-deployment-topologies-and-state-ownership.md" :title "Deployment topologies and state ownership" :status accepted))
+    (adr :id "ADR-0015" :path "docs/adr/0015-deployment-topologies-and-state-ownership.md" :title "Deployment topologies and state ownership" :status accepted))
 
   (settled-boundaries
     :items ("IDApTIK owns the versioned UMS package contract; UMS consumes it as data and is not linked into the shipped game." "IDApTIK does not import Chronicles of Slavia profile types." "Enaction adoption requires fresh game-host evidence." "The evidence ledger and VSM supervisor stay in idaptik-core until ADR-0010's extraction trigger fires." "Cognition is discrete and event-gated; affect is continuous and joins only at the event-sourced ledger. These mappings remain subject to the referenced cross-repository decisions."))

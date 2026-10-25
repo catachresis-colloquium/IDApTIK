@@ -3,17 +3,27 @@
 //! A [`GhostLobbySim`] owns the definition, the run config, the RNG, the tick
 //! counter and the [`RuntimeState`]. Each call to [`GhostLobbySim::tick`] advances
 //! exactly one 60 Hz frame — applying immediates before the systems, then running
-//! the twelve systems in a fixed, load-bearing order (see `systems.rs`), then the
+//! the systems in a fixed, load-bearing order (see `systems.rs`, plus the
+//! companion and infrastructure hosts in `mole.rs`/`infra.rs`), then the
 //! post-systems phase/lockdown checks — and returns the typed events it emitted.
+//!
+//! A floor may also *host* optional subsystems: a Moletaire companion
+//! ([`crate::companion`], ADR-0014) and building infrastructure — water zones
+//! and alarms ([`crate::scenario::infra`]). Both are declared per-floor, both
+//! no-op completely when absent, and both keep their changing half in the
+//! canonical snapshot, so hosting never forks authority or breaks replay.
 //!
 //! The code path is panic-free: no `unwrap`/`expect`/panicking index; fallible
 //! construction returns `Result`; arithmetic is clamped; matches are exhaustive.
 
 mod console;
+mod infra;
+mod mole;
 mod power;
 mod signal;
 mod systems;
 
+use crate::companion::MoletaireSim;
 use crate::netsim::graph::GroundedGraph;
 use crate::scenario::actor::{ComposedActor, billy_actor};
 use crate::scenario::agents::apply_effects;
@@ -61,6 +71,12 @@ pub struct GhostLobbySim {
     /// belief systems read every tunable number from here, so any registry
     /// archetype drives the same machinery.
     actor: ComposedActor,
+    /// The hosted Moletaire companion, on a floor that declares one
+    /// (ADR-0014). Unlike `graph` and `actor` it carries mutable state, so
+    /// its changing half *is* snapshotted (`RuntimeState::mole`); `restore`
+    /// rebuilds the live sim from that record and `new`/`reset` build it from
+    /// the definition and seed.
+    mole: Option<MoletaireSim>,
     paused: bool,
     events: Vec<Event>,
 }
@@ -97,6 +113,8 @@ impl GhostLobbySim {
     /// reset roll and emits `RunStarted` + `SeedAnnounced` (drain them with
     /// [`GhostLobbySim::drain_events`] before the first tick, or let the first
     /// tick return them ahead of its own events).
+    /// Returns the definition's validation errors if it is invalid. Companion
+    /// construction errors instead leave the run without a live companion.
     pub fn new(
         def: ScenarioDefinition,
         cfg: RunConfig,
@@ -124,9 +142,11 @@ impl GhostLobbySim {
             preset,
             graph,
             actor: billy_actor(),
+            mole: None,
             paused: false,
             events: Vec::new(),
         };
+        sim.build_mole();
         sim.emit_start();
         Ok(sim)
     }
@@ -134,6 +154,8 @@ impl GhostLobbySim {
     /// Rebuild an equivalent sim from a snapshot and its definition. A snapshot
     /// tagged with any other format is refused up front, as a typed error,
     /// rather than left to fail later (or worse, restore wrongly) on shape.
+    /// Also returns definition validation errors. Companion restore errors
+    /// leave no live companion and are not returned as run restore errors.
     pub fn restore(
         def: ScenarioDefinition,
         snap: RuntimeSnapshot,
@@ -151,7 +173,7 @@ impl GhostLobbySim {
             .unwrap_or_else(fallback_preset);
         let idx = IdIndex::resolve(&def);
         let graph = floor_graph(&def);
-        Ok(Self {
+        let mut sim = Self {
             def,
             cfg: snap.cfg,
             seed: snap.seed,
@@ -162,9 +184,12 @@ impl GhostLobbySim {
             preset,
             graph,
             actor: billy_actor(),
+            mole: None,
             paused: snap.paused,
             events: Vec::new(),
-        })
+        };
+        sim.adopt_mole();
+        Ok(sim)
     }
 
     /// Restart from `seed`, re-rolling the reset and emitting the start events.
@@ -174,6 +199,7 @@ impl GhostLobbySim {
         let roll = roll_init(&self.def, &mut self.rng, self.cfg.difficulty);
         self.tick = 0;
         self.state = RuntimeState::initial(&self.def, &roll, self.cfg, &self.preset);
+        self.build_mole();
         self.paused = false;
         self.emit_start();
     }
@@ -382,6 +408,9 @@ impl GhostLobbySim {
                     crate::scenario::command::Command::Signal { op } => {
                         self.signal_command(*op);
                     }
+                    crate::scenario::command::Command::Mole { op } => {
+                        self.mole_command(*op);
+                    }
                     crate::scenario::command::Command::Power { op } => {
                         self.power_command(*op);
                     }
@@ -442,6 +471,12 @@ impl GhostLobbySim {
             input
         };
         self.system_signal();
+        // The companion and the infrastructure land before anything moves: a
+        // chewed cable's darkness, a released zone's water and a sounding
+        // alarm are all facts of this tick by the time bodies and perceptions
+        // read them. Both no-op entirely on a floor without them.
+        self.system_mole();
+        self.system_infra();
         self.system_player(input);
 
         //## The network vantage follows the body
@@ -496,6 +531,9 @@ impl GhostLobbySim {
         if self.state.ended {
             return;
         }
+        // The guard's perception of the building: announce-once, before the
+        // belief and FSM systems act on what he can sense.
+        self.system_infra_watch();
         self.system_behaviour();
         self.system_billy();
         self.system_collisions();
@@ -1055,6 +1093,9 @@ impl GhostLobbySim {
     pub(crate) fn move_billy_toward(&mut self, target_x: f64, speed: f64) {
         let dt = TICK_DT;
         let old_x = self.state.billy.x;
+        // Flooded rooms slow the guard exactly as they slow the player:
+        // released water is a fact of the building, not of who walks in it.
+        let speed = speed * self.wade_factor_at(old_x);
         let dx = target_x - old_x;
         let dir = if dx.abs() < 2.0 {
             0.0

@@ -41,7 +41,7 @@ K9!
     committed = [
       { id = "envelope-playable-slice", status = "in-progress", description = "Deliver the Envelope minimum game with movement and basic hacker interactions.", evidence = "README roadmap and crates/idaptik-core/src/scenario/" },
       { id = "two-player-windowed-slice", status = "declared", description = "Deliver the Gossamer-window and Burble-transport two-player slice.", evidence = "docs/adr/0006-gossamer-host-and-burble-transport.md" },
-      { id = "session-relay", status = "in-progress", description = "Maintain the Elixir Bandit/Phoenix relay over the typed command/event boundary; simulation authority remains topology-specific.", evidence = "ADR-0002, ADR-0005, ADR-0006, and ADR-0014" },
+      { id = "session-relay", status = "in-progress", description = "Maintain the Elixir Bandit/Phoenix relay over the typed command/event boundary; simulation authority remains topology-specific.", evidence = "ADR-0002, ADR-0005, ADR-0006, and ADR-0015" },
       { id = "config-schema-coverage", status = "in-progress", description = "Validate Nickel scenarios and ensure invalid fixtures fail the configuration gate.", evidence = "config/ and just config-check" },
     ],
     horizon = [
@@ -49,8 +49,8 @@ K9!
       { id = "wire-format-settled", horizon = "mid", status = "open", description = "Choose the Rust-Elixir wire encoding and persistence strategy.", evidence = "open decision in IDApTIK_chora.deed" },
       { id = "adaptive-security-ai", horizon = "mid", status = "declared", description = "Consider security countermeasures that react to hacker interference.", evidence = "README roadmap" },
       { id = "full-experience", horizon = "far", status = "declared", description = "Deliver adaptive security, emergent tension, and the complete multiplayer experience.", evidence = "README roadmap" },
-      { id = "direct-peer-transport", horizon = "far", status = "planned", description = "Implement direct peer transport and deterministic recovery without a required central service.", evidence = "ADR-0014" },
-      { id = "federated-routing", horizon = "far", status = "planned", description = "Implement advisory federation discovery without transferring session authority.", evidence = "ADR-0014" },
+      { id = "direct-peer-transport", horizon = "far", status = "planned", description = "Implement direct peer transport and deterministic recovery without a required central service.", evidence = "ADR-0015" },
+      { id = "federated-routing", horizon = "far", status = "planned", description = "Implement advisory federation discovery without transferring session authority.", evidence = "ADR-0015" },
     ],
   },
 }
