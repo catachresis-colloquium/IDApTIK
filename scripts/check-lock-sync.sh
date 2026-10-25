@@ -59,13 +59,31 @@
 #    INFERENCE from burble#223's write-up, not a measurement made here, and it
 #    is labelled as such in the output.
 #
+# 3. Every step-level ref ANY workflow uses must have a `dependencies:` entry,
+#    onboarded or not. This arm exists because the previous two let a real
+#    failure through: on 2026-10-24 this gate reported "actions.lock is in
+#    sync" for a tree whose `scan / gitleaks` job died at SET UP with
+#    "Unable to resolve action `actions/checkout@3d3c42e5…`: invalid lockfile
+#    pin", and metadatastician/evil-weevil hit the same wall on its Dependabot
+#    branch (run 39113476510). Both callers use a job-level reusable from
+#    another repository. That reusable does its own `actions/checkout`, and a
+#    called reusable resolves its actions from the CALLER's `dependencies:`
+#    map — so a ref we use ourselves but never declare is a hole that makes a
+#    reusable-calling job unstartable. `actions/checkout`, `actions/cache` and
+#    `actions/upload-artifact` were all used by creusot-proof.yml and
+#    abi-conformance.yml and all three were absent from `dependencies:`, while
+#    arms 1–2 passed them (unonboarded, immutable refs) and arm 5 never saw
+#    them (it only walks refs the lockfile already records). The arm is
+#    offline-checkable, which is why it belongs here and not in a network
+#    probe of the reusable.
+#
 # Exit 0 only when every check passes. There is no warn-only mode for a FAIL
 # arm: a desync means GitHub will refuse to start the run.
 #
 # Usage:
 #   scripts/check-lock-sync.sh                # check this repository
 #   scripts/check-lock-sync.sh DIR            # check another workflows dir
-#   scripts/check-lock-sync.sh --self-test    # 11 controls, 8 of them mutants
+#   scripts/check-lock-sync.sh --self-test    # 13 controls, 12 of them mutants
 
 set -euo pipefail
 
@@ -178,6 +196,7 @@ run_check() { # $1 = workflows dir
       jobrefs[k] = jobrefs[k] " " n; njob++
     } else {                                            # step-level action
       if (!((k SUBSEP n) in stepseen)) { stepseen[k, n] = 1; steps[k] = steps[k] " " n; nstep++ }
+      if (!(n in usedany)) { usedany[n] = k; nusedany++ }
     }
   }
 
@@ -297,6 +316,20 @@ run_check() { # $1 = workflows dir
       } else nresolvable++
     }
 
+    # -- 5b. every step-level ref ANY workflow uses must be declared in
+    #        dependencies:, whether or not its own workflow is onboarded.
+    #        A called reusable resolves its own actions from this same map,
+    #        so an undeclared ref here is what made `scan / gitleaks` die at
+    #        set up on 2026-10-24 while this script reported "in sync".
+    for (r in usedany) {
+      if (r in depseen) { nuseddeclared++; continue }
+      printf "FAIL %s\n     uses %s, but no dependencies: entry declares it\n", usedany[r], r
+      printf "     A called reusable resolves its OWN actions from this same\n"
+      printf "     dependencies: map. A ref used here but declared nowhere is the\n"
+      printf "     hole that makes a reusable-calling job unstartable at set up.\n"
+      bad = 1
+    }
+
     # -- 6. lockfile entries for workflow files that no longer exist
     for (p in onboarded) {
       if (!(p in scanned)) {
@@ -305,8 +338,8 @@ run_check() { # $1 = workflows dir
       }
     }
 
-    printf "check-lock-sync: %d onboarded workflow(s) checked both directions, %d unonboarded with immutable refs (notice), %d/%d dependencies resolved to a commit, %d/%d recorded refs resolvable\n",
-           nchecked, nnotice, npinned, ndeps, nresolvable, nlockrefs
+    printf "check-lock-sync: %d onboarded workflow(s) checked both directions, %d unonboarded with immutable refs (notice), %d/%d dependencies resolved to a commit, %d/%d recorded refs resolvable, %d/%d used refs declared in dependencies:\n",
+           nchecked, nnotice, npinned, ndeps, nresolvable, nlockrefs, nuseddeclared, nusedany
     if (nchecked == 0 && nnotice == 0) {
       print "DENOMINATOR ZERO: no workflow was checked in either direction; that is not a pass"
       bad = 1
@@ -327,7 +360,8 @@ run_check() { # $1 = workflows dir
     }
     print "actions.lock is in sync: every step-level ref in an onboarded workflow is"
     print "recorded under its own path, every recorded ref is used, every dependency"
-    print "resolves to a commit, and no unonboarded workflow carries a movable ref."
+    print "resolves to a commit, no unonboarded workflow carries a movable ref, and"
+    print "every step-level ref any workflow uses is declared in dependencies:."
   }
   ' "$lock" "${files[@]}"
 }
@@ -399,6 +433,11 @@ workflows:
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/reusable.yml': []
 dependencies:
+    'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1':
+        ref: 'v7.0.1'
+        commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+        owner_id: 44036562
+        repo_id: 197814629
     'erlef/setup-beam@v1.24.1':
         ref: 'v1.24.1'
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
@@ -458,6 +497,17 @@ LOCK
   sed -i "/^    'erlef\/setup-beam@v1.24.1':$/,/^        repo_id:/d" "$fixture/actions.lock"
   expect_fail 'a recorded ref with no dependencies: entry is rejected' \
     'but dependencies: has no entry for it' "$fixture"
+
+  fixture="$(new_case undeclared-step-ref)"
+  # The 2026-10-24 shape: a ref used by an UNONBOARDED workflow, with no
+  # dependencies: entry. Arms 1-2 pass it (no lockfile path, immutable ref) and
+  # arm 5 never walks it, so before arm 5b the gate called this tree "in sync"
+  # while GitHub refused to start a job that called a reusable using the same
+  # ref. Deleting the checkout block is exactly that tree.
+  sed -i "/^    'actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1':$/,/^        repo_id:/d" \
+    "$fixture/actions.lock"
+  expect_fail 'a ref used by an unonboarded workflow with no dependencies: entry is rejected' \
+    'no dependencies: entry declares it' "$fixture"
 
   fixture="$(new_case stale-jobref)"
   sed -i "s/'.github\/workflows\/reusable.yml': \[\]/'.github\/workflows\/reusable.yml':\n        - 'hyperpolymath\/standards@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'/" \

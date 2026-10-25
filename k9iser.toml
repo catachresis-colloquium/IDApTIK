@@ -40,7 +40,7 @@ name = "rust-toolchain"
 source = "rust-toolchain.toml"
 format = "toml"
 must = [
-  "channel == \"1.95.0\"",         # exact MSRV pin for reproducible builds
+  "channel == \"1.97.1\"",         # exact MSRV pin for reproducible builds
 ]
 trust = ["signed-by: ci-pipeline"]
 dust = ["remove: floating-channel (stable/beta/nightly without a pin)"]

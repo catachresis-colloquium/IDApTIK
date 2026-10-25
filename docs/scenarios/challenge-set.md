@@ -1,6 +1,6 @@
 # Challenge Set 001 — Pump House
 
-The floor the infrastructure consequences (ADR-0013) were built for: the
+The floor the infrastructure consequences (ADR-0014) were built for: the
 canonical Ghost Lobby rooftop scenario, relabelled as a municipal pump house
 and carrying one floodable water zone, two alarms, a derived sump pump on the
 power graph, and a hosted Moletaire companion. Builder:

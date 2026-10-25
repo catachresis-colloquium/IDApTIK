@@ -146,7 +146,7 @@ pub fn press_command(name: &str) -> Option<Command> {
 }
 
 /// The parameterised token families: `hack:<node>` for the Net View click and
-/// the `mole:*` orders for a hosted companion (ADR-0013). A malformed token is
+/// the `mole:*` orders for a hosted companion (ADR-0014). A malformed token is
 /// `None` exactly like an unknown bare token — scripts are validated by what
 /// they do, and a typo'd order simply never fires.
 fn parameterised(name: &str) -> Option<Command> {

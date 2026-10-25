@@ -7,6 +7,7 @@
 //! set — this is the seam the Elixir session layer and the TUI frontend share.
 
 use crate::scenario::common::{ExtractMethod, FailReason};
+use crate::scenario::power::sim::PowerOp;
 use crate::scenario::signal::sim::SignalOp;
 use crate::scenario::tuning::{ActionKind, DifficultyId};
 use serde::{Deserialize, Serialize};
@@ -109,7 +110,7 @@ pub enum PivotTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NetNodeIndex(pub u32);
 
-/// One order to a hosted Moletaire companion (ADR-0013). The companion's own
+/// One order to a hosted Moletaire companion (ADR-0014). The companion's own
 /// [`crate::companion::MoleCommand`] vocabulary is richer (items, equipment,
 /// feeding); the wire carries only the orders a seat issues mid-run, and only
 /// in `Copy` shapes — an `f64` position and a small sound index, never a
@@ -165,10 +166,15 @@ pub enum Command {
     /// floor's signal network (ADR-0012). Either seat; `op` says which, and
     /// the sim checks that seat can touch the receiving device.
     Signal { op: SignalOp },
-    /// Immediate: order the hosted Moletaire companion (ADR-0013). Denied on
+    /// Immediate: order the hosted Moletaire companion (ADR-0014). Denied on
     /// a floor with no mole; the mole is the infiltrator's companion, so the
     /// seat table routes it to the infiltrator.
     Mole { op: MoleOp },
+    /// Immediate: work the floor's electrical infrastructure (ADR-0013) —
+    /// cut a cable by hand, rewire a load, work a breaker, throw a source,
+    /// switch a device, or ask why one is off. `op` says which, and the sim
+    /// checks that seat can touch what it names.
+    Power { op: PowerOp },
     /// Immediate test hook: force the crisis phase.
     ForceCrisis,
     /// Immediate test hook: force an extraction.
@@ -211,6 +217,7 @@ pub fn fold(cmds: &[Command], held: &mut Buttons) -> TickInput {
             | Command::NetHack { .. }
             | Command::Signal { .. }
             | Command::Mole { .. }
+            | Command::Power { .. }
             | Command::ForceCrisis
             | Command::ForceExtract { .. }
             | Command::ForceFail { .. }

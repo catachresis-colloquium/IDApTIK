@@ -8,7 +8,7 @@
 //! post-systems phase/lockdown checks — and returns the typed events it emitted.
 //!
 //! A floor may also *host* optional subsystems: a Moletaire companion
-//! ([`crate::companion`], ADR-0013) and building infrastructure — water zones
+//! ([`crate::companion`], ADR-0014) and building infrastructure — water zones
 //! and alarms ([`crate::scenario::infra`]). Both are declared per-floor, both
 //! no-op completely when absent, and both keep their changing half in the
 //! canonical snapshot, so hosting never forks authority or breaks replay.
@@ -19,6 +19,7 @@
 mod console;
 mod infra;
 mod mole;
+mod power;
 mod signal;
 mod systems;
 
@@ -71,7 +72,7 @@ pub struct GhostLobbySim {
     /// archetype drives the same machinery.
     actor: ComposedActor,
     /// The hosted Moletaire companion, on a floor that declares one
-    /// (ADR-0013). Unlike `graph` and `actor` it carries mutable state, so
+    /// (ADR-0014). Unlike `graph` and `actor` it carries mutable state, so
     /// its changing half *is* snapshotted (`RuntimeState::mole`); `restore`
     /// rebuilds the live sim from that record and `new`/`reset` build it from
     /// the definition and seed.
@@ -410,6 +411,9 @@ impl GhostLobbySim {
                     crate::scenario::command::Command::Mole { op } => {
                         self.mole_command(*op);
                     }
+                    crate::scenario::command::Command::Power { op } => {
+                        self.power_command(*op);
+                    }
                     crate::scenario::command::Command::ForceCrisis => {
                         self.begin_crisis(CrisisReason::Test);
                     }
@@ -438,13 +442,18 @@ impl GhostLobbySim {
         self.tick += 1;
 
         self.system_timers();
+        // Power runs before the input is chosen, not after it. It is the only
+        // system that can make the body unable to act in the same tick it acts
+        // — contact with live metal — and a stun that only took hold next tick
+        // would let a shocked infiltrator finish an interaction on the way down.
+        self.system_power();
         // Hands busy at a wiring panel hold still and touch nothing else. A
         // run that never wires never sets the timer, so this is the input
         // unchanged.
         // Sitting at a console is the same: still, but interact still works,
         // because interact is how you get up again.
         let idle;
-        let input = if self.state.signal_busy > 0.0 {
+        let input = if self.hands_busy() > 0.0 {
             idle = TickInput::default();
             &idle
         } else if self.state.using_console.is_some() {
@@ -569,6 +578,18 @@ impl GhostLobbySim {
             .iter()
             .position(|r| r.contains(cx))
             .unwrap_or(def.rooms.len().saturating_sub(1))
+    }
+
+    /// Seconds the infiltrator's hands are occupied — by signal wiring,
+    /// electrical work, or the stun of live metal.
+    ///
+    /// There is one pair of hands. The two subsystems keep separate timers
+    /// because they are separate systems, but physical work is exclusive: a
+    /// player mid-cut cannot start a wire, and a player mid-wire cannot start a
+    /// cut. Every caller asks this, never a timer directly, so the rule has one
+    /// home.
+    pub fn hands_busy(&self) -> f64 {
+        self.state.signal_busy.max(self.state.power_busy)
     }
 
     /// The id string of the room containing world-x, if any.

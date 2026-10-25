@@ -1,5 +1,5 @@
 //! The building **authoring audit** — the deeper level-authoring surface
-//! beside [`BuildingDefinition::validate`] (ADR-0013).
+//! beside [`BuildingDefinition::validate`] (ADR-0014).
 //!
 //! `validate` is the load gate: dangling references, duplicates, malformed
 //! subnets, structural connectivity. Its report is embedded in committed

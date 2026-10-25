@@ -111,7 +111,7 @@ impl GhostLobbySim {
         } else {
             self.preset.player_speed
         };
-        // Released water is knee-deep on the floor line (ADR-0013): it slows
+        // Released water is knee-deep on the floor line (ADR-0014): it slows
         // the player to a wade wherever it has been let in. The roof never
         // floods, and a dry floor keeps the speed bit-identical to before.
         let wade = if self.state.player.place == Place::Floor {
@@ -330,7 +330,7 @@ impl GhostLobbySim {
             }
         }
 
-        // valve handle — the physical release (ADR-0013). A floor that
+        // valve handle — the physical release (ADR-0014). A floor that
         // declares a water zone with a handle in this room lets the
         // infiltrator turn it by hand, and the zone releases through the
         // same canonical path a hacked valve node walks: the splash, the
@@ -649,7 +649,11 @@ impl GhostLobbySim {
     // 5. VACUUM ------------------------------------------------------------
     pub(super) fn system_vacuum(&mut self) {
         let dt = TICK_DT;
-        if !self.state.vacuum.active || self.state.vacuum.fallen {
+        // A vacuum with no working supply has no motor, but it has not been
+        // told to stop: the request lives in `active` and this is the gate that
+        // decides whether it can be carried out. Deleting the request would mean
+        // a `Restart::Resume` device that comes back warm could never move again.
+        if !self.state.vacuum.active || self.state.vacuum.fallen || self.power_holds_vacuum() {
             return;
         }
         if self.state.vacuum.x > c::VAC_LAG_X {
@@ -977,7 +981,7 @@ impl GhostLobbySim {
         }
         let noise_invest = self.state.player.noise > self.actor.stats.invest_noise
             && dist(self.state.billy.x, self.state.player.x) < self.actor.stats.invest_dist;
-        // Building awareness (ADR-0013): when the guard neither sees the
+        // Building awareness (ADR-0014): when the guard neither sees the
         // player nor hears their footsteps, the strongest unusual noise he
         // can hear — splashing water, arcing shorts, a sounding alarm, a
         // mole's decoy — pulls his attention to where *it* was heard, never

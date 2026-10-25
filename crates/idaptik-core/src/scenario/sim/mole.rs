@@ -1,4 +1,4 @@
-//! Hosting a Moletaire companion (ADR-0013) inside a floor run.
+//! Hosting a Moletaire companion (ADR-0014) inside a floor run.
 //!
 //! The companion sim ([`crate::companion::MoletaireSim`]) stays exactly what
 //! it was ported as: deterministic, dt-stepped, typed commands in, typed

@@ -34,7 +34,7 @@
 //! The companion stays a standalone, self-contained module: a floor that
 //! hosts the mole drives it through the typed boundary only ([`MoleCommand`]
 //! in, [`MoleEvent`] out) and folds the events into its own world. The host
-//! for scenario floors lives in `crate::scenario::sim` (ADR-0013); nothing in
+//! for scenario floors lives in `crate::scenario::sim` (ADR-0014); nothing in
 //! this module reaches into scenario state, so the companion remains reusable
 //! and deterministic on its own. Per the archive `GameLoop`:
 //!

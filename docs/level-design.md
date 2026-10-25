@@ -94,7 +94,9 @@ of a data-defined building* (`BuildingDefinition`, format `idaptik-scenario/1`):
   disengages it), and an optional `circuit` (an unpowered portal can't be
   traversed; **lifts must declare a circuit**).
 - **`CircuitDef`** — a power feed keyed to a `zone`; cutting its `source`
-  de-powers every portal and controller drawing from it.
+  de-powers every portal and controller drawing from it. It is the building-level
+  precedent for the scenario-level power network below: same idea (one feed, one
+  source, one set of loads), one boolean instead of a model.
 - **`ZoneDef`** — a named region with a dotted `/24 subnet`, mapped **1:1 to a
   netsim segment**.
 
@@ -217,10 +219,13 @@ these validated load points.
 | Moletaire companion | Landed module — **seam, not yet wired into the sim** |
 | UMS content load (`load_building` / `load_actor_pack`) | **Live** load points; generator is UMS-side |
 | Signal network (ADR-0012) | **Live** in the sim (opt-in floor), Bevy wiring overlay; netplay pending burble |
+| Electrical infrastructure (ADR-0013) | **Live** in the sim (opt-in floor, test floor only); no frontend overlay, netplay pending burble |
 | gossamer host + burble transport (ADR-0006) | **Design-accepted, deferred** |
 
 ## See also
 
+- ADR-0013 — electrical infrastructure: sources, feeds, loads, protection, backup
+  and exposed power (`docs/electrical-infrastructure.md`)
 - ADR-0004 — deterministic, event-sourced, definition-as-data scenario sim
 - ADR-0005 — session relay topology
 - ADR-0006 — gossamer host window + burble transport (design)

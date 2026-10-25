@@ -189,7 +189,7 @@ pub enum MoleCommand {
 /// # Integration seam (hosted by a floor that declares a mole)
 ///
 /// A scenario floor folds these into its own world through the host in
-/// `crate::scenario::sim` (ADR-0013); this module never touches scenario
+/// `crate::scenario::sim` (ADR-0014); this module never touches scenario
 /// state itself. Per the archive game loop:
 /// * [`MoleEvent::SynthSoundPlayed`] distracts security dogs within **250 px**
 ///   of the mole's position (the sound spawns at the mole);

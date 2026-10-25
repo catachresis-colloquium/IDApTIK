@@ -49,7 +49,7 @@
 //! time, 2026-10-24). Should one land, the seam it plugs into is this
 //! module's observation surface: an adapter actor consumes [`observations`]
 //! for its own position and senses exactly as Billy's FSM does, and never the
-//! world state behind them. See ADR-0013.
+//! world state behind them. See ADR-0014.
 
 use crate::scenario::constants as c;
 use crate::scenario::definition::ScenarioDefinition;

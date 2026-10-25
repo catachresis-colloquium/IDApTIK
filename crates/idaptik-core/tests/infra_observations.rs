@@ -1,4 +1,4 @@
-//! Infrastructure consequences reach actors only as observations (ADR-0013).
+//! Infrastructure consequences reach actors only as observations (ADR-0014).
 //!
 //! The contract these tests hold:
 //!

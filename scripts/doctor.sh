@@ -27,9 +27,9 @@ check_contains() {
 
 echo "IDApTIK development toolchain status:"
 echo "Rust (gameplay truth):"
-check_contains rustc  "rustc 1.95.0" rustc --version
-check_contains cargo  "cargo 1.95.0" cargo --version
-check_contains clippy "clippy 0.1.95" cargo-clippy --version
+check_contains rustc  "rustc 1.97.1" rustc --version
+check_contains cargo  "cargo 1.97.1" cargo --version
+check_contains clippy "clippy 0.1.97" cargo-clippy --version
 
 echo "Systems / FFI / config / tasks:"
 check_contains zig    "0.14.0" mise exec zig@0.14.0 -- zig version

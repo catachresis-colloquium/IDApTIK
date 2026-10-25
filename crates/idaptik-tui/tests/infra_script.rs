@@ -1,4 +1,4 @@
-//! Unit tests for ADR-0013's headless scenario and companion vocabulary.
+//! Unit tests for ADR-0014's headless scenario and companion vocabulary.
 
 use idaptik_core::companion::MoleEvent;
 use idaptik_core::scenario::command::{Button, Command, MoleOp};

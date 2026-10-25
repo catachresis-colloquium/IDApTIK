@@ -62,10 +62,13 @@ L	crates/idaptik-core/src/scenario/rooftop.rs	the played Ghost Lobby begun from 
 L	crates/idaptik-core/src/scenario/infra.rs	canonical infrastructure state and actor observation rules; gameplay consequences checked by tests
 L	crates/idaptik-core/src/scenario/signal/mod.rs	signal-network model (ADR-0012): devices wired output-to-input and re-wired in play
 L	crates/idaptik-core/src/scenario/signal/sim.rs	deterministic signal-network runtime; replay-visible, and observed directly by tests/signal_network.rs
+L	crates/idaptik-core/src/scenario/power/mod.rs	electrical-infrastructure model and validator (ADR-0013)
+L	crates/idaptik-core/src/scenario/power/sim.rs	deterministic power-network runtime; observed directly by tests/power_network.rs
 L	crates/idaptik-core/src/scenario/sim/console.rs	per-tick console interaction inside the Ghost Lobby run
 L	crates/idaptik-core/src/scenario/sim/signal.rs	the seam that hosts the signal network inside the run tick
 L	crates/idaptik-core/src/scenario/sim/infra.rs	per-tick infrastructure consequences and guard perception over canonical state
 L	crates/idaptik-core/src/scenario/sim/mole.rs	hosted companion commands and world effects inside the deterministic run
+L	crates/idaptik-core/src/scenario/sim/power.rs	the seam that hosts the power network inside the run tick
 L	crates/idaptik-core/src/companion/sim.rs	Moletaire companion simulation
 L	crates/idaptik-core/src/companion/hunger.rs	companion hunger model
 L	crates/idaptik-core/src/companion/music.rs	companion music model
@@ -96,6 +99,7 @@ D	crates/idaptik-core/src/scenario/ghost_lobby.rs	Ghost Lobby content
 D	crates/idaptik-core/src/scenario/pump_house.rs	Rivermouth Pump House content; declares infrastructure and companion fixtures
 D	crates/idaptik-core/src/scenario/building/exchange_house.rs	Exchange House content
 D	crates/idaptik-core/src/scenario/signal/ghost_lobby_wiring.rs	the Ghost Lobby's devices as a signal-network fixture, not authored level design
+D	crates/idaptik-core/src/scenario/power/test_floor.rs	the Ghost Lobby's electrical-infrastructure fixture
 D	crates/idaptik-core/src/companion/definition.rs	serde CompanionDefinition
 B	crates/idaptik-ffi/src/lib.rs	the C ABI; modelled in Idris2 (#117), conformance-tested in Zig
 B	crates/idaptik-net/src/envelope.rs	wire envelope encoding
@@ -172,6 +176,7 @@ T	crates/idaptik-core/tests/mole_host.rs	test
 T	crates/idaptik-core/tests/moletaire.rs	test
 T	crates/idaptik-core/tests/no_panic_fuzz.rs	test
 T	crates/idaptik-core/tests/phase_asymmetry.rs	test
+T	crates/idaptik-core/tests/power_network.rs	test
 T	crates/idaptik-core/tests/replay_determinism.rs	test
 T	crates/idaptik-core/tests/rng_vectors.rs	test
 T	crates/idaptik-core/tests/scoring_grades.rs	test

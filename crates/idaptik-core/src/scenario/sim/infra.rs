@@ -1,4 +1,4 @@
-//! Hosting the floor's infrastructure (ADR-0013) inside the Ghost Lobby run.
+//! Hosting the floor's infrastructure (ADR-0014) inside the Ghost Lobby run.
 //!
 //! The infrastructure model itself lives in [`crate::scenario::infra`]; this
 //! is the seam that steps it and applies what it decides:
@@ -258,7 +258,7 @@ impl GhostLobbySim {
     /// Billy's senses currently carry against what he has already been seen
     /// to notice, announce the new episodes, and forget the ended ones so a
     /// recurrence is news again. Player-visible evidence that the guard
-    /// reacts to observations (ADR-0013).
+    /// reacts to observations (ADR-0014).
     pub(super) fn system_infra_watch(&mut self) {
         if self.def.infra.is_none() && self.def.mole.is_none() {
             return;

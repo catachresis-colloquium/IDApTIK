@@ -37,8 +37,9 @@ packages pulled by `mix`, not toolchains (see ADR-0002).
 2. **Keep Rust on `rustup` via `rust-toolchain.toml`**, not mise. This keeps
    cargo subcommands, clippy, and rust-analyzer resolving identically in editors,
    CI, and web sessions, and avoids the cargo-subcommand conflicts that come from
-   managing Rust through a generic version manager. Pinned to 1.95.0 (Bevy 0.19
-   MSRV); `wasm32-unknown-unknown` kept ready for browser builds.
+   managing Rust through a generic version manager. Pinned to 1.97.1 (Bevy 0.20
+   MSRV; was 1.95.0 for Bevy 0.19 until the 2026-10-25 re-vendor of
+   bevy_winit 0.20.0); `wasm32-unknown-unknown` kept ready for browser builds.
 3. **Provision Idris2 out-of-band via `idris2-pack`** (`just install-idris2`),
    not through mise. Idris2 bootstraps through Chez Scheme + GMP and has no clean
    prebuilt; forcing it into `mise install` would break bootstrap on machines

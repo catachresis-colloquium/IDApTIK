@@ -16,6 +16,7 @@ use crate::scenario::definition::ScenarioDefinition;
 use crate::scenario::floor_graph::floor_graph;
 use crate::scenario::ids::DoorId;
 use crate::scenario::outcome::Debrief;
+use crate::scenario::power::sim::PowerState;
 use crate::scenario::rng::InitRoll;
 use crate::scenario::signal::sim::SignalState;
 use crate::scenario::sim::GhostLobbySim;
@@ -344,6 +345,15 @@ pub struct RuntimeState {
     /// Movement and interaction wait until it runs out.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub signal_busy: f64,
+    /// The floor's electrical infrastructure, when the definition carries it
+    /// (ADR-0013). Skipped when absent, so an unpowered run's snapshot is
+    /// byte-identical to one from before power existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<PowerState>,
+    /// Seconds the infiltrator's hands are busy with electrical work, or thrown
+    /// clear of live metal. Movement and interaction wait until it runs out.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub power_busy: f64,
     /// Billy's arrival countdown is held (frozen) until the infiltrator first
     /// leaves the spawn room. Only ever set on a floor that asks for it.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -547,6 +557,8 @@ impl RuntimeState {
             result: None,
             signal: def.signal.as_ref().map(SignalState::initial),
             signal_busy: 0.0,
+            power: def.power.as_ref().map(PowerState::initial),
+            power_busy: 0.0,
             arrival_held: def.arrival_clock
                 == crate::scenario::definition::ArrivalClock::LeftSpawnRoom,
             using_console: None,

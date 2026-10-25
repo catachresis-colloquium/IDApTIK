@@ -7,7 +7,7 @@
 //! a floodable sump zone in the pump hall with a manual wheel and a derived
 //! pump node on the power graph, a flood bell in the control office, a
 //! normally-energised tamper circuit in the hall, and a hosted Moletaire
-//! companion. See `docs/scenarios/challenge-set.md` and ADR-0013.
+//! companion. See `docs/scenarios/challenge-set.md` and ADR-0014.
 //!
 //! The four lines:
 //!

@@ -1,4 +1,4 @@
-# ADR-0013: Infrastructure consequences are canonical-sim facts that reach actors only as observations
+# ADR-0014: Infrastructure consequences are canonical-sim facts that reach actors only as observations
 
 - Status: Proposed
 - Date: 2026-10-24
@@ -175,6 +175,21 @@ route to the infiltrator seat in this repository's envelope and lockstep
 fixtures, and the pinned relay must learn `"Mole" → infiltrator` in
 `command_roles()` before a live burble session carries them — tracked as an
 external follow-up on the introducing PR.
+
+**Relationship to the adjacent building systems.** Three neighbours landed on
+`main` while this ADR was written, all currently sharing the 0013 slot pending
+a numbering cleanup there: the power network
+(`0013-electrical-infrastructure.md`), the coarse water/gas/airflow systems
+(`0013-water-gas-airflow.md`) and the Evil Weevil adversarial testing adapter
+(`0013-evil-weevil-adversarial-testing-adapter.md`). This ADR's water zones are
+scenario-local flood machinery for driving actors; they do not compete with the
+coarse water system, which moves the building's water between rooms — one owns
+"this room is flooding", the other owns "where the building's water goes". The
+perception contract (`actor_observations`) is the seam the neighbours should
+consume: power failures already land in the same canonical `Event` log, and
+surfacing them to Billy as `equipment_failure`/`darkness` observations — and
+`actor_observations` to the weevil's fault-vs-hostility observer — is named
+follow-up work, not a redesign.
 
 **Alternatives considered.** Giving guards direct reads of infrastructure
 state (rejected: omniscience — the brief, and the game, is about perception).
