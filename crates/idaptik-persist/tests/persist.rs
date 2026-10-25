@@ -148,7 +148,10 @@ fn resume_restores_held_buttons() {
         .expect("checkpoint");
 
     let resumed = store.resume(&id).expect("resume");
-    assert!(resumed.held.has(Button::Left), "Left must survive the resume");
+    assert!(
+        resumed.held.has(Button::Left),
+        "Left must survive the resume"
+    );
     assert!(
         resumed.held.has(Button::Sprint),
         "Sprint must survive the resume"
@@ -298,7 +301,10 @@ fn a_snapshot_of_the_wrong_format_is_refused() {
     let id = SessionId::new("s-fmt");
     // The session says v2; the snapshot is v3.
     store
-        .begin_session(&id, &record(SimKind::GhostLobby, "idaptik-ghost-lobby-runtime-v2"))
+        .begin_session(
+            &id,
+            &record(SimKind::GhostLobby, "idaptik-ghost-lobby-runtime-v2"),
+        )
         .expect("begin");
     let s = sim();
     match store.checkpoint(&id, 0, 0, &s.snapshot(), Buttons::default(), false) {
@@ -330,7 +336,10 @@ fn a_building_session_is_writable_but_has_no_typed_resume_yet() {
     let store = Store::open(dir.path()).expect("open");
     let id = SessionId::new("s-bld");
     store
-        .begin_session(&id, &record(SimKind::Building, "idaptik-building-runtime-v1"))
+        .begin_session(
+            &id,
+            &record(SimKind::Building, "idaptik-building-runtime-v1"),
+        )
         .expect("begin");
     store
         .append_commands(&id, 1, 0, 0, &[Command::Jump])

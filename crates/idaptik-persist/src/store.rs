@@ -447,7 +447,10 @@ impl Store {
         for (&seq, batch) in &batches {
             if let Some(exp) = expected {
                 if seq != exp {
-                    issues.push(VerifyIssue::MissingSeq { expected: exp, found: seq });
+                    issues.push(VerifyIssue::MissingSeq {
+                        expected: exp,
+                        found: seq,
+                    });
                 }
             } else {
                 if seq != 0 {
@@ -563,8 +566,7 @@ fn materialise(
     let obj = body.as_object_mut().ok_or(PersistError::NotAnObject)?;
     obj.insert("definition".to_owned(), definition);
 
-    let snapshot: RuntimeSnapshot =
-        serde_json::from_value(body).map_err(PersistError::Decode)?;
+    let snapshot: RuntimeSnapshot = serde_json::from_value(body).map_err(PersistError::Decode)?;
     Ok((snapshot, record.paused, record.held))
 }
 
