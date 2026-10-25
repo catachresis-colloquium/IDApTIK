@@ -11,6 +11,7 @@
 //! the HUD stays with the floor however the window is split.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::{Activate, Button as UiButton};
 use idaptik_core::scenario::console::{ScreenDevice, ScreenKind};
 use idaptik_core::scenario::constants as c;
 use idaptik_core::scenario::signal::sim::Seat;
@@ -217,7 +218,7 @@ pub fn setup_deck(mut commands: Commands) {
                     card.spawn((CardText::State, line("", DIM)));
                     card.spawn((
                         CardVerb,
-                        Button,
+                        UiButton::default(),
                         Node {
                             padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)),
                             ..Default::default()
@@ -404,15 +405,20 @@ fn set(texts: &mut Query<(&CardText, &mut Text)>, which: CardText, text: String)
     }
 }
 
-/// The card's button sends its verb.
+/// The card's button sends its verb when activated by pointer or keyboard.
 pub fn card_press(
+    activation: On<Activate>,
+    card_buttons: Query<(), With<CardVerb>>,
+    app_mode: Res<State<crate::net_view::AppMode>>,
     sim: Res<SimState>,
     screen: Res<Screen>,
     selection: Res<DeckSelection>,
-    buttons: Query<&Interaction, (Changed<Interaction>, With<CardVerb>)>,
     mut queue: ResMut<CommandQueue>,
 ) {
-    if !buttons.iter().any(|i| *i == Interaction::Pressed) {
+    if *app_mode.get() != crate::net_view::AppMode::GhostLobby {
+        return;
+    }
+    if card_buttons.get(activation.entity).is_err() {
         return;
     }
     let Some(view) = current_view(&sim, &screen, Seat::Hacker) else {

@@ -182,7 +182,17 @@ jobs:
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git checkout --detach --force FETCH_HEAD
       - name: Pinned DEED/K9 and coordination conformance
-        run: bash scripts/machine_readable_check.sh
+        run: |
+          set +e
+          bash scripts/machine_readable_check.sh > /tmp/machine-readable.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/machine-readable.log
+          if [ "$rc" -ne 0 ]; then
+            detail="$(tail -n 30 /tmp/machine-readable.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+            echo "::error::machine-readable rc=$rc -- $detail"
+            exit "$rc"
+          fi
 
 # Idris2 ABI model gate (issue #103): bootstrap Idris 2 0.8.0 with a source
 # built Chez (no system deps beyond libc), then run the model gate.
@@ -447,7 +457,17 @@ jobs:
       - name: Install just (task runner, same recipe as local)
         run: cargo install just --version 1.46.0 --locked
       - name: just test-ghost
-        run: just test-ghost
+        run: |
+          set +e
+          just test-ghost > /tmp/test-ghost.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/test-ghost.log
+          if [ "$rc" -ne 0 ]; then
+            detail="$(tail -n 40 /tmp/test-ghost.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+            echo "::error::test-ghost rc=$rc -- $detail"
+            exit "$rc"
+          fi
       # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
       # (binary, redacted artifacts, secret-shape and byte-identical
       # determinism gates), not only the crate's tests already run above.

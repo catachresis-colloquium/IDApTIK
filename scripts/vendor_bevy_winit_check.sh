@@ -251,8 +251,17 @@ check_graph() {
     # gate fires for the wrong reason and proves nothing about these checks.
     metadata="$(cat "$IDAPTIK_BEVY_WINIT_METADATA")"
   else
-    metadata="$(cargo metadata --format-version 1 --locked 2>/dev/null)" ||
-      die "cargo metadata failed; is the workspace resolvable?"
+    local work metadata_file metadata_err detail
+    work="$(mktemp -d)"
+    CLEANUP_PATHS+=("$work")
+    metadata_file="$work/cargo-metadata.json"
+    metadata_err="$work/cargo-metadata.err"
+    if cargo metadata --format-version 1 --locked >"$metadata_file" 2>"$metadata_err"; then
+      metadata="$(cat "$metadata_file")"
+    else
+      detail="$(tail -n 20 "$metadata_err" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+      die "cargo metadata --locked failed; is the workspace resolvable? $detail"
+    fi
   fi
 
   # 1. The font-parser path must not return to the resolved graph.

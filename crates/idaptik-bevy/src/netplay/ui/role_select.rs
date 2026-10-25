@@ -4,6 +4,7 @@
 //! using Bevy's built-in UI system.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::{Activate, Button as UiButton};
 use idaptik_net::envelope::Role;
 
 /// Plugin for role selection
@@ -82,11 +83,6 @@ fn button_normal_color() -> BackgroundColor {
     BackgroundColor(Color::srgb(0.2, 0.2, 0.2))
 }
 
-/// Hover button color
-fn button_hover_color() -> BackgroundColor {
-    BackgroundColor(Color::srgb(0.3, 0.3, 0.3))
-}
-
 /// Selected/active button color
 fn button_active_color() -> BackgroundColor {
     BackgroundColor(Color::srgb(0.4, 0.6, 0.8))
@@ -97,10 +93,8 @@ impl Plugin for RoleSelectionPlugin {
         app.init_resource::<RoleSelectionState>()
             .init_state::<NetplayAppState>()
             .add_systems(Startup, setup_role_selection_ui)
-            .add_systems(
-                Update,
-                (check_cli_role_selection, handle_role_button_interaction),
-            )
+            .add_systems(Update, check_cli_role_selection)
+            .add_observer(handle_role_button_activation)
             .add_systems(
                 OnEnter(NetplayAppState::RoleSelection),
                 show_role_selection_ui,
@@ -156,7 +150,7 @@ pub fn setup_role_selection_ui(mut commands: Commands) {
                     RoleButton {
                         role: Role::Infiltrator,
                     },
-                    Button,
+                    UiButton::default(),
                     button_node(),
                     button_normal_color(),
                 ))
@@ -169,7 +163,7 @@ pub fn setup_role_selection_ui(mut commands: Commands) {
             parent
                 .spawn((
                     RoleButton { role: Role::Hacker },
-                    Button,
+                    UiButton::default(),
                     button_node(),
                     button_normal_color(),
                 ))
@@ -206,35 +200,23 @@ fn hide_role_selection_ui(
     state.active = false;
 }
 
-/// Handle button interactions for role selection
-fn handle_role_button_interaction(
-    mut interaction_query: Query<(&Interaction, &RoleButton, &mut BackgroundColor)>,
+/// Handle activation of one of the role-selection buttons.
+fn handle_role_button_activation(
+    activation: On<Activate>,
+    role_buttons: Query<&RoleButton>,
+    mut backgrounds: Query<&mut BackgroundColor>,
     mut state: ResMut<RoleSelectionState>,
     mut app_state: ResMut<NextState<NetplayAppState>>,
 ) {
-    for (interaction, role_button, mut bg_color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                // Select this role
-                state.selected_role = Some(role_button.role);
-                state.active = false;
+    let entity = activation.entity;
+    let Ok(role_button) = role_buttons.get(entity) else {
+        return;
+    };
 
-                // Hide the UI and return to normal state
-                app_state.set(NetplayAppState::Normal);
-
-                // Set the button to active color to show selection
-                *bg_color = button_active_color();
-            }
-            Interaction::Hovered => {
-                // Highlight on hover
-                *bg_color = button_hover_color();
-            }
-            Interaction::None => {
-                // Return to normal color if not selected
-                if state.selected_role != Some(role_button.role) {
-                    *bg_color = button_normal_color();
-                }
-            }
-        }
+    state.selected_role = Some(role_button.role);
+    state.active = false;
+    app_state.set(NetplayAppState::Normal);
+    if let Ok(mut background) = backgrounds.get_mut(entity) {
+        *background = button_active_color();
     }
 }
