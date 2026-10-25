@@ -311,7 +311,8 @@ pub fn water_at(def: &ScenarioDefinition, state: &RuntimeState, x: f64) -> Optio
             continue;
         }
         if let Some(z) = infra.zones.get(zone.id.as_str())
-            && z.released && z.level > 0.0
+            && z.released
+            && z.level > 0.0
         {
             deepest = Some(deepest.map_or(z.level, |d: f64| d.max(z.level)));
         }

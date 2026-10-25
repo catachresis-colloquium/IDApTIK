@@ -1741,18 +1741,14 @@ fn duct_step(
             .compartment(to)
             .map(|c| !c.is_exterior())
             .unwrap_or(false);
-        if from_room
-            && let Some((min, _)) = room_air_bounds(def, from)
-        {
+        if from_room && let Some((min, _)) = room_air_bounds(def, from) {
             let available = air
                 .body(from)
                 .map(|b| b.air.saturating_sub(min))
                 .unwrap_or(0);
             q = q.min(available);
         }
-        if to_room
-            && let Some((_, max)) = room_air_bounds(def, to)
-        {
+        if to_room && let Some((_, max)) = room_air_bounds(def, to) {
             let space = air.body(to).map(|b| max.saturating_sub(b.air)).unwrap_or(0);
             q = q.min(space);
         }
@@ -1819,9 +1815,7 @@ fn openings_step(def: &InfrastructureDefinition, state: &mut InfrastructureState
             .compartment(to)
             .map(|c| !c.is_exterior())
             .unwrap_or(false);
-        if from_room
-            && let Some((min, _)) = room_air_bounds(def, from)
-        {
+        if from_room && let Some((min, _)) = room_air_bounds(def, from) {
             let available = state
                 .air
                 .as_ref()
@@ -1830,9 +1824,7 @@ fn openings_step(def: &InfrastructureDefinition, state: &mut InfrastructureState
                 .unwrap_or(0);
             q = q.min(available);
         }
-        if to_room
-            && let Some((_, max)) = room_air_bounds(def, to)
-        {
+        if to_room && let Some((_, max)) = room_air_bounds(def, to) {
             let space = state
                 .air
                 .as_ref()
