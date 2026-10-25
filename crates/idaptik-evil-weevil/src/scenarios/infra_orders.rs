@@ -13,10 +13,15 @@
 //! Two preconditions decide whether that second half can be observed at all,
 //! and the run states both rather than assuming them: the guard has to be on
 //! shift (Billy is `Offsite` until a crisis, and an off-site guard hears
-//! nothing), and the noise has to land inside his hearing radius at the
-//! position the crisis assigns him. A diversion played at the mole's spawn is
-//! 364 units away against a 260-unit gate: audible in the abstract, never
-//! heard in fact.
+//! nothing), and the noise has to land inside his hearing radius where he
+//! actually stands when the synth plays. The second one is the trap: the
+//! crisis *assigns* Billy to `CRISIS_BILLY_X`, but his FSM leaves that point
+//! immediately (Entering walks him to his seed-rolled snack, then patrol),
+//! so the position at the synth tick is a property of this run's trajectory,
+//! not of the assignment. The run therefore shadows the same deterministic
+//! sim (same seed, script and crisis frame; no companion frames, which
+//! cannot move Billy before the synth) and walks the mole into the
+//! intersection of his hearing radius and the mole's reachable range.
 //!
 //! Cross-repository finding, recorded not simulated: at the pinned burble
 //! revision `command_roles()` carries neither `Mole` nor `Power`, so the
@@ -47,10 +52,15 @@ use idaptik_net::lockstep::{LockstepCore, ScriptFeed};
 
 const ID: &str = "EW-06-infrastructure-orders-and-observations";
 
-/// The tick the diversion is played on. Late enough that the mole has walked
-/// from its spawn (390) into the guard's hearing at 240: 150 units at the
-/// companion's 200 px/s underground is 0.75 s, and `TICK_DT` is 1/60.
-const SYNTH_AT: u64 = 52;
+/// The tick the diversion is played on. The mole walks from its spawn
+/// (390) at 200 px/s underground (3.33 px/tick), so with the scene set at
+/// tick 2 it has 79 ticks before the synth — 263 px, which covers the
+/// worst case of 250 px (the inner edge of Billy's 260-unit hearing
+/// radius) plus a 4-tick stand margin. The target itself is not a
+/// constant: the crisis puts Billy at 26 and then his FSM walks him (to
+/// his snack, then on patrol), so the run shadows his trajectory first
+/// and walks the mole into his earshot wherever that leaves him.
+const SYNTH_AT: u64 = 81;
 
 /// The tick the scene is set on. Not tick 1: a commit *through* `n` advances
 /// the peer watermark to `n + 1`, so the opening `feed_commit(.., 1)` in this
@@ -93,8 +103,8 @@ fn inputs() -> Vec<InputSpec> {
         InputSpec {
             step: 4,
             intent: "three frontier scene frames for the infiltrator seat: force the \
-                     crisis at tick 2, walk the mole underground to 240, and schedule \
-                     the synth for tick 52"
+                     crisis at tick 2, walk the mole underground into Billy's \
+                     shadow-computed earshot, and schedule the synth for tick 81"
                 .into(),
             expected: "all accepted: the guard is on shift and the diversion is inside \
                        his hearing rather than 364 units outside it"
@@ -303,15 +313,72 @@ impl Scenario for InfraOrdersScenario {
         //   crisis the run has nobody to speak for the plant, however loud it
         //   is. This frame is authored for the infiltrator seat, which is what
         //   `seat_for` permits for a test hook.
-        // * **The diversion is within earshot of where the crisis puts him.**
-        //   `begin_crisis` assigns `CRISIS_BILLY_X` (26) and the mole spawns at
-        //   390. The hearing gate is `NOISE_INVEST_DIST` (260), and 364 > 260,
-        //   so a synth played from the spawn point is inaudible from the
-        //   position the crisis is about to assign -- the order would run, the
-        //   noise would exist, and no observation would ever reach the guard.
-        //   240 is 214 units from Billy and 150 from the spawn: 0.75 s of
-        //   underground travel at the companion's 200 px/s, which is why the
-        //   synth below is not played at the frontier.
+        // * **The diversion is within earshot of where Billy actually is at
+        //   the synth tick.** Not where the crisis puts him: the moment
+        //   `begin_crisis` assigns `CRISIS_BILLY_X` (26), the guard's FSM
+        //   leaves that point (Entering walks him to his snack, then patrol
+        //   takes over), so by `SYNTH_AT` he is elsewhere. The companion
+        //   frames cannot change his trajectory before the synth -- the mole
+        //   walks silently underground, and the guard's investigation only
+        //   starts on noise that is audible, and no noise exists before the
+        //   synth -- so a shadow of the same deterministic run (same seed,
+        //   same script, same crisis frame, no companion frames) lands Billy
+        //   exactly where the production run has him at the synth tick.
+        let mut shadow =
+            LockstepCore::new(Role::Hacker, 1, &script).expect("shadow core builds");
+        shadow.on_peer_commit(1).expect("shadow: opening commit accepted");
+        let crisis_frame = wire::with_seq(wire::typed_command(SCENE_AT, &Command::ForceCrisis), 4);
+        let (at, cmd) = idaptik_net::envelope::decode_command(&crisis_frame)
+            .expect("crisis frame decodes");
+        shadow.on_peer_command(at, cmd).expect("shadow: crisis accepted");
+        shadow.on_peer_commit(SYNTH_AT + 4).expect("shadow: horizon commit accepted");
+        let mut shadow_feed = ScriptFeed::new(&script, Role::Hacker);
+        let mut billy_at_synth: Option<f64> = None;
+        for _ in 0..=(SYNTH_AT + 2) {
+            if billy_at_synth.is_some() || shadow.finished() {
+                break;
+            }
+            let _ = shadow.pump_outgoing(&mut shadow_feed);
+            shadow.advance_with(|sim, _| {
+                if sim.current_tick() == SYNTH_AT + 1 {
+                    billy_at_synth = Some(sim.state().billy.x);
+                }
+            });
+        }
+        let billy_at_synth = billy_at_synth.expect("shadow reached the synth tick");
+
+        // The diversion target: inside the 260-unit hearing gate (the gate
+        // is strict, so keep a 40-unit corridor and stand at its centre) and
+        // reachable from the spawn (390) in at most SYNTH_AT - SCENE_AT - 4
+        // ticks at 200 px/s, the 4 ticks being a stand margin. The
+        // intersection is never empty while Billy is on this floor, but it
+        // can be degenerate if the tuning drifts far enough -- fail loudly
+        // with the geometry rather than as a silent empty observation list.
+        // Restated, next to the math it guards: the hearing gate is
+        // NOISE_INVEST_DIST (260, strict) and the mole's underground speed
+        // is 200 px/s on a 1/60-s tick.
+        const HEARING: f64 = 260.0;
+        const WALK_PX_PER_TICK: f64 = 200.0 / 60.0;
+        const WALK_MARGIN_TICKS: u64 = 4;
+        let max_walk_px = (SYNTH_AT - SCENE_AT - WALK_MARGIN_TICKS) as f64 * WALK_PX_PER_TICK;
+        let reachable_lo = 390.0 - max_walk_px;
+        let lo = reachable_lo.max(billy_at_synth - HEARING);
+        let hi = 390.0.min(billy_at_synth + HEARING);
+        let corridor = hi - lo;
+        let mole_target = (lo + hi) / 2.0;
+        harness.check(
+            "diversion-target-inside-audible-reachable-corridor",
+            corridor >= 40.0 && (mole_target - billy_at_synth).abs() <= HEARING - 20.0,
+            format!(
+                "Billy is {billy_at_synth:.1} at the synth tick; audible band \
+                 [{:.1}, {:.1}], reachable band [{:.1}, 390.0], corridor {:.1} units",
+                billy_at_synth - HEARING,
+                billy_at_synth + HEARING,
+                reachable_lo,
+                corridor
+            ),
+        );
+
         for (seq, at, cmd) in [
             (4, SCENE_AT, Command::ForceCrisis),
             (
@@ -319,7 +386,7 @@ impl Scenario for InfraOrdersScenario {
                 SCENE_AT,
                 Command::Mole {
                     op: MoleOp::MoveTo {
-                        x: 240.0,
+                        x: mole_target,
                         underground: true,
                     },
                 },
