@@ -2,6 +2,16 @@
 
 # Infrastructure test level 1 — "Sump"
 
+> **Status: not buildable today.** This level references 11 cues —
+> `WaterRunning`, `WaterSlosh`, `WaterRise`, `PumpHum`, `PumpCavitation`,
+> `RelayClack`, `ArcCrackle`, `GasAlarm`, `IsolatorTag`, `WetFootprints`,
+> `Scraping` — of which **none** exist in `CueKind`. It also relies on the
+> authored rule layer (`RuleDef`) and the geometry encoding described in
+> `architecture/infrastructure-interactions.md`, neither of which is
+> implemented. It is kept as the only written statement of Level 1's teaching
+> goal: several successful approaches, including a non-destructive one.
+
+
 **Status: design of record. Not implemented, not authored, not loadable.**
 
 A service-level (floor −1) proving ground for the electricity↔water rules. It

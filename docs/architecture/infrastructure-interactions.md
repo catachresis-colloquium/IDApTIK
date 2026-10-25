@@ -1,6 +1,14 @@
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+# Infrastructure interactions — unimplemented design
 
-# Infrastructure interactions — the design of record
+> **Status: not implemented.** This document specifies a rule layer that the
+> code does not contain. What shipped in `crates/idaptik-core/src/scenario/
+> infrastructure/` is a different design: three fixed-order integer systems
+> with scalar `water_conductance` / `air_conductance` per opening, hard-coded
+> rule order, and no authored `RuleDef`, capability set or precedence ladder.
+> See `infrastructure-implementation-status.md` for the identifier-by-identifier
+> comparison, and ADR-0018 for the decision this would implement.
+>
+> Read this as a **backlog**, not a description of the engine.
 
 **Status: design of record. Not implemented.** There is no
 `SystemInfrastructure`, no `SignalKind::PlantActuator`, and none of the test
@@ -18,20 +26,8 @@ where it states something about the layer being designed, the word is *must*.
 > What remains unimplemented is precisely this document's layer: capability-typed
 > rules, `AccessReq`, actuator precedence and spoof detection.
 
-| Claim | Status |
-|---|---|
-| The tick, system order and signal propagation described in §1 | existing code, cited |
-| The data model, rules, ordering and cascade bounds in §2–§7 | proposed |
-| The tests in §15 | specified, not written |
-| The two test levels | specified in `infrastructure-level-1.md`, `infrastructure-level-2.md` |
 
-Navigation: rules live in
-[`infrastructure-rule-catalogue.md`](infrastructure-rule-catalogue.md); the
-decision is [ADR-0018](../adr/0018-infrastructure-interaction-rules.md). The
-rule catalogue is the authority for *what each interaction does*; this document
-is the authority for *how any interaction is evaluated*.
 
----
 
 ## 1. Where this sits
 
@@ -123,97 +119,47 @@ untouched by its presence.
 
 ---
 
+
+
 ## 2. The model
 
-Four data layers, one runtime. All of it hangs off
-`BuildingDefinition.infra: Option<InfrastructureDefinition>` (`#[serde(default,
-skip_serializing_if = "Option::is_none")]`), the same optional-sub-network shape
-`ScenarioDefinition.signal` already uses.
 
-Payload format: **`idaptik-infrastructure/1`**.
 
-### 2.1 Layer A — compartments and links
+### 2.1 Geometry (not implemented)
 
-A **compartment** is the unit of fluid bookkeeping. It is anchored to a building
-room for cues, evidence and actor presence, but it is not the room: a duct run,
-a sump or a riser shaft can be its own compartment inside one room.
-
-```rust
-// Illustrative shape; not yet compiled.
-pub struct CompartmentDef {
-    pub id: VolumeId,
-    pub name: String,
-    pub room: Option<RoomRef>,      // spatial anchor; None only when `exterior`
-    pub air_l: u32,                 // free volume, litres
-    pub floor_cm2: u32,             // depth_mm = water_ml * 10 / floor_cm2
-    pub elevation: i8,              // -3..+3, used only for density ordering
-    pub open_to_exterior: bool,     // a sealed room is a lethal room; author it
-    pub exterior: bool,             // a sink (outside, sewer); holds no depth
-    pub infiltration_permille: u16, // make-up air a fan may draw, 0 = sealed
-    pub gas_init: BTreeMap<GasId, u32>,  // pure gas ml, at t=0
-}
-```
-
-A **link** is a connection with *two independent behaviours*:
-
-```rust
-pub struct FluidLinkDef {
-    pub id: LinkId,
-    pub a: VolumeId,
-    pub b: VolumeId,
-    pub reach: LinkReach,        // Opening | Duct | Seep | Grate | VentStack
-    pub aperture_cm2: u32,       // FLUID conductance
-    pub capacity_ml_per_s: u32,  // rated flow; a link never exceeds it
-    pub sill_mm: u32,            // fluid passes only above this depth on side `a`
-    pub clearance_mm: u32,       // ACTOR clearance; 0 = actors never pass
-    pub actor: ActorPassage,     // Passable | Blocked | NeedsGate
-    pub gate: Option<GateRef>,   // Portal(PortalId) | Entity(EntityId)
-    pub fluid_block: FluidBlock, // Never | AboveSill | WhenDebris; additional to gate
-    pub noise_permille: u16,     // attenuation for cues/evidence crossing it
-}
-```
-
-Water crosses a link at
+The shipped `OpeningDef` carries a scalar `water_conductance` and
+`air_conductance` per opening: flow is whatever the number says, so a level
+author can make a puddle deep in a cupboard and shallow in a basement. This
+section specified the alternative the levels were designed against — flow and
+depth derived from room size and aperture, so "the hall is ankle-deep" is a
+consequence of the room rather than a number someone picked.
 
 ```
+depth_mm      = water_ml * 10 / floor_cm2
+
 flow_ml_per_s = min(capacity_ml_per_s,
                     aperture_cm2 × max(0, depth_mm − sill_mm) × WATER_LINK_K)
 ```
 
-which is a weir with a ceiling: nothing flows until the water is over the sill,
+That is a weir with a ceiling: nothing flows until the water is over the sill,
 the flow grows with the head above it, and it never exceeds the link's rating.
 
-The two numbers do different jobs and are easy to confuse:
+- `sill_mm` is a **liquid** quantity and is what rule `WA-1` reads. Once the
+  depth on the link's low side exceeds it, the opening is submerged; actor
+  passage is a different question, governed by `clearance_mm` alone.
+- `aperture_cm2` and `clearance_mm` are the whole of "fluid transport is not
+  traversal": `WA-1` reads the aperture, `WA-2` reads the clearance, and
+  nothing infers one from the other.
+- A compartment is anchored to a building room for cues, evidence and actor
+  presence, but it is not the room: a duct run, sump or riser shaft can be its
+  own compartment inside one room.
+- `full_depth_mm = air_l × 10 000 / floor_cm2` is the depth at which a
+  compartment of that volume is full; future acceptance tests would use it as
+  the bound a run may never exceed.
 
-- `sill_mm` is a **liquid** quantity, and it is what `WA-1` also reads. Once the
-  depth on the link's low side is above the sill, the opening is submerged, so
-  the **gas path closes** — an opening full of water carries no air. Liquid is a
-  different matter: a submerged opening still weirs water through it, subject to
-  the rating. `WA-1` therefore closes a duct to air without being a valve for
-  water. If a level wants a duct that carries air but no liquid, it authors
-  `capacity_ml_per_s` to the trickle it should carry (a raised collar, a
-  trapped mouth, a rated orifice) and the weir formula respects it. Level 2's
-  `duct-low` does exactly this with a 50 ml/s rating.
-- `capacity_ml_per_s` is the rating, and it binds in both directions; a link
-  rated at 50 ml/s cannot become a drain because the head is large.
+None of this exists in code. `full_depth_mm`, `aperture_cm2` and `weir` have
+zero occurrences under `crates/`.
 
-`aperture_cm2` and `clearance_mm` are the whole of the "fluid transport is not
-traversal" rule. They are separate numbers on the same link, and the rules that
-read them are separate rules (`WA-1` reads the aperture; `WA-2` reads
-`clearance_mm`). Nothing infers one from the other.
-
-Gate blocking is independent of `fluid_block`: any `gate: Some(…)` blocks both
-water and gas while shut. `AboveSill` additionally blocks gas when submerged
-(`WA-1`), without blocking water; `WhenDebris` blocks both media while debris
-remains. `Never` adds no obstruction, but does not bypass a shut gate.
-
-Both conditions are encoded on the same link: for example,
-`"gate": {"entity":"dmp-l1"}, "fluid_block":"above_sill"` means gas can pass
-only while the damper is open **and** the mouth is not submerged. No
-`WhenGateShut` variant is needed. A gate-only link uses `fluid_block: Never`.
-Where a link mirrors a building portal, `gate: Portal(id)` reads the door's
-own state; the plant never keeps a second copy. Opening it removes only the
-gate obstruction.
 
 ### 2.2 Layer B — entities and typed capabilities
 
@@ -496,112 +442,9 @@ get.
 | T7 | Control | sense → decide → actuate, through the precedence ladder |
 | T8 | Observation | cue, evidence and causal emission from any of the above |
 
-### 2.6 Layer E — runtime state
-
-```rust
-pub struct InfrastructureState {
-    pub ruleset_version: u16,
-    pub tick: u64,
-    pub volumes: Vec<VolumeState>,   // water_ml, gas_ml per GasId, fire, oxygen
-    pub entities: Vec<EntityState>,  // position, energised, wetness, integrity, tags
-    pub links: Vec<LinkState>,       // breached, blockage
-    pub actors: Vec<ActorExposure>,  // shock dose, gas dose, contact
-    pub hazards: Vec<HazardState>,   // kind, subject, level, since_tick, dwell
-    pub scheduled: BTreeMap<(u64, u32), ScheduledEffect>,
-    pub open_causes: Vec<Cause>,     // bounded; see §7
-    pub next_cause: u32,
-    pub deferred: Vec<StagedIntent>, // carried into next tick, never dropped
-}
-```
-
-Every field is serde. `ruleset_version` is in the snapshot; a restore across a
-ruleset change is a typed refusal, not a reinterpretation (§12).
-
----
-
-## 3. Quantities, units and determinism
-
-### 3.1 Integer units
-
-| Quantity | Unit | Notes |
-|---|---|---|
-| water | millilitres (`u64`) | depth derived: `water_ml * 10 / floor_cm2` mm (1 ml = 1 cm³) |
-| gas | ml (amount) and ‰ (concentration) | `permille = gas_ml / air_l` (the ml/L ratio *is* the permille) |
-| wetness | ‰ of saturation, 0..1000 | |
-| integrity | ‰, 0..1000 | 0 = destroyed |
-| fire | ‰ intensity, 0..1000 | |
-| oxygen | ‰ of air volume | starts at 210 |
-| power | `bool` per circuit, `u16` load | |
-| time | ticks (`u32`), 60 Hz | seconds only for display |
-| dose | shock/gas, 0..1000 | |
-| noise | 0..1000, attenuated per link | |
-
-**Why integers.** A float sum depends on evaluation order near the rounding
-edge; an integer sum does not. The evidence ledger already made this decision
-for mass (`Mass = uint32 in 0..10_000`, `docs/architecture/
-evidence-ledger-design.adoc`). The plant follows it. Floats are confined to the
-existing scenario math (`TICK_DT`, camera sweeps) and to display conversion.
-
-### 3.1a Gas is a species amount, not a well-mixed atmosphere
-
-This is the one abstraction worth stating outright, because three separate
-gameplay claims rest on it:
-
-- a compartment holds `gas_ml` of each species, where `gas_ml` is **pure gas**;
-  the concentration a detector or a player reads is `gas_ml / air_l`;
-- an extractor removes the **species** at its rated flow — a 4 L/s fan clears
-  4 L of gas per second from the compartment it serves, because its intake sits
-  in the enriched layer. This is why extraction is worth doing at all;
-- a passive link carries `aperture_cm2 × GAS_LINK_K` ml/s, which is slow. In a
-  three-minute level, gas does not diffuse through a building; it is *moved* by
-  fans, by doors, and by water displacing it.
-
-There is no pressure field, no partial-pressure solver and no well-mixed
-atmosphere. A link may still be closed to gas because water covers its opening
-(`WA-1`) — that is a binary obstruction, not a fluid model.
-
-Buoyant species (`density_vs_air_permille < 1000`) are **not supported in v1**;
-validation refuses them (`gases.unsupported_buoyancy`). Neutral and sinking
-species are the whole of the v1 vocabulary, and `sable-2` is sinking.
-
-### 3.1b Displacement is conservation, not chemistry
-
-When water takes volume `V` in a compartment, it displaces the same volume of
-*mixture*, which carries `V × gas_ml / air_l` of the species into the
-neighbouring volume. Nothing is destroyed. A flood that takes 3 % of a room's
-volume can move at most 3 % of its gas, and the `WA-3` test asserts exactly
-that invariant rather than a dramatic number.
-
-### 3.2 No RNG, no wall clock
-
-The layer draws **zero** random numbers. Arc cadence is a counter, not a roll.
-Fire spread is a scheduled deterministic effect. Two runs of the same command
-stream produce the same plant state, byte for byte, on any target.
-
-### 3.3 Derived values, one fixed order
-
-Derived quantities are recomputed once per commit in this order, because later
-ones read earlier ones:
-
-```
-1. energy      circuit energised → entity energised (series gates, lockouts)
-2. wetness     water contact → wetness (per material)
-3. depth       water_ml → depth_mm per volume
-4. concentration  gas_ml / air_l → permille per (volume, gas)
-5. oxygen      burned gas → oxygen_permille
-6. hazard      energised ∧ wet ∧ damaged → arc candidate;
-               concentration ∈ [LFL,UFL] ∧ source → ignition candidate;
-               depth ∧ conductive source → shock field
-7. traversal   depth vs clearance; gate position; fire presence
-8. readout     sensor values, HUD values, network-reported values
-```
-
-No step reads a value it has not already produced, and no step reads a value
-from a later step.
-
----
-
 ## 4. The tick
+
+
 
 ### 4.1 Five phases
 
@@ -642,124 +485,6 @@ Two properties follow by construction, not by special case:
 The ladder is about **who wins a conflict**, not about **what is true**. A rule
 that computes a physical outcome (arc, ignition, shock) reads the committed
 state, never a controller's reported value. §8.
-
-### 4.3 Worked example — four things at once
-
-Level 1, tick 3600 (t = 60.0 s). Plant depth is 224 L = **140 mm**; sill 180 mm;
-pump plinth 150 mm. Riser gas is 0. `feed-m` is energised. Four things land in
-the same tick:
-
-| # | Input | Origin |
-|---|---|---|
-| 1 | infiltrator throws `iso-m` (local isolator) | R0 |
-| 2 | hacker `Enable`s `pump-p1` over the signal network | R4 |
-| 3 | `gd-1` reports 20 ‰ in level 2 | R2 (alarm interlock) |
-| 4 | the leak keeps entering | environment (no conflict) |
-
-**S1** reads: `depth_plant = 140`, `wet_pump = 0`, `energised(M) = true`,
-`iso_m = closed`, `signal(sig-pump) = off`, `gas_riser = 0`.
-
-**S2** produces, in this order:
-
-| rank | rule | subject | field | value |
-|---|---|---|---|---|
-| 0 | `WE-4` | `pump-p1` | `energised` | **false** (lockout) |
-| 4 | `CP-7` | `pump-p1` | `running` | true |
-| — | `WA-6` | `plant` | `water_ml` | +800 |
-| — | `WE-1` | `pump-p1` | `wetness` | 0 (below plinth) |
-
-**S3** resolves `pump-p1.energised`: R0 wins, R4 is refused. `pump-p1.running`
-is moot once energisation is false; it resolves to `false` with
-`reason: unpowered`, and the refusal is one event, not silence.
-
-**S4** commits: `water_ml += 800` (leak), pump stays dead and dry, circuit M
-stays energised but the pump draws nothing.
-
-**S5** emits, in this order (sorted by rank then subject):
-
-```jsonl
-{"event":"infra.denied","tick":3600,"rule":"WE-4","subject":"pump-p1",
- "requested":{"by":"hacker","field":"running"},"reason":"locked-out","cause":41}
-{"event":"infra.actuated","tick":3600,"rule":"CP-4","subject":"iso-m",
- "field":"position","before":"closed","after":"open","cause":42}
-{"event":"infra.quantity","tick":3600,"volume":"plant","field":"water_ml",
- "before":223200,"after":224000,"cause":43}
-```
-
-Cause tree as the developer trace prints it:
-
-```
-cause#41  remote start refused            ← CP-7 / WE-4
-cause#42  isolator thrown (infiltrator)   root
-cause#43  leak inflow                     ← environment (Cylinder/Leak source)
-```
-
-The player perceives: the pump never starts; the hum they expected does not
-come; a small metal clack from the isolator. The guard, one floor up, perceives
-nothing this tick — the denial is silent *to the guard* by design, and the
-isolator's evidence (`LockoutTag`) only exists if someone looks.
-
----
-
-## 5. Staged deltas: why iteration order cannot matter
-
-**Claim.** For any two schedules of the same set of intents within one wave,
-the committed state is identical.
-
-**Argument.**
-
-1. Intents are values; they are not applied as they are produced. S2 only
-   appends to a `Vec`.
-2. Conflicts are decided by a **total order** on `(rank, rule_rank,
-   subject_index, field)`. Reordering the input cannot change the winner,
-   because the ordering key does not include input position.
-3. Every non-conflicting effect is a delta `(subject, quantity, i64)`. Commits
-   group by `(subject, quantity)`, **sum in `i64`**, clamp once, and write
-   once. Integer addition is commutative and associative. Clamping after the
-   sum (rather than per delta) is what makes this true — clamping per delta
-   would make the result depend on order.
-4. Flow is antisymmetric by construction: `MoveWater(a, b, x)` stages `-x` at
-   `a` and `+x` at `b`, and both are computed from the **S1 snapshot**. Two
-   opposing flows therefore cancel exactly, and a chain `a→b→c` cannot
-   "double-spend" water within one tick, because `b`'s balance is computed from
-   its pre-tick volume.
-5. **Sibling flows are allocated, not summed.** The snapshot alone does *not*
-   prevent two outgoing transfers from overdrawing one source: if a compartment
-   holds 100 ml and two links each stage 100 ml, summing and clamping leaves the
-   source at 0 while crediting 200 ml to the destinations — 100 ml invented.
-   S3 therefore allocates before S4 credits. For each `(subject, medium)` with
-   total requested outflow `R` and available `A`:
-
-   ```
-   if R <= A:            allocated_i = request_i
-   else:                 allocated_i = floor(request_i * A / R)
-                         r = A - Σ allocated_i
-                         remainder_i = (request_i * A) % R
-                         sort by remainder_i descending, then total order for ties
-                         give 1 ml each to the first r intents in that order
-   ```
-
-   The destination is credited with `allocated_i`, never with `request_i`, and
-   the scaled effect is what S4 commits. Hamilton largest-remainder with the
-   total order as tie-break: deterministic, order-independent, and
-   **conservative to the millilitre**. The same routine allocates gas species,
-   which is why a fan and a leak competing for one compartment cannot both take
-   the whole amount.
-6. Derived values are recomputed in the fixed order of §3.3, after the commit,
-   from committed quantities only.
-
-**Consequences.** Entity iteration order is an authoring detail, not a
-behavioural one. This is the same discipline `building/graph.rs` already uses
-(`BTreeMap`/`BTreeSet` throughout, "iteration order can never leak into
-results"), extended to numeric state.
-
-**Tests.** `permuted_intents_yield_identical_committed_state`,
-`opposing_flows_cancel_regardless_of_order`,
-`clamp_applies_once_after_the_sum`,
-`concurrent_outflows_from_one_source_conserve_the_source`,
-`definition_order_permutation_preserves_outcomes` (§15).
-
----
 
 ## 6. Cascades: bounded, deferred, never dropped
 
@@ -807,99 +532,6 @@ is scheduled for `tick + period`, not the same tick.
 
 ---
 
-## 7. Events, causes and the developer trace
-
-### 7.1 Event families
-
-| Family | Class | Example |
-|---|---|---|
-| `RuleFired` | ambient | a rule matched and staged a delta |
-| `QuantityChanged` | ambient | `water_ml 223200 → 224000` |
-| `StateChanged` | load-bearing | position, energised, integrity, wetness crossing a threshold |
-| `Actuated` | load-bearing | pump started, damper closed, isolator thrown |
-| `HazardRaised` / `HazardCleared` | load-bearing | arc, fire, shock field, gas at LFL |
-| `Denied` | load-bearing | remote start against a lockout |
-| `Irreversible` | load-bearing | equipment destroyed, door mechanism broken, gas ignited |
-| `CascadeDeferred` | load-bearing | budget exhausted |
-| `ReadoutSampled` | ambient | sensor value per tick, coalesced |
-| `EvidenceEmitted` | load-bearing | guard-observable item created |
-
-**Load-bearing** events are never coalesced, never throttled and never dropped.
-**Ambient** events are coalesced per tick per `(rule, subject, field)` into one
-record carrying `count`, `first_tick`, `last_tick`. If `MAX_EVENTS_PER_TICK`
-would be exceeded, ambient events are dropped first, and a single
-`EventBudgetExceeded { dropped_ambient }` is emitted — so the developer can see
-that the log is partial. Load-bearing events alone cannot exceed the cap,
-because they are bounded by `MAX_RULES_PER_WAVE`.
-
-### 7.2 Cause ids
-
-A cause is allocated at scheduling time, from a monotonic counter carried in
-state (so it survives snapshot/restore), in the deterministic order of §4.1.
-
-```rust
-pub struct Cause {
-    pub id: u32,
-    pub parent: Option<u32>,
-    pub root: RootCause,   // PlayerCommand | Controller | Environment | Fire | Sensor
-    pub rule: RuleId,
-    pub tick: u64,
-}
-```
-
-Causes form a tree, not a graph: a cause has at most one parent, and an effect
-carries exactly one cause. This makes the developer view a printable tree and
-makes "why did this happen?" a bounded walk.
-
-### 7.3 The developer trace
-
-`idaptik-infra-trace/1` is one JSON object per line, emitted only when tracing
-is enabled (developer builds, `--headless --trace`). It is a *view*: the same
-facts, in the order they were produced.
-
-```json
-{"format":"idaptik-infra-trace/1","tick":3600,"wave":0,"phase":"resolve",
- "rule":{"id":"WE-4","version":1},"subject":{"kind":"entity","id":"pump-p1"},
- "cause":42,"decision":"refuse","reason":"locked-out",
- "intent":{"origin":"remote","field":"running","value":true},
- "sense":{"depth_plant_mm":140,"wet_pump":0,"energised_m":true},
- "commit":null}
-```
-
-The trace is what the level documents quote in §6 of each level file. It is not
-a player surface and it is not replicated.
-
----
-
-## 8. Readouts: reported values versus truth
-
-This is the section that makes `CP-3` honest.
-
-| Reader | Sees | Can be fooled? |
-|---|---|---|
-| physics (arc, ignition, shock, flow) | committed state | **no** |
-| controller / interlock | the *reported* value of the sensor it reads | yes, if spoofed |
-| hacker's panel | network-reported values | yes — that is the deception |
-| infiltrator's senses | cues derived from truth, attenuated by space | no, but noisy and local |
-| guard | evidence at observation sites, delayed by travel | no, but never omniscient |
-
-A **spoof** (`CP-3`) rewrites the reported value only:
-
-```rust
-pub struct ReportedValue { pub entity: EntityId, pub quantity: SenseQuantity, pub value: u32 }
-pub struct SpoofState { pub signal: SignalId, pub reported: u32, pub until_tick: u64 }
-```
-
-The controller acts on `ReportedValue`; the hazard rule reads `InfraState`. A
-spoofed gas detector can therefore talk a controller into starting a pump in a
-90 ‰ atmosphere. The ignition rule does not care what the controller believes.
-That is the whole point: the deception is real, the physics is not negotiable.
-
-The two seats can *disagree* — hacker panel says 0 ‰, infiltrator's nose says
-otherwise — and resolving that disagreement by voice is gameplay, not a bug.
-
----
-
 ## 9. Cues (players) and evidence (guards)
 
 ### 9.1 Cues
@@ -939,192 +571,6 @@ Evidence enters the existing observer-relative ledger
 observation at a place and a time. The guard's belief is updated only from
 evidence he could have perceived: same compartment, or a sound that crossed a
 link with enough `noise_permille`. The engine never hands the guard truth.
-
----
-
-## 10. Integration with the building runtime
-
-### 10.1 Definition
-
-```rust
-pub struct ScenarioDefinition {
-    // … unchanged fields …
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signal: Option<SignalNetworkDef>,     // ADR-0012; already in the tree
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub infra: Option<InfrastructureDefinition>,
-}
-```
-
-`infra` hangs off the **scenario**, beside `signal`, because that is where the
-precedent actually is: `BuildingDefinition` has no `signal` field, and
-`scenario/definition.rs` is where ADR-0012 put it. A level is a scenario
-payload, so its plant travels with it; the building keeps owning `circuits`,
-`portals` and `zones`, which the plant references by id and never redeclares.
-
-Both are skipped when absent, so `exchange_house.json`, the ghost-lobby goldens
-and every recorded replay serialise byte-identically — the same reason the
-canonical floor's golden did not move when ADR-0012 landed.
-
-The loader slice that establishes this is
-[`infrastructure-m0-loader.md`](infrastructure-m0-loader.md), written against
-[`infrastructure-m0-acceptance-tests.md`](infrastructure-m0-acceptance-tests.md).
-
-### 10.2 Host contract
-
-The runtime is host-agnostic, like `SignalSim`:
-
-```rust
-impl InfrastructureSim {
-    pub fn new(def: &InfrastructureDefinition) -> Result<Self, Vec<InfraValidationError>>;
-    pub fn apply(&mut self, op: &InfraOp, access: &InfraAccess) -> Vec<InfraEvent>;
-    pub fn step(&mut self, input: &InfraInput) -> Vec<InfraEvent>;
-}
-
-pub struct InfraInput {
-    pub power: BTreeMap<CircuitId, bool>,          // from netsim effects
-    pub portals: BTreeMap<PortalId, bool>,         // open?
-    pub signals: BTreeMap<SignalId, SignalFact>,   // request latch + reported value
-    pub spoofs: BTreeMap<SignalId, u32>,           // reported overrides
-    pub actor: ActorPresence,                      // volume, reach, capabilities
-}
-```
-
-`InfraAccess` is the same shape as `signal::Access`, carrying which entities each
-seat can touch, computed by the host from vantage and room — one access model,
-not two.
-
-The wire form is `Command::Infrastructure { op: InfraOp }`, index-addressed
-(`EntityIndex`, like `NetNodeIndex` and `SignalIndex`) so that `Command` stays
-`Copy` and a renamed entity cannot break a recorded script. It is folded as an
-immediate at P2, exactly as `Command::Signal` is, and it carries the issuing
-seat so the origin rank (R1 local, R4 remote) is known without asking the
-transport.
-
-### 10.3 Portals: traversal versus fluid
-
-`BuildingSim`'s traversal check gains two deny reasons:
-
-```rust
-pub enum BuildingDenyReason {
-    UnknownPortal, NotAdjacent, Locked, Unpowered,
-    Flooded,   // WA-2: depth > link clearance
-    OnFire,    // EG-4: fire in the destination compartment
-}
-```
-
-Fluid is *not* a deny reason for fluid: `WA-1` closes an aperture without
-touching traversal, and `WA-2` blocks traversal without touching the aperture.
-A flooded duct that stops carrying air may still be walkable — and a walkable
-crawl may be carrying no air at all.
-
-### 10.4 Netsim and actuation
-
-The plant reads power; it does not write reach. `Effect::PowerCut` and
-`Effect::DevicePowerLost` from `netsim::apply_actuation` are folded into
-`InfraInput.power` by the host. Plant actuation from the hacker arrives over the
-signal network (§11), not as a new `Actuation` variant — `Actuation` stays a
-closed, `Copy` enum whose job is reach, exactly as ADR-0012 argued.
-
----
-
-## 11. The signal network: propagation preserved
-
-### 11.1 Invariants that do not change
-
-| Invariant | Where it lives |
-|---|---|
-| outputs are read from state at tick start | `signal/sim.rs::Run::step_body` step 1 |
-| a signal crosses at most one wire per tick | same, step 2 |
-| edge inputs fire once on the rising edge; relays are level | same, step 3 |
-| relay feedback loops are well-defined at one hop/tick | same |
-| a door pulse holds for `door_pulse_ticks` | same |
-| access is per seat, per device | `signal/sim.rs::Access`, `sim/signal.rs::signal_access` |
-| wiring is charged in bandwidth or busy ticks | `SeatProfile` |
-
-None of these functions changes. The propagation contract is not up for
-renegotiation.
-
-### 11.2 The one additive change
-
-The plant needs two new *device roles* on the wire, because overloading `Light`
-or `Sensor` would make plant semantics depend on light semantics — exactly the
-kind of aliasing the brief forbids.
-
-| Kind | Inputs (Edge) | Host outputs | Mirrors |
-|---|---|---|---|
-| `PlantActuator` | `Enable`, `Disable`, `Toggle`, `Open`, `Close` | `Active` | a light's "commanded" latch |
-| `PlantSensor` | `Enable`, `Disable` | `Tripped` | a sensor's enable latch |
-
-`outputs_of` gains two arms:
-
-```rust
-SignalKind::PlantActuator => set(OutPort::Active,  host(OutPort::Active)),
-SignalKind::PlantSensor   => set(OutPort::Tripped, s.active && host(OutPort::Tripped)),
-```
-
-The deliberate asymmetry, and why the two arms differ:
-
-- for a `PlantActuator`, the device carries **two different fields with two
-  different meanings**: `DeviceState.active` is the wire-latched *request*, and
-  `OutPort::Active` is the plant's *report* of what the machine is actually
-  doing. The report is host truth only, exactly like `Guard`, because a machine
-  that a manual local switch started is running whether or not a wire asked for
-  it. The gap between request and report is where interlocks, lockouts and
-  spoofing live, and it is visible to the player as REQUESTED / NOT RUNNING;
-- for a `PlantSensor`, `DeviceState.active` is the enable latch and
-  `OutPort::Tripped` is the reported threshold crossing — identical to the
-  existing `Sensor` arm, because a disabled sensor genuinely reports nothing.
-
-`SignalState::initial` treats `PlantSensor` as initially active, like `Sensor`;
-`PlantActuator` starts inactive, like a light that is off.
-
-### 11.3 Hop-count proof
-
-| Chain | Ticks | Why |
-|---|---|---|
-| physical change → sensor `Tripped` | **+1** | plant commits in S4; the readout is computed at the top of the *next* signal step |
-| sensor output → wire → relay input | same tick as the report | existing one-hop-per-tick rule |
-| relay output → wire → actuator input | +1 | same, because the relay's output is read at tick start |
-| actuator input → plant actuation | same tick as the input change | `system_infrastructure` runs after `system_signal` |
-| plant actuation → sensor readout | +1 | readout is taken at the top of the next signal step |
-
-So a sensor→relay→pump chain costs exactly three ticks, and it would cost the
-same three ticks without the plant. The alternative ordering (plant before
-signal) would make it two. That is the change §11 refuses.
-
-### 11.4 Format and the fallback
-
-`SIGNAL_FORMAT` becomes `idaptik-signal/2`; `load_signal_network` accepts `v1`
-and `v2`, and a `v1` document produces a byte-identical golden event log (the
-two new kinds cannot appear in it). Existing `SignalKind` JSON is unchanged:
-adding variants to a serde enum is additive for data that does not use them.
-
-**If the maintainers refuse the format bump**, the fallback is: plant entities
-are commanded only by `InfraOp` (direct, seat-checked) and by controller laws
-inside the plant, and sensor→actuator automation is expressed as controller
-laws rather than as wires. The plant then works, but the hacker loses the
-"rewire the plant" verb and `CP-1` degrades to `CP-2`. That is a real loss, which
-is why the additive change is the recommendation and the fallback is documented
-rather than assumed.
-
----
-
-## 12. Versioning and compatibility
-
-| Surface | Tag | Rule |
-|---|---|---|
-| infrastructure definition | `idaptik-infrastructure/1` | loader gate; unknown format refused |
-| ruleset | `InfrastructureDef.ruleset_version` | any outcome-changing edit bumps it |
-| individual rule | `RuleDef.version` | bump on any edit to `when`, `effects`, `delay`, `recovery` |
-| snapshot | `InfrastructureState.ruleset_version` + per-rule versions | restore across a mismatch is refused |
-| trace | `idaptik-infra-trace/1` | view only; no compatibility promise |
-| signal | `idaptik-signal/2` | v1 accepted unchanged (§11.4) |
-| building | `idaptik-scenario/1` | unchanged; `infra` and `signal` are optional |
-
-Refusal is a typed `InfraValidationError::RulesetMismatch { found, expected }`,
-not a silent reinterpretation. A replay whose rules changed under it is a bug
-report, not a mystery.
 
 ---
 
@@ -1188,40 +634,6 @@ The last one is a reachability *search over rules*, not a special case: it asks
 whether some command sequence reaches the objective without an irreversible
 failure. `infrastructure-level-1.md` §5 enumerates the routes the search is
 expected to find.
-
----
-
-## 15. Test strategy
-
-### 15.1 Shape
-
-Tests live in `crates/idaptik-core/tests/infrastructure.rs` (behaviour) and
-`crates/idaptik-core/src/scenario/infrastructure/sim.rs` (unit invariants), in
-the style of `tests/signal_network.rs`: build a level, drive a command stream,
-assert on state *and* the event log.
-
-The harness must let a test set state directly (`sim.state_mut()`) for the same
-reason `ghost_lobby` tests do: to test one rule in isolation without scripting a
-minute of play.
-
-### 15.2 Index
-
-| Group | Tests |
-|---|---|
-| determinism | `replay_determinism_with_infrastructure`, `permuted_intents_yield_identical_committed_state`, `opposing_flows_cancel_regardless_of_order`, `clamp_applies_once_after_the_sum`, `concurrent_outflows_from_one_source_conserve_the_source`, `definition_order_permutation_preserves_outcomes`, `snapshot_restore_mid_cascade_is_exact`, `ruleset_mismatch_is_refused` |
-| cascade | `every_produced_intent_is_accounted_for`, `cascade_deferral_emits_one_event`, `deferred_intent_keeps_its_cause`, `deferral_changes_timing_not_outcome`, `self_scheduling_is_a_load_error` |
-| water/electric | `water_on_dry_equipment_does_not_arc`, `a_puddle_below_contact_depth_is_not_lethal`, `damaged_wet_energised_equipment_arcs_on_cadence`, `isolation_prevents_remote_start`, `drying_requires_de_energisation`, `running_a_wet_motor_destroys_it`, `restoring_power_to_wet_equipment_arcs_after_delay_not_instantly` |
-| electricity/gas | `unpowered_fan_stops_extraction_and_gas_accumulates`, `a_light_switch_does_not_ignite_gas`, `a_pump_start_ignites_gas_in_band`, `ignition_requires_the_authored_class`, `ignition_requires_dwell_not_a_single_tick`, `fire_consumes_the_species_and_spreads_by_combustibility` |
-| water/gas/air | `flood_closes_a_duct_without_blocking_traversal`, `flooded_duct_still_weirs_water`, `depth_above_clearance_blocks_traversal_without_closing_the_duct`, `water_displaces_gas_without_neutralising_it`, `a_dissolving_species_is_parameterised_not_hardcoded`, `airflow_moves_gas_between_compartments` |
-| tunnels | `excavation_exposes_the_authored_utility`, `cutting_exposed_cable_kills_the_authored_circuit`, `breach_connects_previously_separate_compartments`, `water_enters_a_tunnel_downhill`, `cutting_is_heard_through_links_by_attenuation`, `isolation_first_makes_the_breach_safe` |
-| control | `a_wired_sensor_starts_the_pump_one_hop_per_tick`, `a_spoofed_detector_misleads_the_controller_but_not_ignition`, `manual_isolation_beats_remote_and_emits_a_denial`, `an_interlock_refuses_a_start_even_when_wired`, `a_feedback_loop_is_bounded_and_repeats_exactly` |
-| observability | `every_rule_emits_a_cue_and_an_evidence_item`, `evidence_is_not_emitted_beyond_its_attenuation`, `load_bearing_events_are_never_coalesced` |
-| anti-hardcoding | `renaming_every_entity_preserves_behaviour`, `no_rule_reads_entity_kind` |
-| signal preservation | `signal_hop_count_unchanged_with_infrastructure_enabled`, `plant_state_reaches_the_signal_network_next_tick_only`, `v1_signal_definition_golden_is_byte_identical`, `plant_actuator_request_and_report_are_distinct` |
-| compatibility | `building_json_without_infra_is_byte_identical`, `scenario_snapshot_v3_still_restores`, `no_rng_draws_from_the_infrastructure_layer` |
-
-Each test name appears in at least one rule's `tests` field in the catalogue.
-The inverse is also gated: `rules.tests_present` (§14) refuses a rule with none.
 
 ---
 

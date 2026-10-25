@@ -2,6 +2,18 @@
 
 # Infrastructure rule catalogue
 
+> **Status: not implemented.** All 36 rules below specify behaviour the engine
+> does not have. `RuleDef`, `RuleId`, `Capability`, `AccessReq`, `LockOut`,
+> `Irreversible`, `RateLimit`, `ReadoutRef`, `CausalTag`, `MaterialDef`,
+> `GasDef` and `FluidLinkDef` have zero occurrences under `crates/`; the
+> shipped `scenario/infrastructure/` module hard-codes its rule order. The
+> cue vocabulary is the sharpest divergence: of the 20 cues named here, **one**
+> (`Hiss`) exists in `CueKind`.
+>
+> Read this as a **backlog of what the engine does not do**, and see
+> `infrastructure-implementation-status.md` for the mapping.
+
+
 **Status: design of record. Not implemented.** These rules are the specification
 an implementation is written against; no rule id below exists in the code yet.
 The evaluation model — phases, deltas, precedence, cascade bounds, events — is

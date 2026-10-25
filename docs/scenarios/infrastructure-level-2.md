@@ -2,6 +2,15 @@
 
 # Infrastructure test level 2 — "Sable"
 
+> **Status: not buildable today.** This level references 6 cues —
+> `CutterGrating`, `FireWhoomph`, `GasAlarm`, `GasReek`, `VentHum`,
+> `VentStops` — of which **none** exist in `CueKind`, and it depends on the
+> `sable-2` gas species and the `GasWaterRule` category the shipped `GasClass`
+> (`Haze`/`Hush`/`Ember`) does not carry. It is kept as the specification of
+> what Level 2 requires: causal chains legible to the developer and perceptible
+> to the player.
+
+
 **Status: design of record. Not implemented, not authored, not loadable.**
 
 Level 1 with ventilation and one fictional gas category. It exists to answer a
