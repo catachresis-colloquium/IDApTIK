@@ -141,7 +141,7 @@ pub fn press_command(name: &str) -> Option<Command> {
         "resume" => Some(Command::Pause { on: false }),
         // The match arm sees the original token, so re-normalise the case for
         // the parameterised families (`Mole:Dig` means `mole:dig`).
-        _ => return parameterised(&name.trim().to_ascii_lowercase()),
+        _ => parameterised(&name.trim().to_ascii_lowercase()),
     }
 }
 

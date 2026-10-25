@@ -195,15 +195,15 @@ impl GhostLobbySim {
     /// part of the snapshot, so every seat agrees on the same noise.
     fn extra_noise(&self) -> Vec<NoiseSource> {
         let mut out = Vec::new();
-        if let Some(d) = &self.state.diversion {
-            if d.t > 0.0 {
-                out.push(NoiseSource {
-                    x: d.x,
-                    room: room_at_or_last(&self.def, d.x),
-                    intensity: d.intensity,
-                    kind: ObservationKind::UnusualNoise,
-                });
-            }
+        if let Some(d) = &self.state.diversion
+            && d.t > 0.0
+        {
+            out.push(NoiseSource {
+                x: d.x,
+                room: room_at_or_last(&self.def, d.x),
+                intensity: d.intensity,
+                kind: ObservationKind::UnusualNoise,
+            });
         }
         if let Some(mole) = &self.mole {
             let ms = mole.state();

@@ -52,11 +52,14 @@ id_newtype!(
     "Stable id of a building portal (door/stair/lift/ladder/vent)."
 );
 id_newtype!(CircuitId, "Stable id of a building power circuit.");
-id_newtype!(PowerSourceId, "Stable id of an electrical power source.");
-id_newtype!(FeedId, "Stable id of an electrical distribution feed.");
-id_newtype!(LoadId, "Stable id of an electrical load or powered device.");
-id_newtype!(BreakerId, "Stable id of an electrical protective breaker.");
-id_newtype!(HazardId, "Stable id of an exposed-power hazard.");
+id_newtype!(
+    PowerSourceId,
+    "Stable id of a power source: mains or backup."
+);
+id_newtype!(FeedId, "Stable id of a power feed out of a source.");
+id_newtype!(BreakerId, "Stable id of a breaker protecting a feed.");
+id_newtype!(LoadId, "Stable id of a load the power network carries.");
+id_newtype!(HazardId, "Stable id of an electrical hazard site.");
 id_newtype!(ZoneId, "Stable id of a building network zone.");
 id_newtype!(
     SignalId,

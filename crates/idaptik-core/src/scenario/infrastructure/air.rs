@@ -828,12 +828,12 @@ pub(crate) fn validate_air(
                 });
             }
         }
-        if let Some(trip) = &e.trip {
-            if trip.conductivity_min > MAX_PER_MILLE {
-                errs.push(E::EquipmentTripInvalid {
-                    equipment: e.id.clone(),
-                });
-            }
+        if let Some(trip) = &e.trip
+            && trip.conductivity_min > MAX_PER_MILLE
+        {
+            errs.push(E::EquipmentTripInvalid {
+                equipment: e.id.clone(),
+            });
         }
     }
 

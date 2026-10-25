@@ -257,14 +257,13 @@ impl BuildingDefinition {
                 strands_objective = Some((circuit.id.clone(), r.clone()));
                 break;
             }
-            if strands_room.is_none() {
-                if let Some(r) = self
+            if strands_room.is_none()
+                && let Some(r) = self
                     .all_rooms()
                     .iter()
                     .find(|r| reachable.contains(r) && !reach.contains(r))
-                {
-                    strands_room = Some((circuit.id.clone(), r.clone()));
-                }
+            {
+                strands_room = Some((circuit.id.clone(), r.clone()));
             }
         }
         check(
