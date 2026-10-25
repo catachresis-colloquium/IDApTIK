@@ -481,9 +481,26 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::UseInstalledContentOrRefuse,
             R::FetchExactContentDigest,
         ),
+        // ADR-0015, state-class table: a derived cache has "no authoritative
+        // owner" and, in P2P, "no required store" — the peers hold nothing
+        // between them that is not recomputable, so there is no hot store to
+        // name. Hosted and federated sessions keep a local ETS or an optional
+        // Dragonfly. The same sentence governs media playout, which is why the
+        // two rows are split the same way.
         (
             S::DerivedCache,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::DerivedOnly,
+            H::NotRequired,
+            D::Volatile,
+            None,
+            C::Recomputable,
+            P::CacheMissAndReadSource,
+            R::RecomputeFromAuthority,
+        ),
+        (
+            S::DerivedCache,
+            vec![Hosted, Federated],
             O::DerivedOnly,
             H::EtsOrDragonfly,
             D::Volatile,
@@ -494,7 +511,18 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
         ),
         (
             S::MediaPlayout,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::MediaSubsystem,
+            H::NotRequired,
+            D::SemanticallyDisposableMediaBuffer,
+            None,
+            C::OrderedBoundedMediaFrames,
+            P::DropMediaFrames,
+            R::FlushAndRejoinMedia,
+        ),
+        (
+            S::MediaPlayout,
+            vec![Hosted, Federated],
             O::MediaSubsystem,
             H::BurbleLmdbRingBufferOrEts,
             D::SemanticallyDisposableMediaBuffer,
