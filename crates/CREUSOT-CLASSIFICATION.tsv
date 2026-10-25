@@ -222,3 +222,12 @@ T	crates/idaptik-evil-weevil/src/wire.rs	raw payload fixtures for production wir
 T	crates/idaptik-net/tests/evil_weevil_relay.rs	loopback regression test comparing the offline relay model to Burble
 T	crates/idaptik-evil-weevil/tests/corpus.rs	fixed adversarial corpus acceptance tests
 T	crates/idaptik-evil-weevil/tests/regression.rs	adversarial adapter invariant and regression tests
+T	crates/idaptik-bevy/tests/button_activation.rs	test
+T	crates/idaptik-net/tests/deployment_contract.rs	deployment-mode contract tests (P2P, federated, single-authority)
+T	crates/idaptik-persist/tests/persist.rs	durable store acceptance tests: append, checkpoint, resume, verify
+T	crates/idaptik-persist/src/lib.rs	persist crate root and module documentation; re-exports
+D	crates/idaptik-persist/src/digest.rs	FNV-1a 64 content digest for dedup and corruption detection; declarative constants, round-trip tested
+D	crates/idaptik-persist/src/error.rs	persist error taxonomy (hand-written Display/From, no thiserror dependency)
+D	crates/idaptik-persist/src/record.rs	serde session/command/checkpoint record definitions and verify reports
+D	crates/idaptik-persist/src/schema.rs	redb table definitions and the store schema tag
+L	crates/idaptik-persist/src/store.rs	durable write/checkpoint/resume/verify logic; a wrong answer is loud (acceptance tests), not silent replay drift

@@ -1,5 +1,6 @@
 //! The store itself: open, append, checkpoint, resume, verify.
 
+use crate::SCHEMA_VERSION;
 use crate::digest::digest_hex;
 use crate::error::PersistError;
 use crate::record::{
@@ -7,7 +8,6 @@ use crate::record::{
     VerifyReport,
 };
 use crate::schema::{self, BLOBS, CHECKPOINTS, COMMANDS, META, SESSIONS};
-use crate::SCHEMA_VERSION;
 use idaptik_core::scenario::{Buttons, Command, RuntimeSnapshot, fold};
 use redb::{Database, ReadableTable};
 use std::collections::BTreeMap;
@@ -25,6 +25,11 @@ pub struct Store {
     db: Database,
     path: PathBuf,
 }
+
+/// One enumerated session: its id alongside the decode result for its record.
+/// A record that fails to decode is reported as an `Err` rather than dropped,
+/// so one corrupt row cannot hide the rest of the session index.
+type ListedSession = (SessionId, Result<SessionRecord, String>);
 
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -66,17 +71,17 @@ impl Store {
             let _blobs = txn.open_table(BLOBS)?;
 
             let mut meta = txn.open_table(META)?;
-            let existing = match meta.get(schema::SCHEMA_KEY)? {
-                None => None,
-                Some(guard) => Some(guard.value().to_vec()),
-            };
+            let existing = meta
+                .get(schema::SCHEMA_KEY)?
+                .map(|guard| guard.value().to_vec());
             match existing {
                 None => {
                     let bytes = serde_json::to_vec(&SCHEMA_VERSION)?;
                     meta.insert(schema::SCHEMA_KEY, bytes.as_slice())?;
                 }
                 Some(bytes) => {
-                    let found: u32 = serde_json::from_slice(&bytes).map_err(PersistError::Decode)?;
+                    let found: u32 =
+                        serde_json::from_slice(&bytes).map_err(PersistError::Decode)?;
                     if found != SCHEMA_VERSION {
                         return Err(PersistError::SchemaMismatch {
                             found,
@@ -124,14 +129,17 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(&self) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
+    pub fn list_sessions(&self) -> Result<Vec<ListedSession>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
         for entry in sessions.iter()? {
             let (k, v) = entry?;
             let id = SessionId::new(k.value());
-            out.push((id, serde_json::from_slice(v.value()).map_err(|e| e.to_string())));
+            out.push((
+                id,
+                serde_json::from_slice(v.value()).map_err(|e| e.to_string()),
+            ));
         }
         Ok(out)
     }
@@ -170,13 +178,13 @@ impl Store {
         {
             let mut sessions = txn.open_table(SESSIONS)?;
             let mut rec = read_session(&sessions, id)?;
-            if let Some(last) = rec.last_seq {
-                if seq <= last {
-                    return Err(PersistError::SeqRegression {
-                        last,
-                        attempted: seq,
-                    });
-                }
+            if let Some(last) = rec.last_seq
+                && seq <= last
+            {
+                return Err(PersistError::SeqRegression {
+                    last,
+                    attempted: seq,
+                });
             }
             let batch = CommandBatch {
                 epoch,
@@ -327,9 +335,8 @@ impl Store {
 
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
-        let range = commands.range(
-            (id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX),
-        )?;
+        let range = commands
+            .range((id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
@@ -440,24 +447,27 @@ impl Store {
         let mut expected: Option<u64> = None;
         let mut last_epoch: Option<u64> = None;
         for (&seq, batch) in &batches {
-            if let Some(exp) = expected {
-                if seq != exp {
-                    issues.push(VerifyIssue::MissingSeq { expected: exp, found: seq });
-                }
+            if let Some(exp) = expected
+                && seq != exp
+            {
+                issues.push(VerifyIssue::MissingSeq {
+                    expected: exp,
+                    found: seq,
+                });
             } else {
                 if seq != 0 {
                     issues.push(VerifyIssue::NonZeroStart { first: seq });
                 }
             }
             expected = Some(seq.saturating_add(1));
-            if let Some(prev) = last_epoch {
-                if batch.epoch < prev {
-                    issues.push(VerifyIssue::EpochRegressed {
-                        seq,
-                        from: prev,
-                        to: batch.epoch,
-                    });
-                }
+            if let Some(prev) = last_epoch
+                && batch.epoch < prev
+            {
+                issues.push(VerifyIssue::EpochRegressed {
+                    seq,
+                    from: prev,
+                    to: batch.epoch,
+                });
             }
             last_epoch = Some(batch.epoch);
         }
@@ -558,8 +568,7 @@ fn materialise(
     let obj = body.as_object_mut().ok_or(PersistError::NotAnObject)?;
     obj.insert("definition".to_owned(), definition);
 
-    let snapshot: RuntimeSnapshot =
-        serde_json::from_value(body).map_err(PersistError::Decode)?;
+    let snapshot: RuntimeSnapshot = serde_json::from_value(body).map_err(PersistError::Decode)?;
     Ok((snapshot, record.paused, record.held))
 }
 
