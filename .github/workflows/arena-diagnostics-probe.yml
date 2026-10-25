@@ -42,11 +42,26 @@ jobs:
             2> .arena-diagnostics/lock-check.txt
           echo "exit=$?" >> .arena-diagnostics/lock-check.txt
 
-          # config-scenario-check's Rust half (nickel-lang-cli itself is not
-          # installed in this probe; the Nickel fixtures run on the user gate).
+          # Full config-scenario-check reproduction: the same pinned
+          # nickel-lang-cli the real gate installs, then the recipe's exact
+          # export -> ignored round-trip test -> negative-fixture loop.
+          cargo install nickel-lang-cli --version 1.16.0 --locked \
+            > .arena-diagnostics/nickel-install.txt 2>&1
+          nickel --version >> .arena-diagnostics/nickel-rt.txt 2>&1
+          nickel export config/ghost_lobby_scenario.ncl --format json \
+            > /tmp/ghost_lobby_scenario_raw.json 2>> .arena-diagnostics/nickel-rt.txt
+          echo "export-exit=$?" >> .arena-diagnostics/nickel-rt.txt
           cargo test -p idaptik-core nickel_scenario_round_trips_and_validates -- --ignored \
-            > .arena-diagnostics/nickel-rt.txt 2>&1
-          echo "exit=$?" >> .arena-diagnostics/nickel-rt.txt
+            >> .arena-diagnostics/nickel-rt.txt 2>&1
+          echo "roundtrip-exit=$?" >> .arena-diagnostics/nickel-rt.txt
+          for f in config/scenario-fixtures/bad_*.ncl; do
+            if nickel export "$f" >/dev/null 2>&1; then
+              echo "FAIL: $f exported but the contract should reject it" \
+                >> .arena-diagnostics/nickel-rt.txt
+            else
+              echo "rejected as expected: $f" >> .arena-diagnostics/nickel-rt.txt
+            fi
+          done
 
           # session-loopback's Rust prerequisite (the Elixir/burble half
           # requires OTP/Elixir and the sibling burble checkout).
@@ -101,9 +116,9 @@ jobs:
           tail -3 .arena-diagnostics/lock-check.txt > .arena-diagnostics/lock-tail.txt
           emit lock-tail .arena-diagnostics/lock-tail.txt
           {
-            grep -E "test result|FAILED|^exit=" .arena-diagnostics/nickel-rt.txt
+            grep -E "test result|FAILED|exit=|rejected as expected|^nickel" .arena-diagnostics/nickel-rt.txt
             grep -E -A4 "panicked|error\[" .arena-diagnostics/nickel-rt.txt
-          } | head -40 > .arena-diagnostics/nickel-rt-compact.txt
+          } | head -60 > .arena-diagnostics/nickel-rt-compact.txt
           emit nickel-rt .arena-diagnostics/nickel-rt-compact.txt
           {
             grep -E "error|warning|^exit=" .arena-diagnostics/loopback-build.txt
