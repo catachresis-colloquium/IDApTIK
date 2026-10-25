@@ -1,0 +1,13 @@
+    Checking idaptik-kernel v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-kernel)
+    Checking idaptik-core v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-core)
+crates/idaptik-core/src/scenario/definition.rs:11:58: error[E0432]: unresolved import `crate::scenario::ids::LoadId`: no `LoadId` in `scenario::ids`
+crates/idaptik-core/src/scenario/power/sim.rs:36:28: error[E0432]: unresolved imports `crate::scenario::ids::BreakerId`, `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`, `crate::scenario::ids::PowerSourceId`: no `BreakerId` in `scenario::ids`, no `FeedId` in `scenario::ids`, no `HazardId` in `scenario::ids`, no `LoadId` in `scenario::ids`, no `PowerSourceId` in `scenario::ids`
+crates/idaptik-core/src/scenario/power/test_floor.rs:34:5: error[E0432]: unresolved import `crate::scenario::ids::FeedId`: no `FeedId` in `scenario::ids`
+crates/idaptik-core/src/scenario/power/mod.rs:45:28: error[E0432]: unresolved imports `crate::scenario::ids::BreakerId`, `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`, `crate::scenario::ids::PowerSourceId`: no `BreakerId` in `scenario::ids`, no `FeedId` in `scenario::ids`, no `HazardId` in `scenario::ids`, no `LoadId` in `scenario::ids`, no `PowerSourceId` in `scenario::ids`
+crates/idaptik-core/src/scenario/sim/power.rs:25:28: error[E0432]: unresolved import `crate::scenario::ids::LoadId`: no `LoadId` in `scenario::ids`
+crates/idaptik-core/src/scenario/sim/power.rs:321:32: error[E0432]: unresolved imports `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`: no `FeedId` in `scenario::ids`, no `HazardId` in `scenario::ids`, no `LoadId` in `scenario::ids`
+crates/idaptik-core/src/scenario/sim/power.rs:392:66: error[E0433]: cannot find `BreakerId` in `ids`: could not find `BreakerId` in `ids`
+error: could not compile `idaptik-core` (lib) due to 5 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `idaptik-core` (lib test) due to 7 previous errors
+clippy exit: 101

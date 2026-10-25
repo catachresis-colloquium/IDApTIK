@@ -1,0 +1,131 @@
+   Compiling rand_core v0.10.1
+   Compiling libc v0.2.186
+   Compiling syn v2.0.118
+   Compiling rustix v1.1.4
+   Compiling serde_core v1.0.229
+   Compiling syn v3.0.3
+   Compiling getrandom v0.4.3
+   Compiling bitflags v2.13.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling fastrand v2.4.1
+   Compiling once_cell v1.21.4
+   Compiling zmij v1.0.21
+   Compiling wait-timeout v0.2.1
+   Compiling tempfile v3.27.0
+   Compiling pearlite-syn v0.13.0
+   Compiling bit-vec v0.10.1
+   Compiling fnv v1.0.7
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling cpufeatures v0.3.0
+   Compiling quick-error v1.2.3
+   Compiling rusty-fork v0.3.1
+   Compiling chacha20 v0.10.2
+   Compiling serde_json v1.0.154
+   Compiling bit-set v0.11.1
+   Compiling num-traits v0.2.19
+   Compiling libm v0.2.16
+   Compiling rand v0.10.2
+   Compiling rand_xorshift v0.5.0
+   Compiling unarray v0.1.4
+   Compiling regex-syntax v0.8.11
+   Compiling core_detect v1.0.0
+   Compiling serde_derive v1.0.229
+   Compiling proptest v1.12.0
+   Compiling creusot-std-proc v0.13.0
+   Compiling serde v1.0.229
+   Compiling creusot-std v0.13.0
+   Compiling idaptik-kernel v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-kernel)
+   Compiling idaptik-core v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-core)
+error[E0432]: unresolved import `crate::scenario::ids::LoadId`
+  --> crates/idaptik-core/src/scenario/definition.rs:11:58
+   |
+11 | use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LoadId, ObjectiveId, RoomId, SignalId};
+   |                                                          ^^^^^^ no `LoadId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+11 - use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LoadId, ObjectiveId, RoomId, SignalId};
+11 + use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LeakId, ObjectiveId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved imports `crate::scenario::ids::BreakerId`, `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`, `crate::scenario::ids::PowerSourceId`
+  --> crates/idaptik-core/src/scenario/power/sim.rs:36:28
+   |
+36 | use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+   |                            ^^^^^^^^^  ^^^^^^  ^^^^^^^^  ^^^^^^  ^^^^^^^^^^^^^ no `PowerSourceId` in `scenario::ids`
+   |                            |          |       |         |
+   |                            |          |       |         no `LoadId` in `scenario::ids`
+   |                            |          |       no `HazardId` in `scenario::ids`
+   |                            |          no `FeedId` in `scenario::ids`
+   |                            no `BreakerId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+36 - use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+36 + use crate::scenario::ids::{BreakerId, FeedId, HazardId, LeakId, PowerSourceId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved import `crate::scenario::ids::FeedId`
+  --> crates/idaptik-core/src/scenario/power/test_floor.rs:34:5
+   |
+34 | use crate::scenario::ids::FeedId;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `FeedId` in `scenario::ids`
+
+error[E0432]: unresolved imports `crate::scenario::ids::BreakerId`, `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`, `crate::scenario::ids::PowerSourceId`
+  --> crates/idaptik-core/src/scenario/power/mod.rs:45:28
+   |
+45 | use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+   |                            ^^^^^^^^^  ^^^^^^  ^^^^^^^^  ^^^^^^  ^^^^^^^^^^^^^ no `PowerSourceId` in `scenario::ids`
+   |                            |          |       |         |
+   |                            |          |       |         no `LoadId` in `scenario::ids`
+   |                            |          |       no `HazardId` in `scenario::ids`
+   |                            |          no `FeedId` in `scenario::ids`
+   |                            no `BreakerId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+45 - use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+45 + use crate::scenario::ids::{BreakerId, FeedId, HazardId, LeakId, PowerSourceId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved import `crate::scenario::ids::LoadId`
+  --> crates/idaptik-core/src/scenario/sim/power.rs:25:28
+   |
+25 | use crate::scenario::ids::{LoadId, RoomId, SignalId};
+   |                            ^^^^^^ no `LoadId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+25 - use crate::scenario::ids::{LoadId, RoomId, SignalId};
+25 + use crate::scenario::ids::{LeakId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved imports `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`
+   --> crates/idaptik-core/src/scenario/sim/power.rs:321:32
+    |
+321 |     use crate::scenario::ids::{FeedId, HazardId, LoadId, RoomId, SignalId};
+    |                                ^^^^^^  ^^^^^^^^  ^^^^^^ no `LoadId` in `scenario::ids`
+    |                                |       |
+    |                                |       no `HazardId` in `scenario::ids`
+    |                                no `FeedId` in `scenario::ids`
+    |
+help: a similar name exists in the module
+    |
+321 -     use crate::scenario::ids::{FeedId, HazardId, LoadId, RoomId, SignalId};
+321 +     use crate::scenario::ids::{FeedId, HazardId, LeakId, RoomId, SignalId};
+    |
+
+error[E0433]: cannot find `BreakerId` in `ids`
+   --> crates/idaptik-core/src/scenario/sim/power.rs:392:66
+    |
+392 |             .and_then(|n| n.breaker_index(&crate::scenario::ids::BreakerId::from(id)))
+    |                                                                  ^^^^^^^^^ could not find `BreakerId` in `ids`
+
+For more information about this error, try `rustc --explain E0432`.
+error: could not compile `idaptik-core` (lib) due to 5 previous errors
+warning: build failed, waiting for other jobs to finish...
+Some errors have detailed explanations: E0432, E0433.
+For more information about an error, try `rustc --explain E0432`.
+error: could not compile `idaptik-core` (lib test) due to 7 previous errors
+test-core exit: 101

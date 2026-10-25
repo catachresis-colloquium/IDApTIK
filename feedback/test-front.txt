@@ -1,0 +1,174 @@
+   Compiling smallvec v1.15.2
+   Compiling thiserror v2.0.18
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.2
+   Compiling log v0.4.33
+   Compiling zerofrom v0.1.8
+   Compiling stable_deref_trait v1.2.1
+   Compiling mio v1.2.1
+   Compiling yoke v0.8.3
+   Compiling either v1.16.0
+   Compiling hashbrown v0.16.1
+   Compiling hashbrown v0.17.1
+   Compiling itertools v0.14.0
+   Compiling castaway v0.2.4
+   Compiling errno v0.3.14
+   Compiling unicode-width v0.2.0
+   Compiling ryu v1.0.23
+   Compiling static_assertions v1.1.0
+   Compiling signal-hook-registry v1.4.8
+   Compiling compact_str v0.9.1
+   Compiling lru v0.18.3
+   Compiling zerovec v0.11.6
+   Compiling strum v0.28.0
+   Compiling kasuari v0.4.12
+   Compiling unicode-truncate v2.0.1
+   Compiling scopeguard v1.2.0
+   Compiling anstyle v1.0.14
+   Compiling rustix v1.1.4
+   Compiling critical-section v1.2.0
+   Compiling ratatui-core v0.1.2
+   Compiling lock_api v0.4.14
+   Compiling signal-hook v0.3.18
+   Compiling parking_lot_core v0.9.12
+   Compiling num_threads v0.1.7
+   Compiling utf8parse v0.2.2
+   Compiling time-core v0.1.9
+   Compiling num-conv v0.2.2
+   Compiling powerfmt v0.2.0
+   Compiling deranged v0.5.8
+   Compiling anstyle-parse v1.0.0
+   Compiling parking_lot v0.12.5
+   Compiling time v0.3.53
+   Compiling signal-hook-mio v0.2.5
+   Compiling derive_more v2.1.1
+   Compiling line-clipping v0.3.7
+   Compiling anstyle-query v1.1.5
+   Compiling colorchoice v1.0.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling serde v1.0.229
+   Compiling anstream v1.0.0
+   Compiling ratatui-widgets v0.3.2
+   Compiling crossterm v0.29.0
+   Compiling creusot-std v0.13.0
+   Compiling tinystr v0.8.3
+   Compiling litemap v0.8.2
+   Compiling writeable v0.6.3
+   Compiling clap_lex v1.1.0
+   Compiling typenum v1.20.1
+   Compiling hybrid-array v0.4.13
+   Compiling clap_builder v4.6.7
+   Compiling icu_locale_core v2.2.0
+   Compiling ratatui-macros v0.7.2
+   Compiling idaptik-kernel v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-kernel)
+   Compiling ratatui-crossterm v0.1.2
+   Compiling zerotrie v0.2.4
+   Compiling potential_utf v0.1.5
+   Compiling utf8_iter v1.0.4
+   Compiling icu_collections v2.2.0
+   Compiling icu_provider v2.2.0
+   Compiling idaptik-core v0.1.0 (/home/runner/work/IDApTIK/IDApTIK/work/crates/idaptik-core)
+   Compiling clap v4.6.7
+   Compiling ratatui v0.30.2
+   Compiling icu_normalizer_data v2.2.0
+   Compiling icu_properties_data v2.2.0
+   Compiling block-buffer v0.12.1
+error[E0432]: unresolved import `crate::scenario::ids::LoadId`
+  --> crates/idaptik-core/src/scenario/definition.rs:11:58
+   |
+11 | use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LoadId, ObjectiveId, RoomId, SignalId};
+   |                                                          ^^^^^^ no `LoadId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+11 - use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LoadId, ObjectiveId, RoomId, SignalId};
+11 + use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LeakId, ObjectiveId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved imports `crate::scenario::ids::BreakerId`, `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`, `crate::scenario::ids::PowerSourceId`
+  --> crates/idaptik-core/src/scenario/power/sim.rs:36:28
+   |
+36 | use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+   |                            ^^^^^^^^^  ^^^^^^  ^^^^^^^^  ^^^^^^  ^^^^^^^^^^^^^ no `PowerSourceId` in `scenario::ids`
+   |                            |          |       |         |
+   |                            |          |       |         no `LoadId` in `scenario::ids`
+   |                            |          |       no `HazardId` in `scenario::ids`
+   |                            |          no `FeedId` in `scenario::ids`
+   |                            no `BreakerId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+36 - use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+36 + use crate::scenario::ids::{BreakerId, FeedId, HazardId, LeakId, PowerSourceId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved import `crate::scenario::ids::FeedId`
+  --> crates/idaptik-core/src/scenario/power/test_floor.rs:34:5
+   |
+34 | use crate::scenario::ids::FeedId;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `FeedId` in `scenario::ids`
+
+error[E0432]: unresolved imports `crate::scenario::ids::BreakerId`, `crate::scenario::ids::FeedId`, `crate::scenario::ids::HazardId`, `crate::scenario::ids::LoadId`, `crate::scenario::ids::PowerSourceId`
+  --> crates/idaptik-core/src/scenario/power/mod.rs:45:28
+   |
+45 | use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+   |                            ^^^^^^^^^  ^^^^^^  ^^^^^^^^  ^^^^^^  ^^^^^^^^^^^^^ no `PowerSourceId` in `scenario::ids`
+   |                            |          |       |         |
+   |                            |          |       |         no `LoadId` in `scenario::ids`
+   |                            |          |       no `HazardId` in `scenario::ids`
+   |                            |          no `FeedId` in `scenario::ids`
+   |                            no `BreakerId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+45 - use crate::scenario::ids::{BreakerId, FeedId, HazardId, LoadId, PowerSourceId, RoomId, SignalId};
+45 + use crate::scenario::ids::{BreakerId, FeedId, HazardId, LeakId, PowerSourceId, RoomId, SignalId};
+   |
+
+error[E0432]: unresolved import `crate::scenario::ids::LoadId`
+  --> crates/idaptik-core/src/scenario/sim/power.rs:25:28
+   |
+25 | use crate::scenario::ids::{LoadId, RoomId, SignalId};
+   |                            ^^^^^^ no `LoadId` in `scenario::ids`
+   |
+help: a similar name exists in the module
+   |
+25 - use crate::scenario::ids::{LoadId, RoomId, SignalId};
+25 + use crate::scenario::ids::{LeakId, RoomId, SignalId};
+   |
+
+   Compiling crypto-common v0.2.2
+   Compiling const-oid v0.10.2
+   Compiling bytes v1.12.1
+   Compiling digest v0.11.3
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling pin-project-lite v0.2.17
+   Compiling rand v0.10.2
+   Compiling idna_adapter v1.2.2
+   Compiling sha1 v0.11.0
+   Compiling httparse v1.10.1
+   Compiling http v1.4.2
+   Compiling socket2 v0.6.5
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.34
+   Compiling percent-encoding v2.3.2
+   Compiling data-encoding v2.11.0
+   Compiling futures-core v0.3.34
+   Compiling futures-sink v0.3.34
+   Compiling futures-util v0.3.34
+   Compiling tungstenite v0.30.0
+   Compiling form_urlencoded v1.2.2
+   Compiling tokio v1.54.1
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling tokio-tungstenite v0.30.0
+   Compiling burble-client v2.0.0 (https://github.com/metadatastician/burble?rev=ef6756cf1591406d434c5c04c3c018e935836e4c#ef6756cf)
+   Compiling predicates-core v1.0.10
+   Compiling regex-automata v0.4.15
+For more information about this error, try `rustc --explain E0432`.
+   Compiling difflib v0.4.0
+error: could not compile `idaptik-core` (lib) due to 5 previous errors
+warning: build failed, waiting for other jobs to finish...
+test-front exit: 101
