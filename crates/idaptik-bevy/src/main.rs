@@ -100,14 +100,9 @@ fn main() -> AppExit {
     };
 
     let mut app = App::new();
-    // No audio yet: Bevy's audio plugin opens the default output device at
-    // startup even when nothing plays, which grabs it from the desktop's
-    // sound server. Add it back when the game has sound.
-    app.add_plugins(
-        DefaultPlugins
-            .set(window_plugin)
-            .disable::<bevy::audio::AudioPlugin>(),
-    );
+    // This frontend enables Bevy's 2D and UI feature sets only. Add the audio
+    // feature and plugin deliberately when gameplay sound ships.
+    app.add_plugins(DefaultPlugins.set(window_plugin));
 
     if let Some(netplay_cfg) = netplay_config {
         // Multiplayer mode

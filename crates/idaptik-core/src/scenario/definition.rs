@@ -8,7 +8,8 @@
 //! failed checks into typed [`ValidationError`]s.
 
 use crate::scenario::floor_graph::floor_graph;
-use crate::scenario::ids::{CameraId, DoorId, HideSpotId, ObjectiveId, RoomId, SignalId};
+use crate::scenario::ids::{CameraId, DoorId, HideSpotId, LoadId, ObjectiveId, RoomId, SignalId};
+use crate::scenario::power::{PowerNetworkDef, PowerValidationError};
 use crate::scenario::signal::{SignalNetworkDef, SignalValidationError};
 use crate::scenario::tuning::{
     ActionKind, ActionSpec, DifficultyId, DifficultyPreset, ScoringDef, TuningConstants,
@@ -221,6 +222,11 @@ pub struct ScenarioDefinition {
     /// canonical Ghost Lobby, so its golden and every replay are unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<SignalNetworkDef>,
+    /// The floor's electrical infrastructure (ADR-0016), if it has one. Absent
+    /// everywhere else, so a floor without power — the canonical Ghost Lobby,
+    /// every recorded replay, the exchange house — is byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<PowerNetworkDef>,
     /// When Billy's arrival countdown starts. The canonical floor starts it with
     /// the run; a floor for new players can hold it until the infiltrator has
     /// found their way out of the starting room.
@@ -234,6 +240,35 @@ pub struct ScenarioDefinition {
     /// inside; a floor with one starts the infiltrator on the roof.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exterior: Option<ExteriorDef>,
+    /// The floor's declared infrastructure — water zones, pumps and valves,
+    /// alarms — and the observations actors get from it. Absent on the
+    /// canonical floor, so its golden and every replay are unchanged
+    /// (see [`crate::scenario::infra`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub infra: Option<crate::scenario::infra::InfraDef>,
+    /// A hosted Moletaire companion, when this floor has one. Absent on the
+    /// canonical floor; a floor with one drives the companion sim through the
+    /// typed boundary and folds its events into the world as observations
+    /// (see [`crate::scenario::sim`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mole: Option<MoleHostDef>,
+}
+
+/// A Moletaire companion hosted on this floor: where it starts, whether it
+/// starts underground, and which coprocessor upgrades are fitted before the
+/// run (a stock bay's AudioSynthesiser plays nothing at all).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MoleHostDef {
+    /// Spawn position, canvas x (body centre, like the props).
+    pub spawn_x: f64,
+    /// Start tunnelling rather than on the surface.
+    #[serde(default)]
+    pub underground: bool,
+    /// Coprocessor slots upgraded one rung each, applied at construction in
+    /// declaration order (a `Vec`, so the upgrade order is content, not map
+    /// iteration).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upgrades: Vec<crate::companion::coprocessors::CoprocessorType>,
 }
 
 /// Outside the building: the roof the infiltrator starts on, two ways in
@@ -335,6 +370,73 @@ pub enum ValidationError {
     /// A console stands in a room the floor does not have, or outside it.
     ConsoleOffFloor {
         console: String,
+    },
+    /// A water zone names a room the floor does not have.
+    InfraZoneRoomMissing {
+        zone: String,
+        room: RoomId,
+    },
+    /// Two water zones share an id.
+    InfraDuplicateZone(String),
+    /// A water zone's fill time is not a positive, finite number of seconds.
+    InfraZoneTimingInvalid {
+        zone: String,
+    },
+    /// A water zone's room has no automation segment, so its derived valve
+    /// and pump nodes cannot be addressed (see
+    /// [`crate::scenario::floor_graph`]).
+    InfraZoneUnaddressable {
+        zone: String,
+        room: RoomId,
+    },
+    /// A water zone's manual handle does not stand inside the room it
+    /// floods, so nobody could ever reach it to turn it.
+    InfraZoneHandleOffRoom {
+        zone: String,
+        room: RoomId,
+    },
+    /// Two alarms share an id.
+    InfraDuplicateAlarm(String),
+    /// An alarm names a room the floor does not have.
+    InfraAlarmRoomMissing {
+        alarm: String,
+        room: RoomId,
+    },
+    /// A water-triggered alarm names a zone the floor does not declare.
+    InfraAlarmZoneMissing {
+        alarm: String,
+        zone: String,
+    },
+    /// A tamper alarm watches a grounded-network node the floor does not
+    /// carry.
+    InfraAlarmWatchMissing {
+        alarm: String,
+        watch: String,
+    },
+    /// A hosted mole spawns outside the world.
+    MoleSpawnOutOfBounds,
+    /// The floor's power network does not validate.
+    PowerNetwork {
+        errors: Vec<PowerValidationError>,
+    },
+    /// A power element (a source, feed, breaker, load or hazard) names a room
+    /// the floor does not have.
+    PowerRoomMissing {
+        element: String,
+        room: RoomId,
+    },
+    /// A load says it *is* a signal device the floor's signal network does not
+    /// carry. Without that device the load has nothing on the floor to disable.
+    PowerSignalMissing {
+        load: LoadId,
+        signal: SignalId,
+    },
+    /// An interlock watches a signal device the floor does not carry. The host
+    /// only ever reports devices that exist, so a missing one reads as "not
+    /// active" for ever: the interlock would silently never hold.
+    PowerInterlockSignalMissing {
+        interlock: String,
+        signal: SignalId,
     },
 }
 
@@ -587,6 +689,106 @@ impl ScenarioDefinition {
             );
         }
 
+        // --- power network (only when the floor has one) ---------------------
+        if let Some(net) = &self.power {
+            let errors = net.validate();
+            check(
+                &mut checks,
+                "power",
+                "power.valid",
+                "The power network validates",
+                errors.is_empty(),
+                format!("{} load(s), {} problem(s)", net.loads.len(), errors.len()),
+                Some(ValidationError::PowerNetwork { errors }),
+            );
+
+            // Every element that names a room stands in one this floor has.
+            let mut placements: Vec<(String, RoomId)> = Vec::new();
+            for s in &net.sources {
+                if let Some(room) = &s.room {
+                    placements.push((s.id.0.clone(), room.clone()));
+                }
+            }
+            for f in &net.feeds {
+                if let Some(room) = &f.room {
+                    placements.push((f.id.0.clone(), room.clone()));
+                }
+            }
+            for b in &net.breakers {
+                if let Some(room) = &b.room {
+                    placements.push((b.id.0.clone(), room.clone()));
+                }
+            }
+            for l in &net.loads {
+                if let Some(room) = &l.room {
+                    placements.push((l.id.0.clone(), room.clone()));
+                }
+            }
+            for h in &net.hazards {
+                placements.push((h.id.0.clone(), h.room.clone()));
+            }
+            let missing_room = placements
+                .into_iter()
+                .find(|(_, room)| !self.rooms.iter().any(|r| &r.id == room));
+            check(
+                &mut checks,
+                "power",
+                "power.rooms",
+                "Every power element stands in a room on this floor",
+                missing_room.is_none(),
+                format!("missing={missing_room:?}"),
+                missing_room
+                    .map(|(element, room)| ValidationError::PowerRoomMissing { element, room }),
+            );
+
+            // Every load that is a device names a device this floor carries.
+            let missing_signal = net.loads.iter().find_map(|l| {
+                let signal = l.signal.as_ref()?;
+                let present = self
+                    .signal
+                    .as_ref()
+                    .is_some_and(|net| net.device(signal).is_some());
+                (!present).then(|| (l.id.clone(), signal.clone()))
+            });
+            check(
+                &mut checks,
+                "power",
+                "power.signals",
+                "Every powered device exists in the signal network",
+                missing_signal.is_none(),
+                format!("missing={missing_signal:?}"),
+                missing_signal
+                    .map(|(load, signal)| ValidationError::PowerSignalMissing { load, signal }),
+            );
+
+            // Every interlock that watches a signal watches one that exists.
+            // An interlock is a safety rule; one wired to nothing is worse than
+            // none at all, because it reads as protection and holds nothing.
+            let missing_interlock = net.interlocks.iter().find_map(|il| {
+                let signal = match &il.holds_when {
+                    crate::scenario::power::InterlockWhen::SignalActive(sig)
+                    | crate::scenario::power::InterlockWhen::SignalLocked(sig) => sig,
+                    crate::scenario::power::InterlockWhen::LoadOperating(_) => return None,
+                };
+                let present = self
+                    .signal
+                    .as_ref()
+                    .is_some_and(|net| net.device(signal).is_some());
+                (!present).then(|| (il.id.clone(), signal.clone()))
+            });
+            check(
+                &mut checks,
+                "power",
+                "power.interlocks",
+                "Every interlock watches a signal device this floor carries",
+                missing_interlock.is_none(),
+                format!("missing={missing_interlock:?}"),
+                missing_interlock.map(|(interlock, signal)| {
+                    ValidationError::PowerInterlockSignalMissing { interlock, signal }
+                }),
+            );
+        }
+
         // --- consoles stand inside the room they name (only when present) ---
         if !self.consoles.is_empty() {
             let off = self.consoles.iter().find(|c| match &c.place {
@@ -609,7 +811,220 @@ impl ScenarioDefinition {
             );
         }
 
+        // --- infrastructure (only when the floor declares any, so a floor
+        // without it reports exactly the checks it always did) ---------------
+        if let Some(infra) = &self.infra {
+            self.validate_infra(infra, &mut checks);
+        }
+
+        // --- hosted companion (only when the floor has one) -----------------
+        if let Some(mole) = &self.mole {
+            let inside = mole.spawn_x >= 0.0 && mole.spawn_x <= self.world.width;
+            check(
+                &mut checks,
+                "mole",
+                "mole.spawn_in_bounds",
+                "A hosted mole spawns inside the world",
+                inside,
+                format!("spawn_x={}", mole.spawn_x),
+                Some(ValidationError::MoleSpawnOutOfBounds),
+            );
+        }
+
         ValidationReport { checks }
+    }
+
+    // Infrastructure-dependent checks (only run when `infra` is present).
+    // Each check reports the first violation in its family, matching the rest
+    // of the suite. Dangling references, duplicates, timing and addressability
+    // are the level-authoring surface's business: a zone nobody can reach or
+    // an alarm watching a node that does not exist is invalid content, not an
+    // intended challenge.
+    /// Append checks for zone and alarm ids, room and trigger references,
+    /// fill times, network addressability, and manual handle placement.
+    /// Each check records only its first violation.
+    fn validate_infra(&self, infra: &crate::scenario::infra::InfraDef, checks: &mut Vec<Check>) {
+        // Zones: unique ids.
+        let dup_zone = infra
+            .water_zones
+            .iter()
+            .enumerate()
+            .find(|(i, z)| infra.water_zones.iter().take(*i).any(|e| e.id == z.id))
+            .map(|(_, z)| z.id.clone());
+        check(
+            checks,
+            "infra",
+            "infra.zones.unique_ids",
+            "Water zone ids are unique",
+            dup_zone.is_none(),
+            dup_zone
+                .as_ref()
+                .map(|z| format!("duplicate {z}"))
+                .unwrap_or_else(|| "all unique".into()),
+            dup_zone.map(ValidationError::InfraDuplicateZone),
+        );
+
+        // Zones: rooms exist.
+        let room_missing = infra
+            .water_zones
+            .iter()
+            .find(|z| !self.rooms.iter().any(|r| r.id == z.room));
+        check(
+            checks,
+            "infra",
+            "infra.zones.rooms_known",
+            "Every water zone floods a room the floor has",
+            room_missing.is_none(),
+            room_missing
+                .as_ref()
+                .map(|z| format!("{} -> {}", z.id, z.room))
+                .unwrap_or_else(|| "all known".into()),
+            room_missing.map(|z| ValidationError::InfraZoneRoomMissing {
+                zone: z.id.clone(),
+                room: z.room.clone(),
+            }),
+        );
+
+        // Zones: positive finite fill times.
+        let bad_time = infra
+            .water_zones
+            .iter()
+            .find(|z| !(z.fill_time.is_finite() && z.fill_time > 0.0));
+        check(
+            checks,
+            "infra",
+            "infra.zones.timing",
+            "Every water zone fills in a positive, finite time",
+            bad_time.is_none(),
+            bad_time
+                .as_ref()
+                .map(|z| format!("{} fill_time={}", z.id, z.fill_time))
+                .unwrap_or_else(|| "all timed".into()),
+            bad_time.map(|z| ValidationError::InfraZoneTimingInvalid { zone: z.id.clone() }),
+        );
+
+        // Zones: addressable — the room's automation segment exists, so the
+        // derived valve/pump nodes the floor graph mints are reachable at all.
+        let graph = floor_graph(self);
+        let unaddressable = infra.water_zones.iter().find(|z| {
+            graph
+                .node(crate::scenario::floor_graph::valve_node_id(&z.id).as_str())
+                .is_none()
+        });
+        check(
+            checks,
+            "infra",
+            "infra.zones.addressable",
+            "Every water zone's derived valve/pump nodes are addressable",
+            unaddressable.is_none(),
+            unaddressable
+                .as_ref()
+                .map(|z| format!("{} in {}", z.id, z.room))
+                .unwrap_or_else(|| "all addressable".into()),
+            unaddressable.map(|z| ValidationError::InfraZoneUnaddressable {
+                zone: z.id.clone(),
+                room: z.room.clone(),
+            }),
+        );
+
+        // Zones: the manual handle stands inside the room it floods. A handle
+        // in the wrong room (or none) is one nobody could ever reach, so the
+        // zone's physical release — one of the ways a floor is meant to be
+        // solvable — would be unreachable content, not a challenge.
+        let off_handle = infra.water_zones.iter().find(|z| {
+            !self
+                .rooms
+                .iter()
+                .any(|r| r.id == z.room && z.valve_x >= r.x && z.valve_x < r.x + r.w)
+        });
+        check(
+            checks,
+            "infra",
+            "infra.zones.handle_in_room",
+            "Every water zone's manual handle stands in the room it floods",
+            off_handle.is_none(),
+            off_handle
+                .as_ref()
+                .map(|z| format!("{} valve_x={} in {}", z.id, z.valve_x, z.room))
+                .unwrap_or_else(|| "all placed".into()),
+            off_handle.map(|z| ValidationError::InfraZoneHandleOffRoom {
+                zone: z.id.clone(),
+                room: z.room.clone(),
+            }),
+        );
+
+        // Alarms: unique ids.
+        let dup_alarm = infra
+            .alarms
+            .iter()
+            .enumerate()
+            .find(|(i, a)| infra.alarms.iter().take(*i).any(|e| e.id == a.id))
+            .map(|(_, a)| a.id.clone());
+        check(
+            checks,
+            "infra",
+            "infra.alarms.unique_ids",
+            "Alarm ids are unique",
+            dup_alarm.is_none(),
+            dup_alarm
+                .as_ref()
+                .map(|a| format!("duplicate {a}"))
+                .unwrap_or_else(|| "all unique".into()),
+            dup_alarm.map(ValidationError::InfraDuplicateAlarm),
+        );
+
+        // Alarms: rooms exist.
+        let alarm_room = infra
+            .alarms
+            .iter()
+            .find(|a| !self.rooms.iter().any(|r| r.id == a.room));
+        check(
+            checks,
+            "infra",
+            "infra.alarms.rooms_known",
+            "Every alarm stands in a room the floor has",
+            alarm_room.is_none(),
+            alarm_room
+                .as_ref()
+                .map(|a| format!("{} -> {}", a.id, a.room))
+                .unwrap_or_else(|| "all known".into()),
+            alarm_room.map(|a| ValidationError::InfraAlarmRoomMissing {
+                alarm: a.id.clone(),
+                room: a.room.clone(),
+            }),
+        );
+
+        // Alarms: references resolve — a water trip names a declared zone, a
+        // tamper trip watches a node the floor graph carries.
+        let bad_ref = infra.alarms.iter().find_map(|a| match &a.trip {
+            crate::scenario::infra::AlarmTrip::Water { zone } => {
+                (!infra.water_zones.iter().any(|z| &z.id == zone)).then(|| {
+                    ValidationError::InfraAlarmZoneMissing {
+                        alarm: a.id.clone(),
+                        zone: zone.clone(),
+                    }
+                })
+            }
+            crate::scenario::infra::AlarmTrip::PowerLost { watch } => (graph
+                .node(watch.as_str())
+                .is_none())
+            .then(|| ValidationError::InfraAlarmWatchMissing {
+                alarm: a.id.clone(),
+                watch: watch.clone(),
+            }),
+        });
+        check(
+            checks,
+            "infra",
+            "infra.alarms.references",
+            "Every alarm's trigger references a zone or node the floor carries",
+            bad_ref.is_none(),
+            bad_ref
+                .as_ref()
+                .map(|e| format!("{e:?}"))
+                .unwrap_or_else(|| "all resolved".into()),
+            bad_ref,
+        );
     }
 
     /// Convenience: `validate().ok()`.

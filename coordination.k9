@@ -1,0 +1,141 @@
+K9!
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 IDApTIK contributors
+metadata:
+  schema: k9-coordination
+  schema_version: 1.2.0
+  generated_by: manual
+  last_updated: 2026-10-25
+
+project:
+  name: "IDApTIK"
+  description: "Deterministic, replayable, cross-platform 2D game runtime and toolkit."
+  license: AGPL-3.0-or-later
+  repo: catachresis-colloquium/IDApTIK
+  deed_ref: "IDApTIK_chora.deed"
+  languages:
+    - Rust
+    - Nickel
+    - Shell
+    - Idris2
+    - Zig
+  build_system: just
+  runtime: rust
+
+build_commands:
+  - command: "just test-ghost"
+    purpose: "Run the Rust core, TUI, FFI, network, and Evil Weevil suites, clippy, and the Rust formatter check."
+  - command: "just fixture-tests"
+    purpose: "Run offline shell, toolchain-parity, coordination, migration-layout, and configuration-security fixtures."
+  - command: "just machine-readable-check"
+    purpose: "Validate DEED, K9 components and Nickel runners against the pinned current standards."
+  - command: "just config-check"
+    purpose: "Validate Nickel configuration and scenario contracts."
+  - command: "just loopback-check"
+    purpose: "Run the required Burble-backed two-seat relay and recovery gate; this is not a skip-if-missing check."
+
+invariants:
+  - id: descriptive-state-home
+    rule: "Keep descriptive project facts in IDApTIK_chora.deed, contractile policies in the six K9 components, and agent instructions in this root coordination.k9 protocol."
+    reason: "These formats have distinct standards, semantics, validators, and discovery paths."
+    severity: critical
+  - id: topology-ownership-authority-separation
+    rule: "Keep network topology, administrative ownership, simulation authority, and optional GSA integration as separate axes."
+    reason: "A network shape or management client does not elect an owner or grant simulation authority."
+    severity: critical
+  - id: all-deployment-profiles
+    rule: "Preserve peer-to-peer, hosted, and federated profiles both with GSA absent and with GSA present."
+    reason: "GSA is optional and cannot be a prerequisite for any deployment topology."
+    severity: critical
+  - id: per-class-state-policy
+    rule: "Specify ownership, hot storage, durability, disposable cache, consistency, partition behavior, and recovery per state class and topology."
+    reason: "BEAM state and ETS, local LMDB, VeriSimDB, and optional Dragonfly have different workloads and authority properties."
+    severity: critical
+  - id: no-false-consensus
+    rule: "Do not describe Dragonfly replication, BEAM clustering, service discovery, or an advisory federation directory as consensus or authority transfer."
+    reason: "A partition must not silently promote a different server to a session authority."
+    severity: critical
+  - id: snif-io-boundary
+    rule: "Keep SNIF guests within bounded computation over host-marshalled values and buffers; keep network and database I/O outside SNIF guests."
+    reason: "SNIF guests are compute/buffer modules, not service or storage adapters."
+    severity: critical
+  - id: implementation-evidence
+    rule: "Describe peer-to-peer transport, hosted authority, federation routing, and GSA runtime integration as unimplemented until code and tests prove otherwise."
+    reason: "The current live multiplayer path is relay-only and both clients simulate."
+    severity: critical
+  - id: license-review
+    rule: "Preserve the repository's code, documentation, and workflow license boundaries; ask before changing licensing terms."
+    reason: "The three license layers are intentional project governance."
+    severity: high
+  - id: agent-scope
+    rule: "Agents may edit source, tests, documentation, and configuration within the requested task scope; never commit secrets or request silent destructive changes."
+    reason: "Routine repository work is permitted while external and destructive boundaries remain explicit."
+    severity: critical
+  - id: fail-closed-validation
+    rule: "Do not silently skip a required validator when its tool is missing, and rerun the relevant checks after fixes."
+    reason: "A skipped check is not evidence of conformance."
+    severity: critical
+
+protected:
+  - path: IDApTIK_chora.deed
+    reason: "Canonical descriptive state for this repository."
+  - path: coordination.k9
+    reason: "Root source of agent coordination instructions."
+  - path: .machine_readable/contractiles/
+    reason: "Canonical location of the six K9 policy components and paired Nickel runners."
+  - path: crates/idaptik-core/
+    reason: "Deterministic gameplay authority and replay contract."
+  - path: crates/idaptik-net/src/deployment.rs
+    reason: "Declarative model of independent deployment axes and state-placement policy."
+  - path: docs/adr/0015-deployment-topologies-and-state-ownership.md
+    reason: "Current topology, GSA, SNIF, and per-state-class storage contract."
+  - path: docs/MULTIPLAYER-TROUBLESHOOTING.md
+    reason: "Existing multiplayer and WSLg Copy Mode recovery guidance."
+
+innervation:
+  afferent:
+    - signal: "Source, configuration, test, or CI evidence changes"
+      description: "Review whether the project deed and contractile evidence pointers remain accurate."
+      triggers_on: "A change to implementation, architecture, toolchain, or workflow results."
+      consumers:
+        - idaptik-agent
+  efferent:
+    - signal: "Implementation status or CI evidence materially changes"
+      action: "Refresh the descriptive project deed and retain the authoritative evidence path."
+      auto_fix: false
+  reflex:
+    - trigger: "Before committing"
+      guard: "just fixture-tests and just must-check; run just machine-readable-check when metadata changes."
+      action: "Block on critical failures, repair the cause, and rerun the relevant checks."
+
+do_not_create:
+  - pattern: **/*.a2ml
+    reason: "The retired legacy format has no active reader; its content is classified into the project deed, K9 components, or coordination protocol."
+  - pattern: k9iser.toml
+    reason: "Do not restore the legacy wrapper; validate current K9 Nickel components against the pinned standards contract."
+  - pattern: .machine_readable/descriptiles/
+    reason: "Descriptive state belongs in the single root project deed, not split into category files."
+  - pattern: **/k9.abnf
+    reason: "The pinned K9 component contract is Nickel; do not invent a component ABNF."
+  - description: "A new storage service used as a universal authority for every state class."
+    reason: "Select storage per state class, topology, consistency, durability, and recovery needs."
+  - description: "Network or database access from inside a SNIF guest."
+    reason: "Network and database I/O stay in host-side adapters."
+
+terminology:
+  - correct: IDApTIK_chora.deed
+    incorrect:
+      - STATE.deed
+      - META.deed
+      - PROJECT-BINDING.deed
+    context: "All descriptive project state belongs in the single root repo deed."
+  - correct: coordination.k9
+    incorrect:
+      - coordination.yaml
+      - coordination.k9.ncl
+    context: "The root protocol follows the current coordination ABNF and is not a K9 component."
+  - correct: K9-component
+    incorrect:
+      - K9-ABNF
+      - k9iser-manifest
+    context: "K9 components are Nickel contracts; the coordination protocol has its own ABNF."

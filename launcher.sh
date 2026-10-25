@@ -2,44 +2,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
-# @a2ml-metadata begin
-# (
-#   id                   = "idaptik-launcher"
-#   type                 = "launcher"
-#   version              = "0.4.2"
-#   app-name             = "idaptik"
-#   app-display          = "IDApTIK"
-#   app-url              = ""
-#   standards-compliance = [
-#     "launcher-standard.adoc"
-#     "LM-LA-LIFECYCLE-STANDARD.adoc"
-#     "cross-platform-system-integration-modes"
-#     "fallback-ladder-keepopen"
-#   ]
-#   modes = [
-#     "--start"
-#     "--stop"
-#     "--status"
-#     "--doctor"
-#     "--repair"
-#     "--flowdiags"
-#     "--man"
-#     "--auto"
-#     "--browser"
-#     "--web"
-#     "--integ"
-#     "--disinteg"
-#     "--help"
-#     "--version"
-#   ]
-#   platforms = ["linux" "macos" "windows"]
-#   lifecycle-phases-covered = ["install" "run" "stop" "status" "uninstall"]
-#   lifecycle-phases-deferred = ["warmup" "personalize" "update" "repair"]
-#   desktop-file-permissions = 444
-#   integrity-verification   = "verify-desktop-integrity.sh"
-# )
-# @a2ml-metadata end
-
 set -euo pipefail
 
 APP_NAME="idaptik"

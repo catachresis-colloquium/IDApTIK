@@ -16,6 +16,7 @@ use crate::scenario::definition::ScenarioDefinition;
 use crate::scenario::floor_graph::floor_graph;
 use crate::scenario::ids::DoorId;
 use crate::scenario::outcome::Debrief;
+use crate::scenario::power::sim::PowerState;
 use crate::scenario::rng::InitRoll;
 use crate::scenario::signal::sim::SignalState;
 use crate::scenario::sim::GhostLobbySim;
@@ -70,6 +71,10 @@ pub struct PlayerState {
     /// Seconds spent picking the front door's lock.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub lockpick: f64,
+    /// Seconds spent turning a water zone's manual valve handle. Absent on a
+    /// floor without infrastructure, so its snapshots are unchanged.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub valve_turn: f64,
 }
 
 /// Billy's physical state, FSM bookkeeping and belief meters.
@@ -170,6 +175,57 @@ pub struct VacuumState {
 pub struct ActionState {
     pub cd: f64,
     pub max: f64,
+}
+
+/// A hosted Moletaire companion mid-run: the seed, the tick counter, the RNG
+/// stream and the mutable runtime state — everything that *changes*. The
+/// companion definition is not carried: the host always runs the canonical
+/// [`crate::companion::moletaire`], so re-embedding it per tick would only
+/// bloat the snapshot. [`MoleHostState::to_snapshot`] rebuilds the full
+/// [`crate::companion::MoletaireSnapshot`] that
+/// [`crate::companion::MoletaireSim::restore`] consumes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MoleHostState {
+    pub seed: u32,
+    pub tick: u64,
+    pub rng: crate::scenario::rng::Mulberry32,
+    pub state: crate::companion::MoleRuntimeState,
+}
+
+impl MoleHostState {
+    /// Capture the changing half of a live companion sim.
+    pub fn from_sim(sim: &crate::companion::MoletaireSim) -> Self {
+        Self {
+            seed: sim.seed(),
+            tick: sim.ticks(),
+            rng: sim.rng().clone(),
+            state: sim.state().clone(),
+        }
+    }
+
+    /// Rebuild the full companion snapshot (definition included) for
+    /// [`crate::companion::MoletaireSim::restore`].
+    pub fn to_snapshot(&self) -> crate::companion::MoletaireSnapshot {
+        crate::companion::MoletaireSnapshot {
+            format: crate::companion::MOLETAIRE_SNAPSHOT_FORMAT.to_owned(),
+            definition: crate::companion::moletaire(),
+            seed: self.seed,
+            tick: self.tick,
+            rng: self.rng.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
+
+/// A running diversion: a position, the seconds of pull it has left, and how
+/// loud it is on the noise scale. Today this is the mole's synth decoy, held
+/// in canonical state so every hearer — and every snapshot, replay and
+/// resync — agrees on the same diversion for the same window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiversionState {
+    pub x: f64,
+    pub t: f64,
+    pub intensity: f64,
 }
 
 /// Fixed-key log-throttle timestamps (never a `String` map — determinism).
@@ -289,6 +345,15 @@ pub struct RuntimeState {
     /// Movement and interaction wait until it runs out.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub signal_busy: f64,
+    /// The floor's electrical infrastructure, when the definition carries it
+    /// (ADR-0016). Skipped when absent, so an unpowered run's snapshot is
+    /// byte-identical to one from before power existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<PowerState>,
+    /// Seconds the infiltrator's hands are busy with electrical work, or thrown
+    /// clear of live metal. Movement and interaction wait until it runs out.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub power_busy: f64,
     /// Billy's arrival countdown is held (frozen) until the infiltrator first
     /// leaves the spawn room. Only ever set on a floor that asks for it.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -304,6 +369,28 @@ pub struct RuntimeState {
         skip_serializing_if = "crate::scenario::console::Intel::is_empty"
     )]
     pub intel: crate::scenario::console::Intel,
+    /// The floor's infrastructure runtime — water zones, alarms, and the
+    /// guard's announce-once memory of what it has noticed. Only on a floor
+    /// that declares an [`crate::scenario::infra::InfraDef`]; skipped when
+    /// absent, so an infrastructure-free run's snapshot is byte-identical to
+    /// one from before infrastructure existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub infra: Option<crate::scenario::infra::InfraState>,
+    /// The hosted Moletaire companion, on a floor that declares one. The sim
+    /// constructor builds the live companion and records it here; skipped
+    /// when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mole: Option<MoleHostState>,
+    /// A running diversion (the mole's synth decoy); skipped when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diversion: Option<DiversionState>,
+    /// What the guard has already been *seen to notice*, as observation keys
+    /// (`Kind:room`). Announce-once per episode: a key is inserted when its
+    /// observation first qualifies for the guard's senses and removed when
+    /// the observation ends, so a later recurrence is news again. Empty (and
+    /// skipped) on any floor without infrastructure or a hosted companion.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub guard_noticed: BTreeSet<String>,
 }
 
 impl RuntimeState {
@@ -387,6 +474,7 @@ impl RuntimeState {
                     Place::Floor
                 },
                 lockpick: 0.0,
+                valve_turn: 0.0,
             },
             billy: BillyState {
                 x: def.billy.spawn_x,
@@ -469,10 +557,22 @@ impl RuntimeState {
             result: None,
             signal: def.signal.as_ref().map(SignalState::initial),
             signal_busy: 0.0,
+            power: def.power.as_ref().map(PowerState::initial),
+            power_busy: 0.0,
             arrival_held: def.arrival_clock
                 == crate::scenario::definition::ArrivalClock::LeftSpawnRoom,
             using_console: None,
             intel: crate::scenario::console::Intel::default(),
+            infra: def
+                .infra
+                .as_ref()
+                .map(crate::scenario::infra::InfraState::initial),
+            // The live companion is built by the sim constructor (it needs the
+            // run's seed, which this projection does not carry) and recorded
+            // here from there.
+            mole: None,
+            diversion: None,
+            guard_noticed: BTreeSet::new(),
         }
     }
 }

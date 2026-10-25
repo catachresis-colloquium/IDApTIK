@@ -53,15 +53,22 @@ L	crates/idaptik-core/src/scenario/actor/mod.rs	composed actor behaviour
 L	crates/idaptik-core/src/scenario/actor/belief.rs	actor belief state
 L	crates/idaptik-core/src/scenario/floor_graph.rs	floor navigation graph
 L	crates/idaptik-core/src/scenario/building/mod.rs	building simulation
+L	crates/idaptik-core/src/scenario/building/audit.rs	building authoring reachability and softlock audit; observed directly by audit tests
 L	crates/idaptik-core/src/scenario/building/sim.rs	building tick
 L	crates/idaptik-core/src/scenario/building/graph.rs	building adjacency
 L	crates/idaptik-core/src/scenario/building/network.rs	building network overlay
 L	crates/idaptik-core/src/scenario/console.rs	consoles as equipment and the screen view a seat is shown; observed by tests/consoles.rs
 L	crates/idaptik-core/src/scenario/rooftop.rs	the played Ghost Lobby begun from the roof; the start state every run is graded from
+L	crates/idaptik-core/src/scenario/infra.rs	canonical infrastructure state and actor observation rules; gameplay consequences checked by tests
 L	crates/idaptik-core/src/scenario/signal/mod.rs	signal-network model (ADR-0012): devices wired output-to-input and re-wired in play
 L	crates/idaptik-core/src/scenario/signal/sim.rs	deterministic signal-network runtime; replay-visible, and observed directly by tests/signal_network.rs
+L	crates/idaptik-core/src/scenario/power/mod.rs	electrical-infrastructure model and validator (ADR-0016)
+L	crates/idaptik-core/src/scenario/power/sim.rs	deterministic power-network runtime; observed directly by tests/power_network.rs
 L	crates/idaptik-core/src/scenario/sim/console.rs	per-tick console interaction inside the Ghost Lobby run
 L	crates/idaptik-core/src/scenario/sim/signal.rs	the seam that hosts the signal network inside the run tick
+L	crates/idaptik-core/src/scenario/sim/infra.rs	per-tick infrastructure consequences and guard perception over canonical state
+L	crates/idaptik-core/src/scenario/sim/mole.rs	hosted companion commands and world effects inside the deterministic run
+L	crates/idaptik-core/src/scenario/sim/power.rs	the seam that hosts the power network inside the run tick
 L	crates/idaptik-core/src/companion/sim.rs	Moletaire companion simulation
 L	crates/idaptik-core/src/companion/hunger.rs	companion hunger model
 L	crates/idaptik-core/src/companion/music.rs	companion music model
@@ -80,18 +87,27 @@ L	crates/idaptik-core/src/netsim/session.rs	netsim session state
 L	crates/idaptik-core/src/netsim/topology.rs	topology construction
 L	crates/idaptik-core/src/network.rs	the demo network model
 L	crates/idaptik-core/src/package.rs	package load/run orchestration
+L	crates/idaptik-core/src/scenario/infrastructure/air.rs	deterministic ventilation-infrastructure model and validation
+L	crates/idaptik-core/src/scenario/infrastructure/fixtures.rs	infrastructure fixtures used by the scenario and tests
+L	crates/idaptik-core/src/scenario/infrastructure/mod.rs	infrastructure model, validation, and public surface
+L	crates/idaptik-core/src/scenario/infrastructure/sim.rs	deterministic infrastructure simulation and state transitions
+L	crates/idaptik-core/src/scenario/infrastructure/water.rs	deterministic water-network model and validation
 D	crates/idaptik-core/src/lib.rs	crate root: re-exports and the demo network fixture
 D	crates/idaptik-kernel/src/lib.rs	crate root: re-exports, and the record of the three conditions a crate must meet before Creusot can prove it
 D	crates/idaptik-core/src/device.rs	device newtypes and enums
 D	crates/idaptik-core/src/scenario/mod.rs	scenario re-exports
 D	crates/idaptik-core/src/scenario/ids.rs	id newtypes
+D	crates/idaptik-net/src/deployment.rs	declarative deployment axes and state-class ownership definitions
 D	crates/idaptik-core/src/scenario/constants.rs	tuning constants
 D	crates/idaptik-core/src/scenario/tuning.rs	tuning tables
 D	crates/idaptik-core/src/scenario/definition.rs	serde ScenarioDefinition
 D	crates/idaptik-core/src/scenario/ghost_lobby.rs	Ghost Lobby content
+D	crates/idaptik-core/src/scenario/pump_house.rs	Rivermouth Pump House content; declares infrastructure and companion fixtures
 D	crates/idaptik-core/src/scenario/building/exchange_house.rs	Exchange House content
 D	crates/idaptik-core/src/scenario/signal/ghost_lobby_wiring.rs	the Ghost Lobby's devices as a signal-network fixture, not authored level design
+D	crates/idaptik-core/src/scenario/power/test_floor.rs	the Ghost Lobby's electrical-infrastructure fixture
 D	crates/idaptik-core/src/companion/definition.rs	serde CompanionDefinition
+T	crates/idaptik-evil-weevil/src/scenarios/infra_orders.rs	adversarial corpus scenario: infrastructure orders against the real validators
 B	crates/idaptik-ffi/src/lib.rs	the C ABI; modelled in Idris2 (#117), conformance-tested in Zig
 B	crates/idaptik-net/src/envelope.rs	wire envelope encoding
 B	crates/idaptik-net/src/error.rs	wire error taxonomy
@@ -150,17 +166,24 @@ T	crates/idaptik-core/tests/actor_registry.rs	test
 T	crates/idaptik-core/tests/agent_fusion.rs	test
 T	crates/idaptik-core/tests/arrival_clock.rs	test
 T	crates/idaptik-core/tests/billy_doors.rs	test
+T	crates/idaptik-core/tests/building_audit.rs	test
 T	crates/idaptik-core/tests/building_runtime.rs	test
+T	crates/idaptik-core/tests/challenge_set.rs	test
 T	crates/idaptik-core/tests/common/mod.rs	test support
 T	crates/idaptik-core/tests/consoles.rs	test
 T	crates/idaptik-core/tests/golden_reset.rs	test
 T	crates/idaptik-core/tests/grounded_slice.rs	test
+T	crates/idaptik-core/tests/infra_boundaries.rs	test
+T	crates/idaptik-core/tests/infra_observations.rs	test
+T	crates/idaptik-core/tests/infra_validation.rs	test
 T	crates/idaptik-core/tests/interp.rs	test
 T	crates/idaptik-core/tests/json_roundtrip.rs	test
 T	crates/idaptik-core/tests/mechanics_b.rs	test
+T	crates/idaptik-core/tests/mole_host.rs	test
 T	crates/idaptik-core/tests/moletaire.rs	test
 T	crates/idaptik-core/tests/no_panic_fuzz.rs	test
 T	crates/idaptik-core/tests/phase_asymmetry.rs	test
+T	crates/idaptik-core/tests/power_network.rs	test
 T	crates/idaptik-core/tests/replay_determinism.rs	test
 T	crates/idaptik-core/tests/rng_vectors.rs	test
 T	crates/idaptik-core/tests/scoring_grades.rs	test
@@ -173,5 +196,38 @@ T	crates/idaptik-bevy/tests/frontend_render_smoke.rs	test
 T	crates/idaptik-bevy/tests/interp_parity.rs	test
 T	crates/idaptik-bevy/tests/net_view_smoke.rs	test
 T	crates/idaptik-bevy/tests/parity.rs	test
+T	crates/idaptik-net/tests/mole_routing.rs	test
 T	crates/idaptik-tui/tests/headless_smoke.rs	test
+T	crates/idaptik-tui/tests/infra_script.rs	test
 T	crates/idaptik-tui/tests/net_smoke.rs	test
+T	crates/idaptik-core/tests/infrastructure.rs	infrastructure simulation acceptance and validation tests
+T	crates/idaptik-evil-weevil/src/agent.rs	bounded adversarial testing agent; proposes test intents only
+T	crates/idaptik-evil-weevil/src/bin/evil_weevil.rs	adversarial testing corpus command-line binary
+T	crates/idaptik-evil-weevil/src/enforce.rs	local-only enforcement-policy test model
+T	crates/idaptik-evil-weevil/src/harness.rs	isolated harness that feeds production validators
+T	crates/idaptik-evil-weevil/src/lib.rs	adversarial testing adapter crate root and module documentation
+T	crates/idaptik-evil-weevil/src/limits.rs	bounded adversarial test harness limits
+T	crates/idaptik-evil-weevil/src/observer.rs	read-only classification of test telemetry
+T	crates/idaptik-evil-weevil/src/policy.rs	authorisation policy for isolated test scenarios
+T	crates/idaptik-evil-weevil/src/relay_model.rs	offline reference model for relay acceptance tests
+T	crates/idaptik-evil-weevil/src/report.rs	redacted adversarial test-corpus report model
+T	crates/idaptik-evil-weevil/src/scenarios/epochs.rs	fixed adversarial test scenario for epoch handling
+T	crates/idaptik-evil-weevil/src/scenarios/mod.rs	fixed adversarial test scenario registry and result types
+T	crates/idaptik-evil-weevil/src/scenarios/observations.rs	fixed adversarial test scenario for delayed observations
+T	crates/idaptik-evil-weevil/src/scenarios/reconnect.rs	fixed adversarial test scenario for reconnect and stale frames
+T	crates/idaptik-evil-weevil/src/scenarios/stale.rs	fixed adversarial test scenario for stale and duplicate messages
+T	crates/idaptik-evil-weevil/src/scenarios/targets.rs	fixed adversarial test scenario for impossible targets
+T	crates/idaptik-evil-weevil/src/telemetry.rs	adversarial test telemetry event model
+T	crates/idaptik-evil-weevil/src/wire.rs	raw payload fixtures for production wire-decoder tests
+T	crates/idaptik-net/tests/evil_weevil_relay.rs	loopback regression test comparing the offline relay model to Burble
+T	crates/idaptik-evil-weevil/tests/corpus.rs	fixed adversarial corpus acceptance tests
+T	crates/idaptik-evil-weevil/tests/regression.rs	adversarial adapter invariant and regression tests
+T	crates/idaptik-bevy/tests/button_activation.rs	UI activation observer tests: pointer and keyboard Activate routed to the card verb and the role buttons
+T	crates/idaptik-net/tests/deployment_contract.rs	boundary and negative cases for the declarative ADR-0015 deployment and state-ownership model; claims no running transport
+D	crates/idaptik-persist/src/digest.rs	FNV-1a content digest for definition blobs; deduplication and corruption detection only, never a security boundary
+D	crates/idaptik-persist/src/error.rs	hand-written error enum for the store; four Display arms, no policy
+D	crates/idaptik-persist/src/lib.rs	crate root: module wiring and the schema-version constant; no behaviour of its own
+D	crates/idaptik-persist/src/record.rs	serde records the store keeps (session, command batch, checkpoint) plus the resume and verify reports
+D	crates/idaptik-persist/src/schema.rs	redb table definitions and table names; the on-disk vocabulary, not the logic
+D	crates/idaptik-persist/src/store.rs	durability plumbing beside the tick (open, append, checkpoint, resume, verify); deliberately outside the simulation, and every failure path is loud through verify and tests/persist.rs
+T	crates/idaptik-persist/tests/persist.rs	store tests, including verify_can_fail which proves the others can fail

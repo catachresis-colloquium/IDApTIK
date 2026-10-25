@@ -1,0 +1,17 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; SPDX-FileCopyrightText: 2026 IDApTIK contributors
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "IDApTIK"
+  :repo-uuid #u8"gv-clade-index:github.com/catachresis-colloquium/IDApTIK"
+  :beholding-chora #u5"estate/chora"
+
+  (front-doors
+    :project-deed "IDApTIK_chora.deed"
+    :coordination-protocol "coordination.k9"
+    :human-guide "README.md"
+    :agent-guidance "AGENTS.md")
+
+  (startup
+    :read-order ("coordination.k9" "IDApTIK_chora.deed" "AGENTS.md")
+    :discovery "coordination.k9 is the root agent-coordination protocol; project facts are in IDApTIK_chora.deed."))
