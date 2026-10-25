@@ -97,10 +97,7 @@ fn unrelated_activation_preserves_role_selection_and_its_pending_state() {
         .resource_mut::<RoleSelectionState>()
         .selected_role = Some(Role::Infiltrator);
     let background = BackgroundColor(Color::srgb(0.1, 0.2, 0.3));
-    let target = app
-        .world_mut()
-        .spawn((UiButton::default(), background))
-        .id();
+    let target = app.world_mut().spawn((UiButton, background)).id();
     app.world_mut().trigger(Activate { entity: target });
     let selection = app.world().resource::<RoleSelectionState>();
     assert!(selection.active);
@@ -148,7 +145,7 @@ fn card_app() -> (App, Entity, String, u32) {
         .insert_resource(DeckSelection(Some(node.clone())))
         .init_resource::<CommandQueue>()
         .add_observer(card_press);
-    let button = app.world_mut().spawn((CardVerb, UiButton::default())).id();
+    let button = app.world_mut().spawn((CardVerb, UiButton)).id();
     (app, button, node, index)
 }
 
@@ -180,7 +177,7 @@ fn card_activation_appends_one_hack_per_event_without_mutating_the_simulation() 
 #[test]
 fn card_activation_ignores_other_targets_and_net_view_mode() {
     let (mut app, target, _, _) = card_app();
-    let unrelated = app.world_mut().spawn(UiButton::default()).id();
+    let unrelated = app.world_mut().spawn(UiButton).id();
     app.world_mut().trigger(Activate { entity: unrelated });
     assert!(app.world().resource::<CommandQueue>().pending.is_empty());
     app.world_mut()

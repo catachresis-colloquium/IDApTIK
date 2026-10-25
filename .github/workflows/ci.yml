@@ -317,6 +317,16 @@ jobs:
     name: fmt (rustfmt --check)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      # checks: write publishes the rustfmt diff into this job's own check-run
+      # output. `cargo fmt -- --check` prints the offending hunks to stdout and
+      # exits 1; without this the failure is a bare "exit code 1" that no one
+      # outside the runner can read.
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         run: |
@@ -327,7 +337,32 @@ jobs:
       - name: Provision pinned Rust toolchain (rust-toolchain.toml)
         run: rustup show
       - name: cargo fmt --all -- --check
-        run: cargo fmt --all -- --check
+        run: |
+          set +e
+          cargo fmt --all -- --check > /tmp/fmt.out 2>&1
+          rc=$?
+          set -e
+          cat /tmp/fmt.out
+          if [ "$rc" -ne 0 ]; then
+            # The diff comes first: a truncated annotation must show the hunks
+            # that are actually unformatted, not the tail of a passing run.
+            {
+              echo '### cargo fmt --all -- --check failed (rc='"$rc"')'
+              echo '```diff'
+              head -n 120 /tmp/fmt.out
+              echo '```'
+            } > /tmp/fmt-detail.md
+            cat /tmp/fmt-detail.md >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            detail="$(grep -nE '^Diff in |^error' /tmp/fmt.out | head -20 | tr '\n' ' ' | head -c 1200)"
+            echo "::error::fmt rc=$rc -- $detail"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "fmt (rustfmt --check)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "rustfmt found unformatted code" --arg rc "$rc" --rawfile body /tmp/fmt-detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: $body}}' > /tmp/fmt_patch.json \
+                && gh api --input /tmp/fmt_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
 
   supply-chain:
     name: supply-chain (cargo-deny)
@@ -486,6 +521,16 @@ jobs:
     name: test-ghost (core/tui/ffi + clippy + fmt)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      # checks: write publishes this job's own failure detail into its check-run
+      # output: annotations are capped at ~4 KB and the runner pool does not
+      # expose ::error:: text through the API, so a truncated annotation used to
+      # show 4 KB of *passing* test output before the actual failure.
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         run: |
@@ -505,8 +550,28 @@ jobs:
           set -e
           cat /tmp/test-ghost.log
           if [ "$rc" -ne 0 ]; then
-            detail="$(tail -n 220 /tmp/test-ghost.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 45000)"
+            # Lead with the diagnostic lines, not with the tail: the annotations
+            # API keeps only the first ~4 KB, and the old tail-first capture spent
+            # that budget on passing tests so the real failure was unreadable.
+            {
+              echo '### test-ghost failed (rc='"$rc"') -- error lines'
+              echo '```'
+              grep -nE '^(error(\[|:)|warning: unused|thread .main.|failures:|test .* FAILED)' /tmp/test-ghost.log | head -40 || true
+              echo '```'
+              echo '### last 25 lines'
+              echo '```'
+              tail -n 25 /tmp/test-ghost.log
+              echo '```'
+            } > /tmp/test-ghost-detail.md
+            cat /tmp/test-ghost-detail.md >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            detail="$(tr '\n' ' ' < /tmp/test-ghost-detail.md | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 3600)"
             echo "::error::test-ghost rc=$rc -- $detail"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "test-ghost (core/tui/ffi + clippy + fmt)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "test-ghost failed" --arg rc "$rc" --rawfile body /tmp/test-ghost-detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: $body}}' > /tmp/test_ghost_patch.json \
+                && gh api --input /tmp/test_ghost_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
             exit "$rc"
           fi
       # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
