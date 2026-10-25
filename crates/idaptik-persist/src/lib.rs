@@ -17,9 +17,12 @@
 //!
 //! **Commands are primary; checkpoints are derived.** A checkpoint may be
 //! deleted at any time and rebuilt from `seed + config + commands`. A command
-//! may never be reconstructed from a checkpoint. [`Store::verify`] exists to
-//! keep that true: it replays the log independently of the checkpoints and
-//! reports every disagreement.
+//! may never be reconstructed from a checkpoint. [`Store::verify`] keeps that
+//! true the hard way: it restores a [`GhostLobbySim`] from the earliest
+//! checkpoint, **ticks every logged batch**, and compares the resulting
+//! `RuntimeSnapshot` with each later checkpoint. Checking only the held-button
+//! set would certify a checkpoint whose RNG, actor state or pause flag had
+//! diverged, and the next resume would then continue from corrupt state.
 //!
 //! # Why `seq` and not `tick`
 //!
@@ -44,6 +47,31 @@
 //! checkpoint records `held`, and `resume` rebuilds it by folding the logged
 //! commands through [`idaptik_core::scenario::fold`] rather than reimplementing
 //! "which command changes which button".
+//!
+//! # Why `resume` ticks, rather than folding
+//!
+//! Folding buttons is enough to know what is *held*; it is not enough to know
+//! what *happened*. [`Store::resume`] therefore restores the checkpoint into a
+//! `GhostLobbySim` and runs every later batch through `tick`, the same entry
+//! point `step_sim` uses. The returned snapshot is the state after those
+//! commands, not the checkpoint's own state.
+//!
+//! An earlier version folded the batches and returned the checkpoint snapshot
+//! with `next_seq` past them, which silently discarded every command logged
+//! since the checkpoint — a `Pause`, a `Restart`, or a second of movement. The
+//! review that caught it is why `resume_replays_trailing_commands_into_the_simulation`
+//! exists and why its assertions are about `tick` and position rather than
+//! about the held set.
+//!
+//! # Checkpoints are numbered by boundary, not by command sequence
+//!
+//! [`CheckpointRecord::at`] counts the commands a checkpoint has applied: `0`
+//! is the initial state, `n` means commands `0..n-1` are included. It is a
+//! different quantity from the command log's `seq` and is stored separately.
+//!
+//! An earlier draft used the same `seq` space for both, so checkpointing the
+//! initial state consumed `seq 0` and forced the first command to `seq 1` —
+//! producing a log that `verify` then rejected as `NonZeroStart`.
 //!
 //! # Storage layout
 //!
@@ -78,7 +106,7 @@ pub use record::{
     CheckpointRecord, CommandBatch, FlushPolicy, Resume, SessionId, SessionRecord, SessionStatus,
     SimKind, VerifyIssue, VerifyReport,
 };
-pub use store::Store;
+pub use store::{SessionListing, Store};
 
 /// The persist-schema version. Bumped only when the *layout* changes.
 ///
@@ -88,4 +116,4 @@ pub use store::Store;
 /// than migrating. Snapshots carry the same discipline one level down: a
 /// `idaptik-ghost-lobby-runtime-v2` body does not restore into a v3 build, and
 /// this crate propagates that refusal instead of papering over it.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;

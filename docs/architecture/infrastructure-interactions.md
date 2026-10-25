@@ -3,12 +3,20 @@
 # Infrastructure interactions — the design of record
 
 **Status: design of record. Not implemented.** There is no
-`scenario/infrastructure` module, no `SystemInfrastructure`, no
-`SignalKind::PlantActuator`, and none of the test names below exist in the
-tree. This document specifies behaviour precisely so that the implementation
-can be written against it and checked. Where it states something about the code
-that *does* exist, the file and function are named; where it states something
-about the layer being designed, the word is *must*.
+`SystemInfrastructure`, no `SignalKind::PlantActuator`, and none of the test
+names below exist in the tree. This document specifies behaviour precisely so
+that the implementation can be written against it and checked. Where it states
+something about the code that *does* exist, the file and function are named;
+where it states something about the layer being designed, the word is *must*.
+
+> **Correction (2026-10-25):** a `scenario/infrastructure/` module *now exists*,
+> but it is not this design — it is ADR-0013's water/gas/air runtime
+> (`CompartmentDef`, `OpeningDef`, `WaterNetworkDef`, `AirNetworkDef`,
+> `InfrastructureCommand`), and it is not yet called from the game tick. The
+> reconciliation between the two is argued in
+> [`docs/reviews/2026-10-25-pr165-vs-main.md`](../reviews/2026-10-25-pr165-vs-main.md).
+> What remains unimplemented is precisely this document's layer: capability-typed
+> rules, `AccessReq`, actuator precedence and spoof detection.
 
 | Claim | Status |
 |---|---|

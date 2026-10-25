@@ -1,24 +1,30 @@
 # Handover — accessible physical tampering testbed (2026-10-25)
 
-Status: **inspection complete, no gameplay code written.** This note exists
-because the authoring sessions for this request kept running out of context. It
-says what was found in the tree, what the request still needs, and what the next
-session should do first. Everything below is either cited to a file or marked
-**proposed**.
+Status: **closed — inspection complete, no gameplay code written, handover
+delivered.** This note exists because the authoring sessions for this request
+kept running out of context. It says what was found in the tree, what the
+request still needs, and what the next session should do first. Everything below
+is either cited to a file or marked **proposed**.
+
+The audit was taken at `aa28895` (2026-10-25, morning) and merged as PR #180.
+`main` then moved a long way in the same day. **§0a is the postscript that
+reconciles this note with `63b4364`** — read it before trusting any line below,
+and treat §2–§5 as the record of what was true when the audit was taken, not as
+a description of the tree you are looking at.
 
 Read it with `AGENTS.md` open. That file's invariants ("gameplay truth lives in
 `idaptik-core`", "the session layer is not in this repository", "no Python/Ruby",
 "checks must be able to fail") are not repeated here, only assumed.
 
-## 0. State of the branch, honestly
+## 0. State of the branch when written
 
 | Fact | Value |
 |---|---|
-| Branch | `arena/0639e4ae-idaptik` |
-| HEAD | `aa28895` — "fix(ci): unblock fixtures-and-must past the documentation-claims gate (#161)" |
-| Working tree | clean before this note; this note is the only change |
-| Behind `origin/main` | **1 commit.** `9680a7f` = PR #164, *docs: design the interacting building infrastructure* |
-| Rust toolchain in the authoring sandbox | **absent** (`cargo`, `rustc`, `just`, `nickel` all not found on PATH) |
+| Branch | `arena/0639e4ae-idaptik` (merged to `main` as PR #180; not the branch you are on) |
+| HEAD then | `aa28895` — "fix(ci): unblock fixtures-and-must past the documentation-claims gate (#161)" |
+| Working tree | clean before this note; this note was the only change |
+| Behind `origin/main` then | **1 commit.** `9680a7f` = PR #164, *docs: design the interacting building infrastructure* |
+| Rust toolchain in the authoring sandbox | **absent** in every session of this thread (`cargo`, `rustc`, `just`, `nickel` all not on PATH) |
 
 Two consequences the next session must absorb before touching code:
 
@@ -28,9 +34,92 @@ Two consequences the next session must absorb before touching code:
    verification of it.
 2. **Merge `origin/main` first.** `docs/architecture/building-infrastructure-design.md`
    (864 lines, from #164) is the most relevant existing design document for this
-   request and it is *not* in this checkout — it is on `main`, one commit ahead.
+   request and it was *not* in this checkout — it was on `main`, one commit ahead.
    Its §5 interaction matrix and §8 truth/readout/knowledge planes are the
-   scaffold this feature should reuse rather than reinvent.
+   scaffold this feature should reuse rather than reinvent. (This is done: the
+   design document is in the tree now.)
+
+## 0a. Postscript — the same day, against `63b4364`
+
+`main` advanced from `aa28895` to `63b4364` in the course of 2026-10-25. Most of
+what this note listed as a dependency, a blocker or a warning has changed state.
+What follows is the delta, each line checked against the tree at `63b4364`.
+
+**Landed, and it makes this work smaller:**
+
+- **The power plane exists.** `scenario/power/` (`mod.rs`, `sim.rs`,
+  `test_floor.rs`) is ADR-0016: `SourceDef`/`FeedDef`/`LoadDef`/`BreakerDef`,
+  the one-line arbitration rule `operating = commanded AND energized AND intact
+  AND not interlocked AND warmed up`, and `power::sim::OffReason`
+  (`sim.rs:260`) reporting the *first failed rung* as a readable phrase —
+  `Damaged`, `Disconnected`, `Interlock { label }`, `Unavailable { feed }`,
+  `Isolated { breaker }`, `Unpowered { feed }`, `Restarting { ticks }`,
+  `NoCommand`. That is the vocabulary Slice A needed, so **do not design a
+  second one**. Hosted by the sim as `sim/power.rs`.
+- **Water, gas and air exist.** `scenario/infrastructure/` (ADR-0013) — but see
+  the wiring caveat below.
+- **Moletaire is hosted.** `Command::Mole` (`command.rs:172`), `MoleOp`
+  (`command.rs:122`), `MoleHostState` on `RuntimeState` (`state.rs:383`),
+  `sim/mole.rs`, and the sim owns a private `mole: Option<MoletaireSim>`
+  (`sim/mod.rs:83`), built by `build_mole()`. This **corrects §2.5 and §2.9's
+  premise**: the companion is no longer a seam waiting for a host.
+- **Evil Weevil exists**, twice: `crates/idaptik-evil-weevil` (the sans-IO
+  adversarial corpus, ADR-0017) and `crates/idaptik-weevil` (the host adapter
+  over the kernel's C ABI, plus a headless `idaptik-weevil-replay` binary). See
+  `docs/dev-notes/weevil-integration.md`.
+- **Durable storage exists.** `crates/idaptik-persist` (Tier 1, `redb`) — a store
+  *beside* the tick for command log, checkpoints and replay-safe resume; it is on
+  the `just test-ghost` list precisely so a run that fails to replay is noticed.
+- **The ADR-number collision this note warned about is resolved.** The register
+  is now: 0012 signal network, 0013 water/gas/air, 0014 consequences as
+  observations, 0015 deployment topologies, 0016 electrical, 0017 Evil Weevil,
+  0018 infrastructure interaction rules. The next free number is **0019**.
+- **Every PR in §4 merged.** #162→#181, #163→#177, #164→#164, #165→#165,
+  #166→#166, #167→#167, plus #175 (persist), #184 (guard brain) and #173 (the
+  DEED/K9 metadata migration). #165's disposition was argued in
+  `docs/reviews/2026-10-25-pr165-vs-main.md`; its design documents were kept
+  beside #167's code rather than folded into it. The "work in flight" framing in
+  §4 is now history: keep it for what each PR contained, not for what is pending.
+- **The metadata migration.** `.machine_readable/descriptiles/STATE.a2ml` is
+  retired. Project state now lives in `IDApTIK_chora.deed`, contractile policy in
+  six K9 components under `.machine_readable/contractiles/`, and agent invariants
+  in `coordination.k9`. Any reference to `STATE.a2ml` in this note is a reference
+  to a file that no longer exists — including the one in the §2.5 table.
+
+**Still true, and now blocking rather than pre-emptive:**
+
+- **The script vocabulary is still the gap in §2.8, but narrower than written.**
+  `script.rs::press_command` gained a `mole:*` family (`mole:dig`,
+  `mole:sabotage`, `mole:synth:<index>`, `mole:move:<x>[:under]`,
+  `script.rs:102`). There is still **no token for `Command::Signal`,
+  `Command::Power`, `NetSsh` or `NetHack`.** M0's script-token task in §6 stands,
+  and now has a precedent to copy.
+- **No panel, tamper or serviceability code exists.** `grep -ri 'PanelOpened|
+  PanelClosed'` is empty; the builtin immutability rule is still one comparison,
+  now at `signal/sim.rs:530` (`if self.state.links[i].builtin { return
+  Err(SignalDenyReason::Hardwired) }`) — the line reference in §2.9 and §5
+  ("~515") is stale, the rule is unchanged. So M1 is untouched and still the
+  right first step.
+- **No device revision on any command.** Unchanged.
+- **The wiring caveat, and it is the big one.** `scenario/infrastructure/`
+  and `scenario/power/` are in the tree, but power is not driven on any shipped
+  floor and the infrastructure runtime is not called from the game tick — see
+  open issue **#192** ("the off-reason reaches no player, and no shipped floor is
+  powered") and `docs/reviews/2026-10-25-pr165-vs-main.md` ("no
+  `system_infrastructure`, no signal bridge, no `BuildingRuntime` call site").
+  **A tamper slice that assumes a live power simulation would be built on a
+  module nobody runs.** M2's first task is therefore "give the corridor a powered
+  floor", not "use the existing power".
+- **Open, and they touch this work:** issue #192 above; #196 (electrical id
+  domains + current-base Rust integration checks); #197 (PR #186 recovery
+  integrity); #198 (branch pruning, owner-approved); #191/#188 (EW-06 assumes an
+  observation Billy cannot make). Read #192, #196 and #191 before adding state
+  to `scenario/power/`.
+
+**One correction to the request's own vocabulary, worth keeping:** the request's
+"distinguish removed fuse / protective trip / disconnected supply / broken load"
+maps almost exactly onto `OffReason`'s eight rungs. Use them; do not add a
+parallel fault enum.
 
 ## 1. What the request is, in one paragraph
 
@@ -152,7 +241,7 @@ not become a floating building overlay.
 | Inventory | No inventory system in `idaptik-core`. `PlayerState` carries `has_note`, `has_usb` (`state.rs:48`), nothing else. |
 | Tools (screwdriver, keys) | None. No tool items, no tool-gated interaction anywhere. |
 | Moletaire's equipment | Exists as a *single-slot* enum, seven items (`companion/equipment.rs`): Skateboard, Glider, BatteringRam, Beacon, Rucksack, FlashCamera, PlasmaCutter. No screwdriver, no fuse. Five-slot coprocessor bay in `companion/coprocessors.rs`. |
-| Moletaire wired into play | **Not.** `STATE.a2ml`: `moletaire = { status = "tested-seam", notes = "…not wired into GhostLobbySim." }`. Its `MoleCommand::SabotageCable` / `MoleEvent::CableSabotaged { cable_id: String }` carry an **opaque string no circuit knows** (#164 §1.2). |
+| Moletaire wired into play | Was **not** wired when this audit was taken — the status source said `tested-seam`. **Changed on 2026-10-25:** the companion is now hosted (`Command::Mole`, `MoleHostState`, `sim/mole.rs`) — see §0a. Its `MoleCommand::SabotageCable` / `MoleEvent::CableSabotaged { cable_id: String }` still carry an **opaque string no circuit knows** (#164 §1.2), and that part has not changed. |
 | Busy / occupied hands | Exists only for wiring: `signal_busy` + `Disallow Busy`. Also `PlayerState::interaction_progress` and `lockpick` for the note and front door. There is no general "work in progress on a device" object, no interruption model, no "someone else is working here" model. |
 
 **Implication:** fuses "as identifiable components/items where the inventory
@@ -234,10 +323,12 @@ and evidence planes**, not a replacement cognitive system.
   `final_snapshot`) and `replay.rs` (run twice, compare, optionally match a
   recorded log).
 - **Sharp gap:** the script vocabulary (`idaptik-tui/src/script.rs`,
-  `press_command`) has **no token for `Command::Signal`, `NetSsh` or `NetHack`.**
-  Headless replay therefore cannot currently exercise wiring, let alone panel
-  work. Any new panel command needs a script token, or the "headless replay and
-  meaningful tests" deliverable is blocked on it.
+  `press_command`) had **no token for `Command::Signal`, `NetSsh` or `NetHack`.**
+  Headless replay therefore cannot exercise wiring, let alone panel work. Any new
+  panel command needs a script token, or the "headless replay and meaningful
+  tests" deliverable is blocked on it. **Partly fixed on 2026-10-25:** a `mole:*`
+  token family landed (`script.rs:102`); signal, power and net verbs still have
+  none. See §0a.
 
 ### 2.9 The immutability rule the request asks about — found
 
@@ -301,9 +392,12 @@ Read off the tree, in the order they will bite:
    is missing **fails** — so `must_check.sh` will report failures in a sandbox
    without cargo, by design).
 
-## 4. Work in flight that this feature has to reconcile with
+## 4. Work in flight that this feature had to reconcile with
 
-Five open PRs, all touching the same ground. Fetched and read; none merged.
+*Historical. When this audit was taken, five PRs touching the same ground were
+open and were fetched and read. All of them merged the same day (see §0a). The
+table is kept because it records what each contained at the time, which is what
+the reconciliation argument was built on.*
 
 | PR | Branch | What it actually contains | Relation to this request |
 |---|---|---|---|
@@ -314,14 +408,17 @@ Five open PRs, all touching the same ground. Fetched and read; none merged.
 | [#166](https://github.com/metadatastician/IDApTIK/pull/166) | `arena/cb226ff1-idaptik` | `idaptik-evil-weevil` crate: five deterministic adversarial scenarios over session/movement/epoch/reconnect/observation rules, four permission-separated realms | The request's "integrate Evil Weevil only where its adapter exists" — **it does not exist on `main`**; it is this PR. ADR-0013 too |
 | [#167](https://github.com/metadatastician/IDApTIK/pull/167) | `arena/a7c1a66b-idaptik` | Water/gas/air runtime in `scenario/infrastructure/` | Out of scope for this request beyond noting it claims the same module namespace |
 
-**Two warnings.**
+**Two warnings** — both were accurate when written; the first has since been
+resolved.
 
-1. **Three unmerged PRs each claim ADR-0013** (#162 title, #163
+1. **Three unmerged PRs each claimed ADR-0013** (#162 title, #163
    `0013-infrastructure-consequences-as-observations.md`, #165
    `0018-infrastructure-interaction-rules.md`, #166 title). `docs/adr/README.md`
-   says "take the next number" and the next free number is 0013. Whatever this
-   feature's decision record is, **take a number only after those land**, or it
-   collides three ways.
+   says "take the next number" and the next free number was 0013. **Resolved on
+   2026-10-25** by renumbering: 0013 water/gas/air, 0014 consequences as
+   observations, 0015 deployment topologies, 0016 electrical, 0017 Evil Weevil,
+   0018 infrastructure interaction rules. The next free number is **0019**, and
+   `IDApTIK_chora.deed` carries the register that must be updated with it.
 2. **Do not stack a 5,000-line WIP branch under this feature.** #162/#163/#165/
    #167 all rewrite or claim `scenario/` module space and are BLOCKED/UNKNOWN
    for merge. Build the tamper slice on `main` + #164's design doc, and reuse
@@ -329,6 +426,9 @@ Five open PRs, all touching the same ground. Fetched and read; none merged.
    merge.
 
 ## 5. Gap analysis against the request, in one table
+
+*The "Today" column is as of the audit (`aa28895`). §0a lists everything that
+moved afterwards; the verdicts below survived it except where §0a says so.*
 
 | Request | Today | Verdict |
 |---|---|---|
@@ -359,9 +459,13 @@ Ordered so that each step is independently mergeable and the corridor becomes
 playable as early as possible. **Proposed**, not agreed. Definitions of done are
 written so a check can fail.
 
+*Progress since: M0's first bullet is done (merge upstream — five PRs landed);
+M1 is untouched; M2's power task changed shape because the power module exists
+but is not yet driven by any shipped floor (see §0a and issue #192).*
+
 ### M0 — reconcile and unblock (half a session)
 
-- Merge `origin/main` into the session branch.
+- ~~Merge `origin/main` into the session branch.~~ Done on 2026-10-25.
 - Read `docs/architecture/building-infrastructure-design.md` §5 and §8; decide
   whether the corridor lives in `GhostLobbySim` (scenario) or in a new
   consolidated runtime (#164 §7.2 sketches one). **Recommendation: build the
@@ -402,14 +506,19 @@ one value:
 | switch physical position | panel/device state (`truth`) |
 | outgoing control signal | `SignalState` wire level |
 | receiving device's *requested* state | signal-driven input latch |
-| power and fault | #162's vocabulary (`energized`, `intact`, `isolated`, `tripped`) |
+| power and fault | `scenario/power/`'s `OffReason` (`sim.rs:260`) — its eight rungs are exactly the distinctions the request asks for |
 | actual physical state | sim truth the renderer draws |
 
 The UI rule from the request — *"must not claim a door opened if its actuator
 could not operate"* — is a readout rule: the panel shows *requested*, the world
-shows *actual*, and the discrepancy is where the player learns something. Write
-the sentence generator once (`is off — <first failed rung>`, per #162) and reuse
-it.
+shows *actual*, and the discrepancy is where the player learns something. The
+sentence generator already exists (`OffReason::phrase()`); reuse it rather than
+writing a second one.
+
+**The live caveat (issue #192):** `scenario/power/` is not driven by any shipped
+floor, and `OffReason` reaches no player yet. A corridor that wants a light to go
+out *because the feed is dead* has to be the first floor that actually powers
+one, or the slice will be demonstrating a sentence nobody prints.
 
 - **Done when** the corridor's switch drives its light through one wire, power
   removal makes the light *not* light while the switch still shows *on*, a
@@ -552,10 +661,17 @@ channel-gated spread. Check that before building on it.
    New optional state must be absent-when-default, and any golden that *must*
    change needs its ignored regeneration test run and the change justified in the
    PR body.
-6. **Do not add `scenario/infrastructure/`** — that path is claimed by open PR
-   #167. Likewise the `scenario/infra.rs` name is #163's.
-7. **The branch name is fixed** (`arena/0639e4ae-idaptik`) and this session is
-   tracked by it; work continues there, PRs open from it.
+6. **`scenario/infrastructure/` and `scenario/power/` now exist.** Do not create
+   a second plant or a second power model beside them, and do not assume either
+   one runs: neither is called from the game tick on a shipped floor (#192).
+7. **The branch name is fixed per session** (`arena/<id>-idaptik`) and each
+   session is tracked by its own; work continues on the session's branch and PRs
+   open from it. This note's branch, `arena/0639e4ae-idaptik`, merged as #180 and
+   is not the branch you are on.
+8. **The metadata files are DEED/K9 now.** There is no `STATE.a2ml`, no
+   `.machine_readable/descriptiles/`, and no `k9iser.toml`; `just
+   machine-readable-check` and `tests/machine_readable_migration_test.sh` both
+   fail if one reappears. Project state goes in `IDApTIK_chora.deed`.
 
 ## 11. One-line summary for whoever picks this up
 
@@ -566,3 +682,17 @@ panel-as-object with a serviceability permission (M1), the five-layer switch/doo
 slice (M2), the staged NPC notice-and-repair pipeline (M3), the developer
 truth/readout/belief view (M4), then cameras, telephony and fuses. Keep the
 existing three planes and the `builtin` rule; extend them, do not replace them.
+
+## 12. Closing position of this thread
+
+Nothing in this request was implemented. What the thread produced is the audit
+(§2), the gap table (§5), a staged plan with failing-test definitions of done
+(§6), a first device/action/observation matrix (§7), the five demonstration beats
+as assertions (§8), and six questions that need an owner ruling before code
+(§9) — plus §0a, which turns the audit into a starting point against the tree as
+it actually stands.
+
+The honest next step is small: give one corridor a powered floor, then M1's
+panel object with the serviceability permission. Everything after that is
+additive.
+

@@ -16,6 +16,7 @@ members = [
     "crates/idaptik-evil-weevil",
     "crates/idaptik-persist",
     "crates/idaptik-bevy",
+    "crates/idaptik-weevil",
 ]
 
 [workspace.package]
@@ -29,6 +30,7 @@ repository = "https://github.com/metadatastician/IDApTIK"
 idaptik-kernel = { path = "crates/idaptik-kernel", version = "0.1.0" }
 idaptik-core = { path = "crates/idaptik-core", version = "0.1.0" }
 idaptik-tui = { path = "crates/idaptik-tui", version = "0.1.0" }
+idaptik-weevil = { path = "crates/idaptik-weevil", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` guarantees bit-exact f64 JSON round-trips (snapshots/exports).
 serde_json = { version = "1", features = ["float_roundtrip"] }
