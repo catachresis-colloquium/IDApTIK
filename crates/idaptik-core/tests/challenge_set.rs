@@ -648,8 +648,8 @@ fn mole_move_to(x: f64) -> Command {
 /// infiltrator flies the mole: synth decoys refresh every half second while
 /// staged underground legs sweep the guard east — each leg waits inside his
 /// 260px hearing for him to close before the next runs — pins him at the
-/// sluice exit, then legs back west and parks him at the pump hall's west
-/// door. Meanwhile the body
+/// gallery's east end, then legs back west and parks him at the pump
+/// hall's west door. Meanwhile the body
 /// leaves the counter, climbs back to the roof, and waits over the hatch
 /// until the guard is beyond hearing of the gallery. The drop, the silent
 /// search and the ride all happen with the guard walking the *wrong* way,
@@ -681,12 +681,26 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
     // decoy — before the next issues: at most 245px at issue, inside
     // hearing, and a badge pause costs only a beat of silence before he
     // re-hears the waiting endpoint on arrival.
-    const EAST_LEGS: [f64; 4] = [560.0, 760.0, 960.0, 1150.0];
-    const WEST_LEGS: [f64; 4] = [900.0, 700.0, 500.0, 390.0];
+    //
+    // The east turn stops at 960, inside the gallery: chasing it asks the
+    // guard to badge D2 and D3 — crossings this run's own leg gates prove
+    // his FSM completes — and never the service exit D4, the one door of
+    // this five-door floor (the front door is door 0, so D4 is door 4)
+    // that he has not been observed to open. The sweep does not need it.
+    const EAST_LEGS: [f64; 3] = [560.0, 760.0, 960.0];
+    const WEST_LEGS: [f64; 4] = [800.0, 640.0, 500.0, 390.0];
     let mut east_started = false;
     let mut east_leg = 0usize;
     let mut sweeping_west = false;
     let mut west_leg = 0usize;
+    // Stall dynamics for the budget panic: one snapshot cannot tell a
+    // permanent wall from a slow cycle, so the loop tracks the extremes.
+    let mut max_wait = 0.0_f64;
+    let mut last_wait = 0.0_f64;
+    let mut wait_resets = 0usize;
+    let mut d4_open_ticks = 0usize;
+    let mut lk_updates = 0usize;
+    let mut last_lk = run.sim.state().billy.last_known_x;
     let mut i = 0usize;
     loop {
         let mut immediates = Vec::new();
@@ -721,11 +735,11 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 && run.billy_x() > EAST_LEGS[east_leg] - 145.0
                 && east_leg + 1 == EAST_LEGS.len()
             {
-                // Committed east: within 145px of the sluice exit the chase
-                // has done its work — the turn-back starts, back to the pump
-                // hall's west door, far from the hatch and the chute. (The
-                // interior legs keep the tight 45px gate: that is what keeps
-                // the chain inside his hearing.)
+                // Committed east: within 145px of the gallery's east end
+                // the chase has done its work — the turn-back starts, back
+                // to the pump hall's west door, far from the hatch and the
+                // chute. (The interior legs keep the tight 45px gate: that
+                // is what keeps the chain inside his hearing.)
                 sweeping_west = true;
                 immediates.push(mole_move_to(WEST_LEGS[0]));
             }
@@ -760,7 +774,9 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                         "the cooperative line never finished: phase {phase}, tick {i}, \
                          guard {} (last known {}, {:?}, door_wait {}, blocked {:?}), \
                          body at {} ({:?}), mole {:?}, diversion {:?}, legs E{east_leg} \
-                         W{west_leg} west={sweeping_west}, synth {}, denied {}",
+                         W{west_leg} west={sweeping_west}, synth {}, denied {}, \
+                         badges {}, max_wait {max_wait:.2}, resets {wait_resets}, \
+                         d4_open {d4_open_ticks}, lk_updates {lk_updates}",
                         run.billy_x(),
                         run.sim.state().billy.last_known_x,
                         run.sim.state().billy.mode,
@@ -777,6 +793,7 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                             }
                         )),
                         run.count(|e| matches!(e, Event::MoleDenied { .. })),
+                        run.count(|e| matches!(e, Event::BillyBadgedDoor { .. })),
                     );
                     continue;
                 }
@@ -822,7 +839,9 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                         "the cooperative line never finished: phase {phase}, tick {i}, \
                          guard {} (last known {}, {:?}, door_wait {}, blocked {:?}), \
                          body at {} ({:?}), mole {:?}, diversion {:?}, legs E{east_leg} \
-                         W{west_leg} west={sweeping_west}, synth {}, denied {}",
+                         W{west_leg} west={sweeping_west}, synth {}, denied {}, \
+                         badges {}, max_wait {max_wait:.2}, resets {wait_resets}, \
+                         d4_open {d4_open_ticks}, lk_updates {lk_updates}",
                         run.billy_x(),
                         run.sim.state().billy.last_known_x,
                         run.sim.state().billy.mode,
@@ -839,6 +858,7 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                             }
                         )),
                         run.count(|e| matches!(e, Event::MoleDenied { .. })),
+                        run.count(|e| matches!(e, Event::BillyBadgedDoor { .. })),
                     );
                     continue;
                 }
@@ -856,6 +876,21 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
         };
         run.tick(&input);
         i += 1;
+        {
+            let st = run.sim.state();
+            max_wait = max_wait.max(st.billy.door_wait);
+            if st.billy.door_wait < last_wait - f64::EPSILON {
+                wait_resets += 1;
+            }
+            last_wait = st.billy.door_wait;
+            if st.doors.get(4).is_some_and(|d| d.open > 0.0) {
+                d4_open_ticks += 1;
+            }
+            if (st.billy.last_known_x - last_lk).abs() > 0.5 {
+                lk_updates += 1;
+                last_lk = st.billy.last_known_x;
+            }
+        }
         if phase == 5 && run.sim.state().player.place == Place::Floor {
             break;
         }
@@ -864,7 +899,9 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
             "the cooperative line never finished: phase {phase}, tick {i}, \
              guard {} (last known {}, {:?}, door_wait {}, blocked {:?}), \
              body at {} ({:?}), mole {:?}, diversion {:?}, legs E{east_leg} \
-             W{west_leg} west={sweeping_west}, synth {}, denied {}",
+             W{west_leg} west={sweeping_west}, synth {}, denied {}, \
+             badges {}, max_wait {max_wait:.2}, resets {wait_resets}, \
+             d4_open {d4_open_ticks}, lk_updates {lk_updates}",
             run.billy_x(),
             run.sim.state().billy.last_known_x,
             run.sim.state().billy.mode,
@@ -881,6 +918,7 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 }
             )),
             run.count(|e| matches!(e, Event::MoleDenied { .. })),
+            run.count(|e| matches!(e, Event::BillyBadgedDoor { .. })),
         );
     }
 
