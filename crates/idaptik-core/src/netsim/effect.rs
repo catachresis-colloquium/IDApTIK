@@ -25,6 +25,7 @@ pub enum Effect {
     WaterReleased(String),
 }
 
+/// Map an actuation to its immediate effect on `id`, without a power cascade.
 fn direct(act: Actuation, id: &str) -> Effect {
     let id = id.to_string();
     match act {

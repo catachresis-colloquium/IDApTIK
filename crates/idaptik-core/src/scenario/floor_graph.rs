@@ -183,6 +183,9 @@ fn authored() -> GroundedGraph {
 
 /// The floor's grounded graph: the authored network structure, plus one node
 /// per door, light, camera and the vacuum, derived from `def`.
+/// Declared water zones add an actuable valve and a passive pump on their
+/// room's automation segment. Fixtures with no segment or usable address
+/// are omitted.
 pub fn floor_graph(def: &ScenarioDefinition) -> GroundedGraph {
     let mut graph = authored();
     let mut nodes: Vec<Node> = Vec::new();

@@ -98,6 +98,11 @@ pub fn button_from(name: &str) -> Option<Button> {
 
 /// Resolve a script `press` token to a [`Command`]. Public for the same reason
 /// as [`button_from`]: one token vocabulary, resolved identically everywhere.
+/// Trims whitespace and ignores ASCII case. Supports `hack:<node-index>`,
+/// `mole:dig`, `mole:sabotage`, `mole:synth:<index>`, and `mole:move:<x>[:under]`.
+/// Move coordinates are world-x positions. Unknown tokens and numeric parse
+/// failures return `None`; target existence and order availability are checked
+/// by the simulation.
 pub fn press_command(name: &str) -> Option<Command> {
     match name.trim().to_ascii_lowercase().as_str() {
         "jump" | "w" | "space" => Some(Command::Jump),

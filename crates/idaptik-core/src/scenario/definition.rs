@@ -711,6 +711,9 @@ impl ScenarioDefinition {
     // are the level-authoring surface's business: a zone nobody can reach or
     // an alarm watching a node that does not exist is invalid content, not an
     // intended challenge.
+    /// Append checks for zone and alarm ids, room and trigger references,
+    /// fill times, network addressability, and manual handle placement.
+    /// Each check records only its first violation.
     fn validate_infra(&self, infra: &crate::scenario::infra::InfraDef, checks: &mut Vec<Check>) {
         // Zones: unique ids.
         let dup_zone = infra

@@ -112,6 +112,8 @@ impl GhostLobbySim {
     /// reset roll and emits `RunStarted` + `SeedAnnounced` (drain them with
     /// [`GhostLobbySim::drain_events`] before the first tick, or let the first
     /// tick return them ahead of its own events).
+    /// Returns the definition's validation errors if it is invalid. Companion
+    /// construction errors instead leave the run without a live companion.
     pub fn new(
         def: ScenarioDefinition,
         cfg: RunConfig,
@@ -151,6 +153,8 @@ impl GhostLobbySim {
     /// Rebuild an equivalent sim from a snapshot and its definition. A snapshot
     /// tagged with any other format is refused up front, as a typed error,
     /// rather than left to fail later (or worse, restore wrongly) on shape.
+    /// Also returns definition validation errors. Companion restore errors
+    /// leave no live companion and are not returned as run restore errors.
     pub fn restore(
         def: ScenarioDefinition,
         snap: RuntimeSnapshot,

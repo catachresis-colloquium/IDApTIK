@@ -231,6 +231,8 @@ impl GhostLobbySim {
     /// feet, sparking electrics) do not pull: he is already standing in them.
     /// `None` on a floor without infrastructure or a companion, which keeps
     /// the canonical FSM untouched.
+    /// Sources less than 15 world units away are ignored. The strongest
+    /// eligible observation wins, with the first winning ties.
     pub(crate) fn infra_investigation_target(&self) -> Option<f64> {
         let obs = self.actor_observations(self.state.billy.x);
         let mut best: Option<&Observation> = None;
@@ -310,6 +312,8 @@ impl GhostLobbySim {
 
     /// The water depth at `x`, for frontends and tests reading canonical
     /// state (never a render-side quantity).
+    /// Returns the deepest positive released level as a fraction of full
+    /// depth, or `None` when no released water is present at that position.
     pub fn water_depth_at(&self, x: f64) -> Option<f64> {
         water_at(&self.def, &self.state, x)
     }

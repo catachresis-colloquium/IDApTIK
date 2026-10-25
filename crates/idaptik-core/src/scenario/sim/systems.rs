@@ -73,6 +73,9 @@ impl GhostLobbySim {
     }
 
     // 2. PLAYER ------------------------------------------------------------
+    /// Advance movement, stamina, hiding, and noise by one fixed tick.
+    /// Floor water slows movement and raises movement noise; roof movement
+    /// is unaffected. Rope travel delegates to the rope movement rules.
     pub(super) fn system_player(&mut self, input: &TickInput) {
         let dt = TICK_DT;
         // On the rope the body only goes up or down it.
@@ -226,6 +229,10 @@ impl GhostLobbySim {
     }
 
     // 3. INTERACTIONS ------------------------------------------------------
+    /// Process nearby interactions and their hold progress for one tick,
+    /// emitting resulting events. Exterior handholds take priority outside;
+    /// indoors, props and chute interactions precede valves and consoles.
+    /// May extract the player and end the run.
     pub(super) fn system_interactions(&mut self, input: &TickInput) {
         let dt = TICK_DT;
         let pw = self.def.player.w;
@@ -959,6 +966,9 @@ impl GhostLobbySim {
         }
     }
 
+    /// Choose Billy's next action while assessing. An existing object belief
+    /// takes priority, then player sight or noise, then an audible infrastructure
+    /// source. Otherwise continue patrol. `sees` is the current player sight test.
     fn billy_assess(&mut self, sees: bool) {
         if self.state.billy.belief.is_some() {
             self.state.billy.target = self.state.billy.belief;

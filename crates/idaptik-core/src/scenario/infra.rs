@@ -192,7 +192,8 @@ impl InfraState {
     }
 
     /// Release a zone (idempotent; the first cause is the recorded one).
-    /// Returns `true` when this call is what released it.
+    /// Returns `true` when this call is what released it, or `false` for an
+    /// unknown or already released zone. The water level is unchanged.
     pub fn release(&mut self, zone: &str, cause: ReleaseCause) -> bool {
         let Some(z) = self.zones.get_mut(zone) else {
             return false;
@@ -274,11 +275,9 @@ pub fn room_centre(def: &ScenarioDefinition, room: &str) -> f64 {
 }
 
 /// Whether a room's lights are off right now, from canonical state alone:
-/// the global lights-out flicker, the room's light node dead (power cascade
-/// or a short), or the room's light device switched off over the signal
-/// network. This is the same trio the sim's own sight checks read; it is a
-/// free function so the observation gate and the authoring audit share one
-/// definition of "dark".
+/// the global lights-out flicker or camera lockout, the room's light node dead
+/// (power cascade or a short), or the room's light device switched off over
+/// the signal network.
 pub fn room_unlit(def: &ScenarioDefinition, state: &RuntimeState, room: &str) -> bool {
     if state.lights_flicker > 0.0 || state.camera_lockout > 0.0 {
         return true;
@@ -300,7 +299,8 @@ pub fn room_unlit(def: &ScenarioDefinition, state: &RuntimeState, room: &str) ->
 
 /// The water, if any, at world-x: the deepest released zone in the room the
 /// body stands in. `None` on a floor with no infrastructure, in a room with
-/// no zone, or while every zone is dry.
+/// no zone, or while every zone is dry. Depth is a fraction of full depth
+/// (`0..=1` in normal runtime state), not a distance.
 pub fn water_at(def: &ScenarioDefinition, state: &RuntimeState, x: f64) -> Option<f64> {
     let infra_def = def.infra.as_ref()?;
     let infra = state.infra.as_ref()?;
@@ -402,9 +402,14 @@ pub struct Hearing {
 /// * darkness — the actor's own room, and only when that room is normally
 ///   lit (a room authored dark is not an observation);
 /// * water and equipment failure — the actor's own room (seen);
-/// * unusual noise — any source inside the actor's hearing distance whose
-///   intensity clears the actor's threshold (heard);
-/// * alarms — floor-wide, ungated (an alarm is meant to be heard).
+/// * noise, including sparking equipment and `extra_noise` supplied by the
+///   host — sources strictly inside the hearing distance and strictly above
+///   the loudness threshold (heard);
+/// * alarms — heard at any distance, but still strictly above the threshold.
+///
+/// Returns room observations before heard sources, without deduplication;
+/// sparking equipment may be both seen and heard. Returns an empty list if
+/// the definition has no rooms.
 ///
 /// Nothing here reads the player's hidden state, the command stream, or any
 /// fact outside the actor's room and earshot; an actor fed only this list can
@@ -486,6 +491,8 @@ pub fn observations(
 /// local copy rather than a call into `sim` so this module stays a pure
 /// function of definition and state (and `sim` keeps its crate-private
 /// helper).
+/// Adds `world.room_offset` to `x` before testing room spans. Coordinates
+/// outside all spans fall back to the last room; no rooms yields `None`.
 pub fn room_id_at(def: &ScenarioDefinition, x: f64) -> Option<&str> {
     let cx = x + def.world.room_offset;
     def.rooms

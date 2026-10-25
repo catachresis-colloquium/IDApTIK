@@ -47,6 +47,9 @@ pub fn scenario_for(script: &ScriptFile) -> Result<ScenarioDefinition, String> {
 }
 
 /// Build a sim from a script's config and seed.
+///
+/// Returns an error for an unrecognized difficulty or scenario name, or for
+/// scenario validation failures (prefixed with `invalid scenario:`).
 pub fn build(script: &ScriptFile) -> Result<GhostLobbySim, String> {
     let diff = config::parse_difficulty(&script.difficulty)?;
     let cfg = config::run_config(diff, script.reduced_motion, script.supervised);

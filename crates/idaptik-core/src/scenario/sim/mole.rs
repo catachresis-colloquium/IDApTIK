@@ -38,6 +38,7 @@ impl GhostLobbySim {
     /// Build the live companion from the floor's declaration and the run's
     /// seed, fit its declared upgrades, and record it in canonical state.
     /// Called by `new` and `reset`; a floor with no mole clears both slots.
+    /// Construction errors also clear both slots. Setup events are discarded.
     pub(super) fn build_mole(&mut self) {
         let Some(host) = self.def.mole.clone() else {
             self.mole = None;
@@ -77,6 +78,8 @@ impl GhostLobbySim {
     /// Rebuild the live companion from the canonical state — the `restore`
     /// path. The host record travels inside every snapshot, so a restored
     /// seat resumes the companion's RNG mid-sequence exactly.
+    /// An absent host record or a companion restore error leaves no live mole;
+    /// restore errors are not propagated to the caller.
     pub(super) fn adopt_mole(&mut self) {
         self.mole = self
             .state
@@ -85,9 +88,10 @@ impl GhostLobbySim {
             .and_then(|host| MoletaireSim::restore(host.to_snapshot()).ok());
     }
 
-    /// `Command::Mole` (immediate; self-guards on paused/ended). Refusals are
-    /// typed events, never panics and never silent: which refusal it was is
-    /// how the player learns what the companion can do from here.
+    /// Apply a hosted companion order and update its canonical host record.
+    /// Paused or ended runs silently ignore the order. Otherwise emits
+    /// `MoleDenied` for an absent or dead companion, insufficient digging
+    /// depth, or a synth index unavailable with the fitted upgrade.
     pub(crate) fn mole_command(&mut self, op: MoleOp) {
         if self.paused || self.state.ended {
             return;

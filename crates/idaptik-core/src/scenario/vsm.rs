@@ -302,6 +302,8 @@ impl GhostLobbySupervisor {
     /// Frontend-only events (`ContextHint`, `TutorialCue`) are skipped: they
     /// are excluded from the canonical determinism diff, so counting them
     /// would let two frontends disagree about `observed_events`.
+    /// Sabotage events also update tactic counts and apply director proposals,
+    /// even when the batch contains no objective evidence.
     pub fn ingest(&mut self, events: &[Event]) {
         let mut evidence_changed = false;
         for event in events {
