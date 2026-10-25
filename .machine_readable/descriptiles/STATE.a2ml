@@ -68,6 +68,7 @@ remaining = [
   { item = "Theory-of-mind depth and resource accounting. Any cap must be counted in deterministic units -- inferences or unifications, never milliseconds -- or byte-parity breaks", resolve-by = "before nested belief ships" },
   { item = "Whether affect is state or an annotation on events. The shared contract currently permits only the latter", resolve-by = "before affect enters Rust" },
   { item = "What verification means in the conative path, and the rule that a veto must be an event rather than a silent substitution", resolve-by = "before an action gate ships" },
+  { item = "Infrastructure interactions as capability-typed rules over an optional building sub-network. ADR-0013 is Proposed; the design of record is docs/architecture/infrastructure-interactions.md and the rule catalogue is docs/architecture/infrastructure-rule-catalogue.md. Nothing is implemented and no test in either document has run", resolve-by = "M0 slice: definition, validator and the idaptik-infrastructure/1 loader", ref = "ADR-0013" },
 ]
 
 [route-to-mvp]
