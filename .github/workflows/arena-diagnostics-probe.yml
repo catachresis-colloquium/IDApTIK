@@ -1,0 +1,102 @@
+# TEMPORARY diagnostics probe — delete before merge. The authoring sandbox
+# cannot reach Actions log storage, so gate diagnostics are emitted as
+# workflow-command annotations readable via the check-runs annotations API.
+# No `uses:` reference; not a gate.
+name: Arena diagnostics probe
+
+on:
+  push:
+    branches: ["arena/1287ad93-idaptik"]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        run: |
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" .
+      - name: diagnostics
+        run: |
+          set +e
+          mkdir -p .arena-diagnostics
+
+          # 1. test-ghost recipe, split so each failure mode is captured.
+          cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net \
+            -p idaptik-evil-weevil -p idaptik-persist \
+            > .arena-diagnostics/ghost-test.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/ghost-test.txt
+
+          cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net \
+            -p idaptik-evil-weevil -p idaptik-persist --all-targets -- -D warnings \
+            > .arena-diagnostics/ghost-clippy.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/ghost-clippy.txt
+
+          # 2. Full-workspace fmt (the fmt gate uses --all).
+          cargo fmt --all -- --check > .arena-diagnostics/rustfmt.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/rustfmt.txt
+
+          # 3. Vendor gate's lockfile check, exactly as the gate invokes it.
+          cargo metadata --locked --format-version 1 > /dev/null \
+            2> .arena-diagnostics/lock-check.txt
+          echo "exit=$?" >> .arena-diagnostics/lock-check.txt
+
+          # 4. Workspace-wide compile to catch anything outside test-ghost.
+          cargo test --workspace --no-run > .arena-diagnostics/ws-build.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/ws-build.txt
+
+          # 5. Offline shell suites behind fixtures-and-must.
+          for suite in tests/runtime_doctor_test.sh tests/launcher_fixture_test.sh \
+                       tests/vendor_winit_check_test.sh tests/abi_authority_pin_test.sh \
+                       tests/ci_security_config_test.sh tests/pages_wellknown_test.sh; do
+            echo "===== $suite" >> .arena-diagnostics/shell-suites.txt
+            bash "$suite" >> .arena-diagnostics/shell-suites.txt 2>&1
+            echo "exit=$?" >> .arena-diagnostics/shell-suites.txt
+          done
+          bash scripts/toolchain-parity.sh --self-test \
+            >> .arena-diagnostics/shell-suites.txt 2>&1
+          echo "parity-exit=$?" >> .arena-diagnostics/shell-suites.txt
+          bash scripts/must_check.sh >> .arena-diagnostics/shell-suites.txt 2>&1
+          echo "must-exit=$?" >> .arena-diagnostics/shell-suites.txt
+
+          emit() {
+            local title="$1" file="$2" part=0
+            while true; do
+              local chunk
+              chunk=$(dd if="$file" bs=1 skip=$((part * 3000)) count=3000 2>/dev/null)
+              [ -z "$chunk" ] && break
+              local encoded
+              encoded=$(printf '%s' "$chunk" | base64 | tr -d '\n')
+              echo "::warning title=${title}-part-${part}::${encoded}"
+              part=$((part + 1))
+            done
+          }
+          emit_gzip() {
+            local title="$1" file="$2" part=0
+            gzip -cn9 "$file" | base64 -w0 | fold -w 3000 > .arena-diagnostics/gz.b64
+            while IFS= read -r line || [ -n "$line" ]; do
+              echo "::warning title=${title}-part-${part}::${line}"
+              part=$((part + 1))
+            done < .arena-diagnostics/gz.b64
+          }
+          {
+            grep -E "test result|FAILED|^exit=" .arena-diagnostics/ghost-test.txt
+            grep -E -A4 "panicked|error\[" .arena-diagnostics/ghost-test.txt
+          } | head -80 > .arena-diagnostics/ghost-test-compact.txt
+          emit ghost-test .arena-diagnostics/ghost-test-compact.txt
+          grep -E "^(error|warning)|-->" .arena-diagnostics/ghost-clippy.txt \
+            | head -90 > .arena-diagnostics/ghost-clippy-compact.txt
+          grep -qE "^(error|warning)" .arena-diagnostics/ghost-clippy-compact.txt \
+            && emit ghost-clippy .arena-diagnostics/ghost-clippy-compact.txt || true
+          emit_gzip rustfmt-gz .arena-diagnostics/rustfmt.txt
+          emit lock-check .arena-diagnostics/lock-check.txt
+          emit shell-suites .arena-diagnostics/shell-suites.txt
+          grep -E "^(error|warning)|-->" .arena-diagnostics/ws-build.txt \
+            | head -90 > .arena-diagnostics/ws-build-compact.txt
+          grep -qE "^(error|warning)" .arena-diagnostics/ws-build-compact.txt \
+            && emit ws-build .arena-diagnostics/ws-build-compact.txt || true
+          exit 0
