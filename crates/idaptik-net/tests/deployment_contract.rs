@@ -481,9 +481,24 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::UseInstalledContentOrRefuse,
             R::FetchExactContentDigest,
         ),
+        // ADR-0015: "P2P: no required store. Hosted/federated: local ETS or
+        // optional Dragonfly." A hot store is a server-side affordance; in a
+        // peer-to-peer run there is no server to hold one, and the class is
+        // derived state that recomputes from the authority regardless.
         (
             S::DerivedCache,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::DerivedOnly,
+            H::NotRequired,
+            D::Volatile,
+            None,
+            C::Recomputable,
+            P::CacheMissAndReadSource,
+            R::RecomputeFromAuthority,
+        ),
+        (
+            S::DerivedCache,
+            vec![Hosted, Federated],
             O::DerivedOnly,
             H::EtsOrDragonfly,
             D::Volatile,
@@ -492,9 +507,23 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::CacheMissAndReadSource,
             R::RecomputeFromAuthority,
         ),
+        // Same split, per the same ADR: the bounded ring buffer lives in the
+        // media subsystem of a hosted/federated deployment, and a peer-to-peer
+        // run has no such process to buffer through.
         (
             S::MediaPlayout,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::MediaSubsystem,
+            H::NotRequired,
+            D::SemanticallyDisposableMediaBuffer,
+            None,
+            C::OrderedBoundedMediaFrames,
+            P::DropMediaFrames,
+            R::FlushAndRejoinMedia,
+        ),
+        (
+            S::MediaPlayout,
+            vec![Hosted, Federated],
             O::MediaSubsystem,
             H::BurbleLmdbRingBufferOrEts,
             D::SemanticallyDisposableMediaBuffer,
