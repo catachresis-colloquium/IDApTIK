@@ -805,7 +805,10 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 if run.sim.state().player.place == Place::Roof {
                     phase = 3;
                 }
-                TickInput { immediates, ..Default::default() }
+                TickInput {
+                    immediates,
+                    ..Default::default()
+                }
             }
             3 => {
                 if (run.cx() - 990.0).abs() <= 10.0 {
@@ -860,12 +863,18 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                     );
                     continue;
                 }
-                TickInput { immediates, ..Default::default() }
+                TickInput {
+                    immediates,
+                    ..Default::default()
+                }
             }
             _ => {
                 // Dropped: one settling tick, then the bottom of the loop
                 // breaks out to the search and ride.
-                TickInput { immediates, ..Default::default() }
+                TickInput {
+                    immediates,
+                    ..Default::default()
+                }
             }
         };
         run.tick(&input);
