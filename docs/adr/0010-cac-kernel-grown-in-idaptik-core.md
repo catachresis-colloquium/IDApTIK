@@ -52,9 +52,10 @@ spend effort.
 
 Because it is being grown for eventual extraction, it is held to the kernel's
 fixed-point rule now rather than converted later: the
-`cac-kernel-is-fixed-point` invariant in
-`.machine_readable/contractiles/Mustfile.a2ml` fails the build if `vsm.rs`
-acquires an `f32` or `f64`.
+`cac-kernel-is-fixed-point` clause in
+`.machine_readable/contractiles/must/must.k9.ncl` is executed by
+`scripts/must_check.sh` and fails the build if `vsm.rs` acquires an `f32` or
+`f64`.
 
 Superseding this ADR is the mechanism by which extraction happens. It is not
 paperwork to be skipped: a supersession must state which of T1, T2 and T3 fired

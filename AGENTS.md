@@ -7,12 +7,12 @@ Cargo git dependency, and **this repository contains no Elixir at all**. It is a
 member repository of The Metadatastician estate and adopts that estate's
 governance profile via `docs/PROJECT-GOVERNANCE-BINDING.adoc`.
 
-Read `.machine_readable/0-AI-MANIFEST.a2ml`, `README.md`, `GOVERNANCE.md`,
+Read `coordination.k9`, `IDApTIK_chora.deed`, `README.md`, `GOVERNANCE.md`,
 `.github/MAINTAINERS`, and `docs/PROJECT-GOVERNANCE-BINDING.adoc` before
-editing. Canonical policy lives in the governance documents; machine-readable
-descriptiles mirror declared state and do not outrank them.
+editing. The deed records descriptive project state; K9 components hold
+contractile policy; `coordination.k9` is the root agent-instructions protocol.
 
-Invariants (see `0-AI-MANIFEST.a2ml` for the full list):
+Invariants (see `coordination.k9` and the K9 contractiles):
 
 - Licence layers are deliberate: engine/code is AGPL-3.0-or-later, game
   content is CC-BY-SA-4.0, names/marks (IDApTIK, Moletaire) are trademarked.
@@ -30,7 +30,7 @@ Invariants (see `0-AI-MANIFEST.a2ml` for the full list):
   `.gitignore`, `.gitattributes` and `dependabot.yml` entries that implied
   otherwise were removed on 2026-09-27; the dependabot one had been failing its
   weekly `hex in /server` update for a year because of it.
-- State/metadata belongs under `.machine_readable/`, not the repository root.
+- Descriptive state belongs in the single root `IDApTIK_chora.deed`; keep policy in K9 contractiles and agent instructions in root `coordination.k9`.
 - Contributions come in under DCO 1.1 — sign commits with `git commit -s`
   (see `CONTRIBUTING.md`).
 

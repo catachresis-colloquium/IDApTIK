@@ -208,12 +208,15 @@ fn faults_are_never_hostile_and_enforcement_has_no_remote_arm() {
 }
 
 #[test]
-fn the_signal_relay_drift_remains_a_documented_finding() {
-    // Pins the demonstrated cross-repository gap: burble's idaptik profile
-    // has no Signal entry at the pinned revision. If burble adds it, this
-    // test fails and ADR-0013's defect entry must be re-evaluated.
+fn the_relay_drift_remains_a_documented_finding() {
+    // Pins the demonstrated cross-repository gaps: burble's idaptik profile
+    // has no Signal entry (ADR-0012), and no Mole (ADR-0014) or Power
+    // (electrical infrastructure) entry at the pinned revision. If burble
+    // adds any of them, this test fails and the defect entries in the corpus
+    // runbook must be re-evaluated. Power's seat lives per-op, which a
+    // tag-keyed profile cannot route without splitting the verb.
     assert_eq!(
         idaptik_evil_weevil::relay_model::RelayModel::client_tags_missing_from_relay(),
-        vec!["Signal"]
+        vec!["Signal", "Mole", "Power"]
     );
 }

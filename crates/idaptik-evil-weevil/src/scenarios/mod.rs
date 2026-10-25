@@ -8,6 +8,7 @@
 //! replay artefact.
 
 pub mod epochs;
+pub mod infra_orders;
 pub mod observations;
 pub mod reconnect;
 pub mod stale;
@@ -154,7 +155,8 @@ pub fn finalize(
     }
 }
 
-/// The five-scenario corpus, in the task's order.
+/// The corpus: the five scenarios the task named, then the
+/// infrastructure-orders scenario ADR-0014 added.
 pub fn corpus() -> Vec<Box<dyn Scenario>> {
     vec![
         Box::new(stale::StaleDuplicateScenario),
@@ -162,9 +164,10 @@ pub fn corpus() -> Vec<Box<dyn Scenario>> {
         Box::new(epochs::EpochConflictScenario),
         Box::new(reconnect::ReconnectObsoleteScenario),
         Box::new(observations::WithheldObservationScenario),
+        Box::new(infra_orders::InfraOrdersScenario),
     ]
 }
 
 /// The corpus version, bumped when any scenario's input sequence changes so
 /// replay traces stay interpretable.
-pub const CORPUS_VERSION: u32 = 1;
+pub const CORPUS_VERSION: u32 = 2;

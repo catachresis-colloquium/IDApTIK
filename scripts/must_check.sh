@@ -1,71 +1,263 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Execute the physical-state probes declared in
-# .machine_readable/contractiles/Mustfile.a2ml (the estate `must check` verb).
+# Execute the blocking repository probes declared in
+# .machine_readable/contractiles/must/must.k9.ncl.
 #
-# Each `### probe` block's `- run:` command is executed with bash from the
-# repository root. Probes with severity `critical` gate the exit status;
-# `warning` probes are reported but do not fail the run. A probe whose tool is
-# missing fails — an absent toolchain is a failure, never a skip.
+# K9 clauses carry stable probe IDs, never arbitrary shell. This adapter maps
+# each ID to a reviewed command below. Critical failures block; warning failures
+# are reported without failing. Missing tools are failures, never silent skips.
 
-set -uo pipefail
+set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MUSTFILE="$REPO_DIR/.machine_readable/contractiles/Mustfile.a2ml"
+COMPONENT="$REPO_DIR/.machine_readable/contractiles/must/must.k9.ncl"
+PROBES="$(mktemp)"
+DETAIL="$(mktemp)"
+trap 'rm -f "$PROBES" "$DETAIL"' EXIT
 
-if [ ! -r "$MUSTFILE" ]; then
-  printf 'must: %s is missing\n' "$MUSTFILE" >&2
+if [ ! -r "$COMPONENT" ]; then
+  printf 'must: %s is missing\n' "$COMPONENT" >&2
   exit 2
 fi
 
-# Emit one record per probe: name<TAB>severity<TAB>command
-parse_probes() {
-  awk '
-    /^### / {
-      if (name != "") emit()
-      name = $2
-      severity = "critical"
-      run = ""
+# Parse the deliberately one-line clause records. Commands are selected by the
+# host-side case statement below; no contract text is evaluated as shell.
+if ! awk '
+  # Return the quoted value after the first key = " marker, or an empty
+  # string if the marker or closing quote is missing. Escapes are not decoded.
+  function field(line, key,    pos, rest, end) {
+    pos = index(line, key " = \"")
+    if (!pos) return ""
+    rest = substr(line, pos + length(key " = \""))
+    end = index(rest, "\"")
+    if (!end) return ""
+    return substr(rest, 1, end - 1)
+  }
+  /^[[:space:]]*\{ id = "/ {
+    id = field($0, "id")
+    severity = field($0, "severity")
+    probe = field($0, "probe")
+    if (id == "" || severity == "" || probe == "") {
+      printf "must: malformed K9 clause at line %d\n", FNR > "/dev/stderr"
+      bad = 1
       next
     }
-    /^- run:/     { sub(/^- run:[[:space:]]*/, ""); run = $0; next }
-    /^- severity:/ { sub(/^- severity:[[:space:]]*/, ""); severity = $0; next }
-    END { if (name != "") emit() }
-    function emit() {
-      if (run != "") printf "%s\t%s\t%s\n", name, severity, run
+    if (id in seen) {
+      printf "must: duplicate K9 clause ID %s\n", id > "/dev/stderr"
+      bad = 1
+      next
     }
-  ' "$MUSTFILE"
+    seen[id] = 1
+    printf "%s\t%s\t%s\n", id, severity, probe
+    count++
+  }
+  END {
+    if (count == 0) {
+      print "must: no K9 clauses were parsed" > "/dev/stderr"
+      bad = 1
+    }
+    exit bad
+  }
+' "$COMPONENT" > "$PROBES"; then
+  exit 2
+fi
+
+# grep returns 1 only after searching all inputs without a match. Errors must
+# fail the probe too, including missing files and unmatched manifest globs.
+grep_no_matches() {
+  local status=0
+  grep "$@" || status=$?
+  [ "$status" -eq 1 ]
+}
+
+# Run the repository check selected by probe ID ($1). Return zero on success,
+# 1 for a registered check failure, or 2 for an unknown ID.
+run_probe() {
+  local id="$1"
+  case "$id" in
+    license-present)
+      test -f "$REPO_DIR/LICENSE"
+      ;;
+    license-texts-present)
+      test -f "$REPO_DIR/LICENSES/AGPL-3.0-or-later.txt" \
+        && test -f "$REPO_DIR/LICENSES/CC-BY-SA-4.0.txt"
+      ;;
+    readme-present)
+      test -f "$REPO_DIR/README.md"
+      ;;
+    ai-front-doors-present)
+      test -f "$REPO_DIR/0-AI-MANIFEST.deed" \
+        && test -f "$REPO_DIR/IDApTIK_chora.deed" \
+        && test -f "$REPO_DIR/coordination.k9"
+      ;;
+    governance-docs)
+      test -f "$REPO_DIR/GOVERNANCE.md" \
+        && test -f "$REPO_DIR/.github/MAINTAINERS" \
+        && test -f "$REPO_DIR/CODE_OF_CONDUCT.md" \
+        && test -f "$REPO_DIR/.github/CODEOWNERS"
+      ;;
+    mise-pins-present)
+      test -f "$REPO_DIR/mise.toml" \
+        && grep -q 'zig' "$REPO_DIR/mise.toml" \
+        && grep -q 'elixir' "$REPO_DIR/mise.toml"
+      ;;
+    rust-toolchain-pinned)
+      grep -q 'channel = "1.97.1"' "$REPO_DIR/rust-toolchain.toml" \
+        && grep -q ':rust-toolchain "1.97.1"' "$REPO_DIR/IDApTIK_chora.deed"
+      ;;
+    engine-license-agpl)
+      grep -q 'license = "AGPL-3.0-or-later"' "$REPO_DIR/Cargo.toml"
+      ;;
+    crates-workspace)
+      test -d "$REPO_DIR/crates/idaptik-kernel" \
+        && test -d "$REPO_DIR/crates/idaptik-core" \
+        && test -d "$REPO_DIR/crates/idaptik-ffi" \
+        && test -d "$REPO_DIR/crates/idaptik-tui" \
+        && test -d "$REPO_DIR/crates/idaptik-net" \
+        && test -d "$REPO_DIR/crates/idaptik-evil-weevil" \
+        && test -d "$REPO_DIR/crates/idaptik-bevy"
+      ;;
+    server-and-config)
+      test -d "$REPO_DIR/config" \
+        && test -f "$REPO_DIR/docs/adr/0006-gossamer-host-and-burble-transport.md"
+      ;;
+    adr-records)
+      test -f "$REPO_DIR/docs/adr/0001-toolchain-and-runtime-management.md" \
+        && test -f "$REPO_DIR/docs/adr/0007-versioned-ums-package-boundary.md" \
+        && test -f "$REPO_DIR/docs/adr/0008-select-bevy-and-retire-fyrox.md" \
+        && test -f "$REPO_DIR/docs/adr/0015-deployment-topologies-and-state-ownership.md"
+      ;;
+    rust-formatted)
+      (cd "$REPO_DIR" && cargo fmt --all -- --check)
+      ;;
+    no-authoring-dependency)
+      local prohibited='(idaptik-ums|ums-[[:alnum:]_-]+|slavia-[[:alnum:]_-]+)'
+      # Cover ordinary keys, renamed packages (inline or table form), and
+      # dependency subtables across workspace, target, dev and build scopes.
+      grep_no_matches -E \
+        -e "^[[:space:]]*[\"']?$prohibited[\"']?[[:space:]]*=" \
+        -e "(^|[.,{[:space:]])[\"']?package[\"']?[[:space:]]*=[[:space:]]*[\"']$prohibited[\"']" \
+        -e "^[[:space:]]*\\[.*dependencies[[:space:]]*\\.[[:space:]]*[\"']?$prohibited[\"']?[[:space:]]*\\]" \
+        "$REPO_DIR/Cargo.toml" "$REPO_DIR"/crates/*/Cargo.toml
+      ;;
+    cac-kernel-is-fixed-point)
+      grep_no_matches -E '(^|[^[:alnum:]_])(f32|f64)([^[:alnum:]_]|$)' \
+        "$REPO_DIR/crates/idaptik-core/src/scenario/vsm.rs"
+      ;;
+    package-contract-published)
+      test -f "$REPO_DIR/contracts/idaptik/v1/contract.json" \
+        && test -f "$REPO_DIR/contracts/idaptik/v1/package.schema.json" \
+        && test -f "$REPO_DIR/contracts/idaptik/v1/fixtures/ghost-lobby-scenario.json"
+      ;;
+    machine-readable-dir)
+      test -d "$REPO_DIR/.machine_readable/contractiles"
+      ;;
+    machine-readable-layout)
+      bash "$REPO_DIR/tests/machine_readable_migration_test.sh"
+      ;;
+    contractiles-present)
+      local verb
+      for verb in adjust bust dust intend must trust; do
+        test -r "$REPO_DIR/.machine_readable/contractiles/$verb/$verb.k9.ncl" \
+          && test -r "$REPO_DIR/.machine_readable/contractiles/$verb/$verb.ncl" || return 1
+      done
+      ;;
+    ffi-language-claims-honest)
+      local zig_count idr_count language_list
+      zig_count="$(find "$REPO_DIR" -name '*.zig' -not -path '*/.git/*' -not -path '*/target/*' -not -path '*/vendor/*' -type f | wc -l | tr -d ' ')"
+      idr_count="$(find "$REPO_DIR" -name '*.idr' -not -path '*/.git/*' -not -path '*/target/*' -not -path '*/vendor/*' -type f | wc -l | tr -d ' ')"
+      language_list="$(sed -n 's/.*:languages (\([^)]*\)).*/\1/p' "$REPO_DIR/IDApTIK_chora.deed" | head -n 1)"
+      if [ "$zig_count" -gt 0 ]; then
+        printf '%s\n' "$language_list" | tr ' ' '\n' | grep -qx zig || return 1
+      else
+        ! printf '%s\n' "$language_list" | tr ' ' '\n' | grep -qx zig || return 1
+      fi
+      if [ "$idr_count" -gt 0 ]; then
+        printf '%s\n' "$language_list" | tr ' ' '\n' | grep -qx idris2 \
+          && grep -q 'abi_model_check.sh' "$REPO_DIR/.github/workflows/ci.yml"
+      else
+        ! printf '%s\n' "$language_list" | tr ' ' '\n' | grep -qx idris2
+      fi
+      ;;
+    vendor-patch-gated)
+      test -x "$REPO_DIR/scripts/vendor_bevy_winit_check.sh" \
+        && test -x "$REPO_DIR/tests/vendor_winit_check_test.sh" \
+        && grep -q 'wayland-csd-adwaita-notitle' "$REPO_DIR/Cargo.toml" \
+        && grep -q '^\[patch.crates-io\]' "$REPO_DIR/Cargo.toml"
+      ;;
+    deployment-contract-recorded)
+      test -f "$REPO_DIR/crates/idaptik-net/src/deployment.rs" \
+        && test -f "$REPO_DIR/docs/adr/0015-deployment-topologies-and-state-ownership.md"
+      ;;
+    deployment-mode-cross-product)
+      grep -q 'all_three_topologies_allow_gsa_present_or_absent_without_merging_axes' \
+        "$REPO_DIR/crates/idaptik-net/src/deployment.rs" \
+        && grep -q 'GsaIntegration::Absent' "$REPO_DIR/crates/idaptik-net/src/deployment.rs" \
+        && grep -q 'GsaIntegration::Present' "$REPO_DIR/crates/idaptik-net/src/deployment.rs"
+      ;;
+    state-class-contract-present)
+      grep -q 'pub const STATE_CLASSES' "$REPO_DIR/crates/idaptik-net/src/deployment.rs" \
+        && grep -q 'every_state_class_has_explicit_owner_storage_cache_consistency_partition_and_recovery' \
+          "$REPO_DIR/crates/idaptik-net/src/deployment.rs"
+      ;;
+    snif-boundary-recorded)
+      grep -qi 'SNIF' "$REPO_DIR/docs/adr/0015-deployment-topologies-and-state-ownership.md" \
+        && grep -qi 'buffer' "$REPO_DIR/docs/adr/0015-deployment-topologies-and-state-ownership.md" \
+        && grep -qi 'database' "$REPO_DIR/docs/adr/0015-deployment-topologies-and-state-ownership.md"
+      ;;
+    coordination-k9-v1-2)
+      bash "$REPO_DIR/scripts/coordination_k9_check.sh"
+      ;;
+    legacy-layout-retired)
+      ! find "$REPO_DIR" -type f -name '*.a2ml' -not -path '*/.git/*' -print -quit | grep -q . \
+        && test ! -e "$REPO_DIR/k9iser.toml" \
+        && test ! -d "$REPO_DIR/.machine_readable/descriptiles"
+      ;;
+    validation-ci-wired)
+      grep -q 'machine-readable-conformance' "$REPO_DIR/.github/workflows/ci.yml" \
+        && grep -q 'scripts/machine_readable_check.sh' "$REPO_DIR/.github/workflows/ci.yml"
+      ;;
+    *)
+      printf 'must: no host-side probe is registered for K9 clause %s\n' "$id" >&2
+      return 2
+      ;;
+  esac && return 0
+  # Reserve status 2 for unregistered probes; commands may themselves return
+  # 2 (or another error), so normalize every registered failure to status 1.
+  return 1
 }
 
 critical_failures=0
 warnings_failed=0
 total=0
 
-while IFS=$'\t' read -r name severity command; do
-  [ -n "$name" ] || continue
+while IFS=$'\t' read -r id severity probe; do
+  [ -n "$id" ] || continue
   total=$((total + 1))
-  if (cd "$REPO_DIR" && bash -c "$command") >/dev/null 2>&1; then
-    printf '  ok    %s\n' "$name"
+  if run_probe "$probe" >"$DETAIL" 2>&1; then
+    printf '  ok    %s\n' "$id"
   else
+    if [ "$?" -eq 2 ]; then
+      critical_failures=$((critical_failures + 1))
+      printf '  FAIL  %s (unregistered probe)\n' "$id" >&2
+      sed 's/^/        /' "$DETAIL" >&2
+      continue
+    fi
     case "$severity" in
       warning)
         warnings_failed=$((warnings_failed + 1))
-        printf '  WARN  %s\n' "$name" >&2
+        printf '  WARN  %s\n' "$id" >&2
         ;;
       *)
         critical_failures=$((critical_failures + 1))
-        detail="$(cd "$REPO_DIR" && bash -c "$command" 2>&1 | tail -3 || true)"
-        printf '  FAIL  %s\n' "$name" >&2
-        if [ -n "$detail" ]; then
-          printf '%s\n' "$detail" | sed 's/^/        /' >&2
-        fi
+        printf '  FAIL  %s\n' "$id" >&2
+        if [ -s "$DETAIL" ]; then sed 's/^/        /' "$DETAIL" >&2; fi
         ;;
     esac
   fi
-done < <(parse_probes)
+done < "$PROBES"
 
-printf 'must: %d probes, %d critical failure(s), %d warning failure(s)\n' \
+printf 'must: %d K9 clauses, %d critical failure(s), %d warning failure(s)\n' \
   "$total" "$critical_failures" "$warnings_failed"
-
 [ "$critical_failures" -eq 0 ]

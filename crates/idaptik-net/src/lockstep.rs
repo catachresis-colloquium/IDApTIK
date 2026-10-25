@@ -456,12 +456,14 @@ mod tests {
         );
     }
 
-    /// Two cores over a lossless in-memory wire — with *different* input
-    /// delays, which must interoperate because every command carries its own
-    /// `at` and every commit its own watermark — reproduce the reference run
-    /// exactly, pause window included.
+    /// Two peers run with no relay, database, GSA, or other central service:
+    /// only the two sans-IO cores and an in-memory direct wire. Different
+    /// input delays interoperate because every command carries its own `at`
+    /// and every commit its own watermark, reproducing the reference run
+    /// exactly (pause window included). This is a simulation/core test, not a
+    /// production direct-network transport test.
     #[test]
-    fn live_pipeline_matches_the_reference_run() {
+    fn peer_lockstep_runs_without_central_services() {
         let script = live_fixture();
         let mut a = LockstepCore::new(Role::Infiltrator, 2, &script).unwrap();
         let mut b = LockstepCore::new(Role::Hacker, 5, &script).unwrap();

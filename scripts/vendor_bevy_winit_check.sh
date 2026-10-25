@@ -41,14 +41,18 @@ VENDORED_NOTITLE='wayland-csd-adwaita-notitle = ["wayland", "winit/wayland-csd-a
 PUBLISHED_WAYLAND='wayland = ["winit/wayland", "winit/wayland-csd-adwaita"]'
 
 say()  { printf '[vendor-winit] %s\n' "$*"; }
+# Report all arguments as one failure message, emit a GitHub Actions error
+# annotation on stdout, and exit with status 1.
 die()  {
   printf '[vendor-winit] FAIL: %s\n' "$*" >&2
   # Also emit a check-run annotation: without it the failure detail exists
   # only in the run log, which a remote operator (or a sandbox without log
   # egress) cannot read -- a gate that cannot be diagnosed from outside
-  # cannot be cleared from outside. Newlines flattened; the log keeps the
-  # original formatting on stderr.
-  printf '::error::[vendor-winit] %s\n' "$(printf '%s' "$*" | sed -n ':a;N;$!ba;s/\n/ | /gp')"
+  # cannot be cleared from outside. Flatten multiline diagnostics for the
+  # annotation while retaining the original formatting on stderr.
+  local annotation
+  annotation="$(printf '%s' "$*" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+  printf '::error::[vendor-winit] %s\n' "$annotation"
   exit 1
 }
 
@@ -236,6 +240,10 @@ the vendor patch premise needs review"
 
 # ----------------------------------------------------------------- graph ----
 
+# Validate font-parser exclusion and title-free Wayland CSD selection using
+# IDAPTIK_BEVY_WINIT_METADATA when set, otherwise locked Cargo metadata.
+# Requires cargo and jq even with a fixture; exits on missing tools, metadata
+# errors, or graph violations.
 check_graph() {
   need cargo "resolving the workspace dependency graph"
   need jq "inspecting cargo metadata"
@@ -249,8 +257,17 @@ check_graph() {
     # gate fires for the wrong reason and proves nothing about these checks.
     metadata="$(cat "$IDAPTIK_BEVY_WINIT_METADATA")"
   else
-    metadata="$(cargo metadata --format-version 1 --locked 2>/dev/null)" ||
-      die "cargo metadata failed; is the workspace resolvable?"
+    local work metadata_file metadata_err detail
+    work="$(mktemp -d)"
+    CLEANUP_PATHS+=("$work")
+    metadata_file="$work/cargo-metadata.json"
+    metadata_err="$work/cargo-metadata.err"
+    if cargo metadata --format-version 1 --locked >"$metadata_file" 2>"$metadata_err"; then
+      metadata="$(cat "$metadata_file")"
+    else
+      detail="$(tail -n 20 "$metadata_err" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+      die "cargo metadata --locked failed; is the workspace resolvable? $detail"
+    fi
   fi
 
   # 1. The font-parser path must not return to the resolved graph.
