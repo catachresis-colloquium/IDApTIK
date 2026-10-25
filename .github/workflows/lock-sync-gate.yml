@@ -29,7 +29,7 @@ name: Lock Sync Gate
 # ⚠ NO `paths:` FILTER, also deliberately. A filtered workflow never reports on
 # pull requests that miss the filter, which deadlocks any ruleset that requires
 # the check. The estate has been bitten by this; see creusot-proof.yml's header
-# for the same reasoning. The whole gate is one awk pass over nine small files
+# for the same reasoning. The gate compares parsed YAML values from small files
 # and runs in about a second, so there is nothing to save by filtering.
 
 on:
@@ -62,6 +62,9 @@ jobs:
           git fetch -q --no-tags --depth 1 origin "${SHA}"
           git checkout -q --detach --force FETCH_HEAD
           echo "checked out ${SHA}"
+
+      - name: Provision pinned YAML reader (Y-1)
+        run: bash scripts/install-ci-yq.sh
 
       # The self-test runs FIRST and on every pull request. A gate that cannot
       # fail is worse than no gate, so each of the checker's arms has a mutant

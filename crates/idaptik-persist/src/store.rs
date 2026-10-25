@@ -14,6 +14,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// One indexed session, including a decode error when its record is damaged.
+pub type SessionListEntry = (SessionId, Result<SessionRecord, String>);
+
 /// A durable store. Cheap to keep alive; every method opens its own redb
 /// transaction.
 ///
@@ -66,10 +69,9 @@ impl Store {
             let _blobs = txn.open_table(BLOBS)?;
 
             let mut meta = txn.open_table(META)?;
-            let existing = match meta.get(schema::SCHEMA_KEY)? {
-                None => None,
-                Some(guard) => Some(guard.value().to_vec()),
-            };
+            let existing = meta
+                .get(schema::SCHEMA_KEY)?
+                .map(|guard| guard.value().to_vec());
             match existing {
                 None => {
                     let bytes = serde_json::to_vec(&SCHEMA_VERSION)?;
@@ -125,9 +127,7 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(
-        &self,
-    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
+    pub fn list_sessions(&self) -> Result<Vec<SessionListEntry>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
@@ -176,13 +176,13 @@ impl Store {
         {
             let mut sessions = txn.open_table(SESSIONS)?;
             let mut rec = read_session(&sessions, id)?;
-            if let Some(last) = rec.last_seq {
-                if seq <= last {
-                    return Err(PersistError::SeqRegression {
-                        last,
-                        attempted: seq,
-                    });
-                }
+            if let Some(last) = rec.last_seq
+                && seq <= last
+            {
+                return Err(PersistError::SeqRegression {
+                    last,
+                    attempted: seq,
+                });
             }
             let batch = CommandBatch {
                 epoch,
@@ -458,14 +458,14 @@ impl Store {
                 }
             }
             expected = Some(seq.saturating_add(1));
-            if let Some(prev) = last_epoch {
-                if batch.epoch < prev {
-                    issues.push(VerifyIssue::EpochRegressed {
-                        seq,
-                        from: prev,
-                        to: batch.epoch,
-                    });
-                }
+            if let Some(prev) = last_epoch
+                && batch.epoch < prev
+            {
+                issues.push(VerifyIssue::EpochRegressed {
+                    seq,
+                    from: prev,
+                    to: batch.epoch,
+                });
             }
             last_epoch = Some(batch.epoch);
         }
@@ -504,14 +504,14 @@ impl Store {
 
         // A checkpoint's tick must not lag the last batch at or below its seq.
         for (&cp_seq, cp) in &cps {
-            if let Some((_, batch)) = batches.range(..=cp_seq).next_back() {
-                if cp.tick < batch.tick {
-                    issues.push(VerifyIssue::TickBehindLog {
-                        seq: cp_seq,
-                        recorded: cp.tick,
-                        logged: batch.tick,
-                    });
-                }
+            if let Some((_, batch)) = batches.range(..=cp_seq).next_back()
+                && cp.tick < batch.tick
+            {
+                issues.push(VerifyIssue::TickBehindLog {
+                    seq: cp_seq,
+                    recorded: cp.tick,
+                    logged: batch.tick,
+                });
             }
         }
 

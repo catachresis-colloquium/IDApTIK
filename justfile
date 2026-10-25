@@ -207,11 +207,12 @@ replay FILE:
 test:
     cargo test --workspace
 
-# The Ghost Lobby scenario gate: core + tui + ffi + net + evil-weevil
-# (does not build Bevy).
+# All headless workspace members, including kernel and persistence. Selecting
+# the workspace prevents a newly added core consumer from silently missing CI.
+# Bevy has its own gate with the native window-system dependencies installed.
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil --all-targets -- -D warnings
+    cargo test --locked --workspace --exclude idaptik-bevy
+    cargo clippy --locked --workspace --exclude idaptik-bevy --all-targets -- -D warnings
     cargo fmt --all -- --check
 
 # The Evil Weevil adversarial-testing gate (ADR-0017): offline, sans-IO
