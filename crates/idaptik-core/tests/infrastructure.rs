@@ -6,12 +6,12 @@
 //! replays identically after a snapshot round trip.
 
 use idaptik_core::scenario::ids::{
-    CompartmentId, DamperId, DrainId, DuctId, EquipmentId, FanId, GasSourceId, LeakId, ReservoirId,
-    ValveId, WaterOutletId,
+    CompartmentId, DamperId, DrainId, DuctId, EquipmentId, FanId, GasSourceId, LeakId, ValveId,
+    WaterOutletId,
 };
 use idaptik_core::scenario::infrastructure::sim::{
-    FanStallReason, InfrastructureCommand, InfrastructureEvent, InfrastructureSim,
-    InfrastructureState, TripCause, load_infrastructure,
+    FanStallReason, InfrastructureCommand, InfrastructureEvent, InfrastructureSim, TripCause,
+    load_infrastructure,
 };
 use idaptik_core::scenario::infrastructure::{HazardKind, Tier, fixtures, model_declaration};
 

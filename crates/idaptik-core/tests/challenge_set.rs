@@ -709,7 +709,7 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
         // crossing. The mole starts at its host spawn (390, pump hall) —
         // the first decoys play from there and the guard's own patrol
         // brings him inside their 260px hearing.
-        if i % 30 == 0 && phase < 5 {
+        if i.is_multiple_of(30) && phase < 5 {
             immediates.push(Command::Mole {
                 op: MoleOp::Synth {
                     index: ((i / 30) % 3) as u8,
@@ -805,9 +805,10 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 if run.sim.state().player.place == Place::Roof {
                     phase = 3;
                 }
-                let mut t = TickInput::default();
-                t.immediates = immediates;
-                t
+                TickInput {
+                    immediates,
+                    ..Default::default()
+                }
             }
             3 => {
                 if (run.cx() - 990.0).abs() <= 10.0 {
@@ -862,16 +863,18 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                     );
                     continue;
                 }
-                let mut t = TickInput::default();
-                t.immediates = immediates;
-                t
+                TickInput {
+                    immediates,
+                    ..Default::default()
+                }
             }
             _ => {
                 // Dropped: one settling tick, then the bottom of the loop
                 // breaks out to the search and ride.
-                let mut t = TickInput::default();
-                t.immediates = immediates;
-                t
+                TickInput {
+                    immediates,
+                    ..Default::default()
+                }
             }
         };
         run.tick(&input);
