@@ -718,11 +718,14 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 east_leg += 1;
                 immediates.push(mole_move_to(EAST_LEGS[east_leg]));
             } else if east_started
-                && run.billy_x() > EAST_LEGS[east_leg] - 45.0
+                && run.billy_x() > EAST_LEGS[east_leg] - 145.0
                 && east_leg + 1 == EAST_LEGS.len()
             {
-                // Pinned east: the west sweep starts, back to the pump
-                // hall's west door — far from the hatch and the chute.
+                // Committed east: within 145px of the sluice exit the chase
+                // has done its work — the turn-back starts, back to the pump
+                // hall's west door, far from the hatch and the chute. (The
+                // interior legs keep the tight 45px gate: that is what keeps
+                // the chain inside his hearing.)
                 sweeping_west = true;
                 immediates.push(mole_move_to(WEST_LEGS[0]));
             }
@@ -755,12 +758,25 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                     assert!(
                         i < 7200,
                         "the cooperative line never finished: phase {phase}, tick {i}, \
-                         guard {} (last known {}), body at {} ({:?}), legs E{east_leg} \
-                         W{west_leg} west={sweeping_west}",
+                         guard {} (last known {}, {:?}, door_wait {}, blocked {:?}), \
+                         body at {} ({:?}), mole {:?}, diversion {:?}, legs E{east_leg} \
+                         W{west_leg} west={sweeping_west}, synth {}, denied {}",
                         run.billy_x(),
                         run.sim.state().billy.last_known_x,
+                        run.sim.state().billy.mode,
+                        run.sim.state().billy.door_wait,
+                        run.sim.state().billy.blocked_door,
                         run.cx(),
                         run.sim.state().player.place,
+                        run.sim.state().mole.as_ref().map(|h| h.state.x),
+                        run.sim.state().diversion.as_ref().map(|d| (d.x, d.t)),
+                        run.count(|e| matches!(
+                            e,
+                            Event::Mole {
+                                mole: MoleEvent::SynthSoundPlayed { .. }
+                            }
+                        )),
+                        run.count(|e| matches!(e, Event::MoleDenied { .. })),
                     );
                     continue;
                 }
@@ -804,12 +820,25 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                     assert!(
                         i < 7200,
                         "the cooperative line never finished: phase {phase}, tick {i}, \
-                         guard {} (last known {}), body at {} ({:?}), legs E{east_leg} \
-                         W{west_leg} west={sweeping_west}",
+                         guard {} (last known {}, {:?}, door_wait {}, blocked {:?}), \
+                         body at {} ({:?}), mole {:?}, diversion {:?}, legs E{east_leg} \
+                         W{west_leg} west={sweeping_west}, synth {}, denied {}",
                         run.billy_x(),
                         run.sim.state().billy.last_known_x,
+                        run.sim.state().billy.mode,
+                        run.sim.state().billy.door_wait,
+                        run.sim.state().billy.blocked_door,
                         run.cx(),
                         run.sim.state().player.place,
+                        run.sim.state().mole.as_ref().map(|h| h.state.x),
+                        run.sim.state().diversion.as_ref().map(|d| (d.x, d.t)),
+                        run.count(|e| matches!(
+                            e,
+                            Event::Mole {
+                                mole: MoleEvent::SynthSoundPlayed { .. }
+                            }
+                        )),
+                        run.count(|e| matches!(e, Event::MoleDenied { .. })),
                     );
                     continue;
                 }
@@ -833,12 +862,25 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
         assert!(
             i < 7200,
             "the cooperative line never finished: phase {phase}, tick {i}, \
-             guard {} (last known {}), body at {} ({:?}), legs E{east_leg} \
-             W{west_leg} west={sweeping_west}",
+             guard {} (last known {}, {:?}, door_wait {}, blocked {:?}), \
+             body at {} ({:?}), mole {:?}, diversion {:?}, legs E{east_leg} \
+             W{west_leg} west={sweeping_west}, synth {}, denied {}",
             run.billy_x(),
             run.sim.state().billy.last_known_x,
+            run.sim.state().billy.mode,
+            run.sim.state().billy.door_wait,
+            run.sim.state().billy.blocked_door,
             run.cx(),
             run.sim.state().player.place,
+            run.sim.state().mole.as_ref().map(|h| h.state.x),
+            run.sim.state().diversion.as_ref().map(|d| (d.x, d.t)),
+            run.count(|e| matches!(
+                e,
+                Event::Mole {
+                    mole: MoleEvent::SynthSoundPlayed { .. }
+                }
+            )),
+            run.count(|e| matches!(e, Event::MoleDenied { .. })),
         );
     }
 
