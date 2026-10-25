@@ -12,8 +12,8 @@ fn every_corpus_scenario_passes_and_holds_its_invariant() {
     let results: Vec<_> = corpus().iter().map(|s| s.run()).collect();
     assert_eq!(
         results.len(),
-        5,
-        "the bounded corpus starts with five scenarios"
+        6,
+        "the bounded corpus is the five tasked scenarios plus EW-06"
     );
     for result in &results {
         assert!(
@@ -126,7 +126,7 @@ fn the_redacted_artifact_carries_no_secrets_and_keeps_dummy_evidence() {
     assert!(rendered.contains("ew-dummy-"));
     assert!(rendered.contains("idaptik-evil-weevil-corpus-v1"));
     // Deterministic run id: the wall clock never enters the artifact.
-    assert_eq!(report.run_id, "ew-corpus-v1-seed-777001");
+    assert_eq!(report.run_id, "ew-corpus-v2-seed-777001");
 }
 
 #[test]

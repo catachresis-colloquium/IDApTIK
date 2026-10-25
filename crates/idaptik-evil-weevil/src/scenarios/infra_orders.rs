@@ -50,8 +50,7 @@ fn inputs() -> Vec<InputSpec> {
         InputSpec {
             step: 1,
             intent: "Mole order proposed from the hacker seat, through the model relay".into(),
-            expected: "relay refusal: the burble profile carries no Mole tag (fails closed)"
-                .into(),
+            expected: "relay refusal: the burble profile carries no Mole tag (fails closed)".into(),
         },
         InputSpec {
             step: 2,
@@ -150,9 +149,7 @@ impl Scenario for InfraOrdersScenario {
                     wire::typed_command(
                         2,
                         &Command::Mole {
-                            op: MoleOp::Synth {
-                                index: 0,
-                            },
+                            op: MoleOp::Synth { index: 0 },
                         },
                     ),
                     0,
@@ -228,9 +225,7 @@ impl Scenario for InfraOrdersScenario {
                     wire::typed_command(
                         2,
                         &Command::Mole {
-                            op: MoleOp::Synth {
-                                index: 0,
-                            },
+                            op: MoleOp::Synth { index: 0 },
                         },
                     ),
                     2,
@@ -342,12 +337,7 @@ impl Scenario for InfraOrdersScenario {
             .propose(
                 IntentKind::StaleReplay,
                 wire::with_seq(
-                    wire::typed_command(
-                        1,
-                        &Command::Mole {
-                            op: MoleOp::Dig,
-                        },
-                    ),
+                    wire::typed_command(1, &Command::Mole { op: MoleOp::Dig }),
                     3,
                 ),
                 "replay a Mole order scheduled below the committed watermark",

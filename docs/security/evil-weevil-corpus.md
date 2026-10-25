@@ -228,7 +228,7 @@ actually fires.
 
 ### What is demonstrated
 
-All five scenarios pass against the real production validators in this
+All six scenarios pass against the real production validators in this
 repository, and the 14 tests in `tests/corpus.rs` + `tests/regression.rs`
 plus the crate's unit tests pin the guarantees. The corpus report records,
 per run: pass/fail per named check, full telemetry, observer classifications
@@ -299,7 +299,7 @@ cargo run -p idaptik-evil-weevil -- --scenario EW-04-reconnect-obsolete-messages
 ```
 
 Outputs: `corpus-report.json` (schema `idaptik-evil-weevil-corpus-v1`,
-deterministic run id `ew-corpus-v1-seed-777001`) and one
+deterministic run id `ew-corpus-v2-seed-777001`) and one
 `<scenario-id>/result.json` per scenario containing the exact proposed
 intents with their raw wire payloads (the replay input side), the named
 checks, observed effects, validated telemetry, observer report, metrics and
