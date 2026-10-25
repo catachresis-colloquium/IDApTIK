@@ -20,9 +20,18 @@ pub enum RouteAccess {
 pub enum AccessDenial {
     RouteSealed,
     RouteCollapsed,
-    ActorNotAdmitted { actor: ActorClass },
-    ClearanceTooSmall { actor: ActorClass, need: ActorBody, have: Clearance },
-    EquipmentMissing { actor: ActorClass, missing: Vec<Equipment> },
+    ActorNotAdmitted {
+        actor: ActorClass,
+    },
+    ClearanceTooSmall {
+        actor: ActorClass,
+        need: ActorBody,
+        have: Clearance,
+    },
+    EquipmentMissing {
+        actor: ActorClass,
+        missing: Vec<Equipment>,
+    },
 }
 
 /// Whether `actor` may traverse `route` given the current route/runtime
@@ -45,12 +54,12 @@ pub fn route_accessibility(
         RouteState::Sealed => {
             return RouteAccess::Denied {
                 reason: AccessDenial::RouteSealed,
-            }
+            };
         }
         RouteState::Collapsed => {
             return RouteAccess::Denied {
                 reason: AccessDenial::RouteCollapsed,
-            }
+            };
         }
         RouteState::Open => {}
     }
@@ -83,10 +92,7 @@ pub fn route_accessibility(
         .collect();
     if !missing.is_empty() {
         return RouteAccess::Denied {
-            reason: AccessDenial::EquipmentMissing {
-                actor,
-                missing,
-            },
+            reason: AccessDenial::EquipmentMissing { actor, missing },
         };
     }
 
@@ -112,7 +118,10 @@ mod tests {
             id: RouteId::from("duct-1"),
             kind: SpaceKind::Duct,
             label: "test duct".into(),
-            geometry: RouteGeometry { x_range: (0.0, 100.0), depth: (0.1, 0.5) },
+            geometry: RouteGeometry {
+                x_range: (0.0, 100.0),
+                depth: (0.1, 0.5),
+            },
             clearance: Clearance { w: 22.0, h: 18.0 },
             actors: ActorClassSet::only(ActorClass::Moletaire),
             travel_cost_per_sec: 0.005,
@@ -191,11 +200,15 @@ mod tests {
     fn sealed_route_denies_everyone() {
         let route = duct_route();
         let mut state = fresh_state();
-        state.route_states.insert(RouteId::from("duct-1"), RouteState::Sealed);
+        state
+            .route_states
+            .insert(RouteId::from("duct-1"), RouteState::Sealed);
         for actor in ActorClass::ALL {
             assert!(matches!(
                 route_accessibility(actor, &route, &state),
-                RouteAccess::Denied { reason: AccessDenial::RouteSealed }
+                RouteAccess::Denied {
+                    reason: AccessDenial::RouteSealed
+                }
             ));
         }
     }
@@ -210,8 +223,7 @@ mod tests {
             RouteAccess::Denied { reason: AccessDenial::EquipmentMissing { actor, .. } }
             if actor == ActorClass::Moletaire
         ));
-        state.mole.state_mut().equipped =
-            Some(crate::companion::equipment::Equipment::FlashCamera);
+        state.mole.state_mut().equipped = Some(crate::companion::equipment::Equipment::FlashCamera);
         assert!(matches!(
             route_accessibility(ActorClass::Moletaire, &route, &state),
             RouteAccess::Allowed

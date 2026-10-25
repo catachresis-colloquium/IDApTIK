@@ -84,7 +84,7 @@ pub struct ContactRecord {
 pub struct IntentRecord {
     pub action: String,
     pub target_id: u32,
-    pub move: (i32, i32),
+    pub r#move: (i32, i32),
     pub speed: i32,
     pub priority: u32,
     pub budget_used: u32,
@@ -175,10 +175,7 @@ impl std::error::Error for ReplayMismatch {}
 pub fn replay_equal(a: &ReplayTrace, b: &ReplayTrace) -> Result<(), ReplayMismatch> {
     if a.header.format != b.header.format {
         return Err(ReplayMismatch {
-            detail: format!(
-                "format {} vs {}",
-                a.header.format, b.header.format
-            ),
+            detail: format!("format {} vs {}", a.header.format, b.header.format),
         });
     }
     if a.header.kernel_version != b.header.kernel_version {
@@ -203,7 +200,10 @@ pub fn replay_equal(a: &ReplayTrace, b: &ReplayTrace) -> Result<(), ReplayMismat
         return Err(ReplayMismatch {
             detail: format!(
                 "profile {} v{} vs {} v{}",
-                a.header.profile_id, a.header.profile_version, b.header.profile_id, b.header.profile_version
+                a.header.profile_id,
+                a.header.profile_version,
+                b.header.profile_id,
+                b.header.profile_version
             ),
         });
     }
@@ -214,7 +214,10 @@ pub fn replay_equal(a: &ReplayTrace, b: &ReplayTrace) -> Result<(), ReplayMismat
     }
     if a.header.tick_rate != b.header.tick_rate {
         return Err(ReplayMismatch {
-            detail: format!("tick rate {:?} vs {:?}", a.header.tick_rate, b.header.tick_rate),
+            detail: format!(
+                "tick rate {:?} vs {:?}",
+                a.header.tick_rate, b.header.tick_rate
+            ),
         });
     }
     if a.header.scenario_id != b.header.scenario_id {
@@ -269,23 +272,37 @@ pub fn decision_identity(trace: &ReplayTrace) -> u64 {
     mix(hdr.kernel_version.2 as u64);
     mix(hdr.abi_major as u64);
     mix(hdr.abi_fingerprint);
-    mix(hdr.profile_id.as_bytes().iter().fold(0u64, |acc, b| {
-        acc.wrapping_mul(31).wrapping_add(*b as u64)
-    }));
+    mix(hdr
+        .profile_id
+        .as_bytes()
+        .iter()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
     mix(hdr.profile_version as u64);
     mix(hdr.seed);
     mix(hdr.tick_rate.0);
     mix(hdr.tick_rate.1);
-    mix(hdr.scenario_id.as_bytes().iter().fold(0u64, |acc, b| {
-        acc.wrapping_mul(31).wrapping_add(*b as u64)
-    }));
+    mix(hdr
+        .scenario_id
+        .as_bytes()
+        .iter()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
     mix(hdr.initial_context.capabilities as u64);
     mix(hdr.initial_context.budget_units as u64);
     mix(hdr.initial_context.max_agents as u64);
     for a in &hdr.initial_context.agents {
         mix(a.rng_state);
         mix(a.tick_last);
-        mix(a.memory.map(|m| (m.bearing.x as u64, m.bearing.y as u64, m.age as u64, m.target as u64)).unwrap_or(0));
+        mix(a
+            .memory
+            .map(|m| {
+                (
+                    m.bearing.x as u64,
+                    m.bearing.y as u64,
+                    m.age as u64,
+                    m.target as u64,
+                )
+            })
+            .unwrap_or(0));
         mix(a.cached_action as u64);
         mix(a.cached_target as u64);
         mix(a.budget_used as u64);
@@ -303,7 +320,11 @@ pub fn decision_identity(trace: &ReplayTrace) -> u64 {
         mix(e.observation.ammo as u64);
         for c in &e.observation.contacts {
             mix(c.id as u64);
-            mix(c.source.as_bytes().iter().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
+            mix(c
+                .source
+                .as_bytes()
+                .iter()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
             mix(c.bearing.0 as u64);
             mix(c.bearing.1 as u64);
             mix(c.distance as u64);
@@ -312,23 +333,37 @@ pub fn decision_identity(trace: &ReplayTrace) -> u64 {
         }
         mix(e.agent_before.rng_state);
         mix(e.agent_before.tick_last);
-        mix(e.agent_before.memory.map(|m| (m.bearing.x as u64, m.bearing.y as u64, m.age as u64)).unwrap_or(0));
-        mix(e.intent.action.as_bytes().iter().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
+        mix(e
+            .agent_before
+            .memory
+            .map(|m| (m.bearing.x as u64, m.bearing.y as u64, m.age as u64))
+            .unwrap_or(0));
+        mix(e
+            .intent
+            .action
+            .as_bytes()
+            .iter()
+            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
         mix(e.intent.target_id as u64);
-        mix(e.intent.move.0 as u64);
-        mix(e.intent.move.1 as u64);
+        mix(e.intent.r#move.0 as u64);
+        mix(e.intent.r#move.1 as u64);
         mix(e.intent.speed as u64);
         mix(e.intent.priority as u64);
         mix(e.intent.budget_used as u64);
-        mix(
-            (e.intent.degraded as u64)
-                | ((e.intent.new_target as u64) << 1)
-                | ((e.intent.unreachable as u64) << 2)
-                | ((e.intent.from_memory as u64) << 3),
-        );
-        mix((e.accepted as u64) | ((e.applied.moved as u64) << 1) | ((e.applied.blocked as u64) << 2));
+        mix((e.intent.degraded as u64)
+            | ((e.intent.new_target as u64) << 1)
+            | ((e.intent.unreachable as u64) << 2)
+            | ((e.intent.from_memory as u64) << 3));
+        mix((e.accepted as u64)
+            | ((e.applied.moved as u64) << 1)
+            | ((e.applied.blocked as u64) << 2));
         mix(e.applied.speed_applied as u64);
-        mix(e.applied.reason.as_bytes().iter().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
+        mix(e
+            .applied
+            .reason
+            .as_bytes()
+            .iter()
+            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
     }
     h
 }
@@ -371,7 +406,7 @@ impl From<&Intent> for IntentRecord {
         Self {
             action: i.action.name().to_owned(),
             target_id: i.target_id,
-            move: (i.move.x, i.move.y),
+            r#move: (i.r#move.x, i.r#move.y),
             speed: i.speed,
             priority: i.priority,
             budget_used: i.budget_used,
@@ -451,7 +486,10 @@ mod tests {
         let obs = Observation {
             agent_id: 0,
             tick: 1,
-            self_pos: crate::fx::Fx2 { x: to_fx(1.0), y: 0 },
+            self_pos: crate::fx::Fx2 {
+                x: to_fx(1.0),
+                y: 0,
+            },
             self_vel: crate::fx::Fx2::ZERO,
             health: FX_ONE,
             ammo: FX_ONE,
@@ -459,7 +497,10 @@ mod tests {
             contacts: vec![Contact::new(
                 7,
                 ContactSource::Player,
-                crate::fx::Fx2 { x: to_fx(1.0), y: 0 },
+                crate::fx::Fx2 {
+                    x: to_fx(1.0),
+                    y: 0,
+                },
                 to_fx(2.0),
             )],
             cooldown: 0,
@@ -472,7 +513,7 @@ mod tests {
             intent: IntentRecord {
                 action: "ADVANCE".to_owned(),
                 target_id: 7,
-                move: (to_fx(1.0), 0),
+                r#move: (to_fx(1.0), 0),
                 speed: FX_ONE,
                 priority: 26214,
                 budget_used: 6,

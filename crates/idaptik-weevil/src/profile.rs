@@ -193,7 +193,10 @@ impl std::fmt::Display for ProfileError {
         match self {
             Self::WrongFormat { found } => write!(f, "profile format {found} is not supported"),
             Self::FutureVersion { found, max } => {
-                write!(f, "profile version {found} is newer than this build ({max})")
+                write!(
+                    f,
+                    "profile version {found} is newer than this build ({max})"
+                )
             }
             Self::UnknownCapability(mask) => {
                 write!(f, "profile declares undefined capability bit 0x{mask:08x}")
@@ -257,7 +260,9 @@ impl Profile {
             return Err(ProfileError::ZeroAgents(self.max_agents));
         }
         if !(self.host.max_speed_world > 0.0) {
-            return Err(ProfileError::NonPositiveMovementLimit(self.host.max_speed_world));
+            return Err(ProfileError::NonPositiveMovementLimit(
+                self.host.max_speed_world,
+            ));
         }
         if let Some(d) = &self.host.decoy
             && d.id < 1
@@ -400,14 +405,23 @@ mod tests {
     fn an_undefined_capability_is_refused() {
         let mut p = ProfileSet::canonical().cautious_sentry.clone();
         p.capabilities |= 1u32 << 31;
-        assert_eq!(p.validate().unwrap_err(), ProfileError::UnknownCapability(1u32 << 31));
+        assert_eq!(
+            p.validate().unwrap_err(),
+            ProfileError::UnknownCapability(1u32 << 31)
+        );
     }
 
     #[test]
     fn profiles_differ_observably() {
         let set = ProfileSet::canonical();
-        assert_ne!(set.cautious_sentry.host.max_speed_world, set.aggressive_pursuer.host.max_speed_world);
-        assert_ne!(set.cautious_sentry.host.engage_dist_world, set.aggressive_pursuer.host.engage_dist_world);
+        assert_ne!(
+            set.cautious_sentry.host.max_speed_world,
+            set.aggressive_pursuer.host.max_speed_world
+        );
+        assert_ne!(
+            set.cautious_sentry.host.engage_dist_world,
+            set.aggressive_pursuer.host.engage_dist_world
+        );
         assert!(set.equipment_specialist.host.report_objects);
         assert!(!set.cautious_sentry.host.report_objects);
     }

@@ -9,21 +9,21 @@
 use crate::companion::hunger::EdibleObject;
 use crate::companion::sim::MoleEvent;
 use crate::netsim::apply_actuation;
+use crate::scenario::GhostLobbySim;
 use crate::scenario::agents::apply_effects;
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
-use crate::scenario::GhostLobbySim;
 use crate::scenario::mathf::TICK_DT;
 use serde::{Deserialize, Serialize};
 
-use crate::scenario::secondary_spaces::access::{route_accessibility, RouteAccess};
+use crate::scenario::secondary_spaces::access::{RouteAccess, route_accessibility};
+use crate::scenario::secondary_spaces::events::SecondaryEvent;
 use crate::scenario::secondary_spaces::model::{
     AccessPointId, AccessPointKind, AccessPointSpec, ActorClass, CableState, Clearance,
     EntryRefusalReason, EvidenceKind, ObstructionReason, RouteId, RouteSpec, RouteState,
     SabotageRefusalReason, SecondarySpec, SecondaryState, SpaceKind,
 };
 use crate::scenario::secondary_spaces::topology::{self, RouteNetwork};
-use crate::scenario::secondary_spaces::events::SecondaryEvent;
 
 /// Mirrors [`crate::companion::definition::moletaire().tuning.dig_min_depth`]:
 /// the mole can only chew or dig while underground. Kept as a named constant
@@ -108,9 +108,7 @@ impl GhostLobbySim {
         //    sabotage timer. Nothing here touches the main scenario yet.
         let mole_events = st.mole.tick(TICK_DT, NO_EDIBLES);
         for ev in mole_events {
-            if let Some(node_id) =
-                secondary_mole_event(net, &mut st, &mut events, ev)
-            {
+            if let Some(node_id) = secondary_mole_event(net, &mut st, &mut events, ev) {
                 pending_cut = Some(node_id);
             }
         }
@@ -126,8 +124,7 @@ impl GhostLobbySim {
         //    (dead nodes, darkened lights, silence) this tick.
         if let Some(node_id) = pending_cut.take() {
             let effects = apply_actuation(&self.graph, &node_id);
-            let effect_events =
-                apply_effects(&self.def, &mut self.state, self.cfg, &effects);
+            let effect_events = apply_effects(&self.def, &mut self.state, self.cfg, &effects);
             self.events.extend(effect_events);
         }
 
@@ -143,9 +140,7 @@ impl GhostLobbySim {
         if self.paused || self.state.ended {
             return;
         }
-        let (Some(net), Some(st)) =
-            (&self.def.secondary, self.state.secondary.as_mut())
-        else {
+        let (Some(net), Some(st)) = (&self.def.secondary, self.state.secondary.as_mut()) else {
             return;
         };
         let s = st.mole.state();
@@ -184,11 +179,7 @@ impl GhostLobbySim {
             });
             return;
         };
-        let sealed = st
-            .grille_states
-            .get(&ap.id)
-            .copied()
-            .unwrap_or(ap.sealed);
+        let sealed = st.grille_states.get(&ap.id).copied().unwrap_or(ap.sealed);
         if sealed {
             self.events.push(Event::Secondary {
                 secondary: SecondaryEvent::EntryRefused {
@@ -198,10 +189,7 @@ impl GhostLobbySim {
             });
             return;
         }
-        let route = net
-            .routes
-            .iter()
-            .find(|r| r.access_points.contains(&ap.id));
+        let route = net.routes.iter().find(|r| r.access_points.contains(&ap.id));
         let Some(route) = route else {
             self.events.push(Event::Secondary {
                 secondary: SecondaryEvent::EntryRefused {
@@ -211,9 +199,7 @@ impl GhostLobbySim {
             });
             return;
         };
-        if let RouteAccess::Denied { .. } =
-            route_accessibility(ActorClass::Moletaire, route, st)
-        {
+        if let RouteAccess::Denied { .. } = route_accessibility(ActorClass::Moletaire, route, st) {
             self.events.push(Event::Secondary {
                 secondary: SecondaryEvent::EntryRefused {
                     route_id: Some(route.id.clone()),
@@ -244,7 +230,9 @@ impl GhostLobbySim {
         st.discovered.insert(route.id.clone());
         st.mole.order_move_to(egress_ap.x, true);
         self.events.push(Event::Secondary {
-            secondary: SecondaryEvent::RouteEntered { route_id: route.id.clone() },
+            secondary: SecondaryEvent::RouteEntered {
+                route_id: route.id.clone(),
+            },
         });
     }
 
@@ -257,9 +245,7 @@ impl GhostLobbySim {
         if self.paused || self.state.ended {
             return;
         }
-        let (Some(net), Some(st)) =
-            (&self.def.secondary, self.state.secondary.as_mut())
-        else {
+        let (Some(net), Some(st)) = (&self.def.secondary, self.state.secondary.as_mut()) else {
             return;
         };
         let s = st.mole.state();
@@ -300,9 +286,7 @@ impl GhostLobbySim {
         if self.paused || self.state.ended {
             return;
         }
-        let (Some(net), Some(st)) =
-            (&self.def.secondary, self.state.secondary.as_mut())
-        else {
+        let (Some(net), Some(st)) = (&self.def.secondary, self.state.secondary.as_mut()) else {
             return;
         };
         let Some(route_id) = st.mole_route.clone() else {
@@ -334,9 +318,7 @@ impl GhostLobbySim {
         if self.paused || self.state.ended {
             return;
         }
-        let (Some(net), Some(st)) =
-            (&self.def.secondary, self.state.secondary.as_mut())
-        else {
+        let (Some(net), Some(st)) = (&self.def.secondary, self.state.secondary.as_mut()) else {
             return;
         };
         let Some(route_id) = &st.mole_route else {
@@ -346,12 +328,17 @@ impl GhostLobbySim {
             return;
         }
         let s = st.mole.state();
-        let network = RouteNetwork { spec: net, state: st };
+        let network = RouteNetwork {
+            spec: net,
+            state: st,
+        };
         let Some(route) = network.route(route_id) else {
             return;
         };
         let at_ap = route.access_points.iter().any(|id| {
-            network.access_point(id).is_some_and(|ap| (ap.x - s.x).abs() <= ENTRY_REACH)
+            network
+                .access_point(id)
+                .is_some_and(|ap| (ap.x - s.x).abs() <= ENTRY_REACH)
         });
         if at_ap {
             st.mole.order_move_to(s.x, false);
@@ -396,28 +383,24 @@ impl GhostLobbySim {
                     .and_then(|s| s.route_states.get(&route.id))
                     .copied()
                     .unwrap_or(RouteState::Open);
-                let discovered = st
-                    .map_or(false, |s| s.discovered.contains(&route.id));
+                let discovered = st.map_or(false, |s| s.discovered.contains(&route.id));
                 let access_points = route
                     .access_points
                     .iter()
                     .filter_map(|ap_id| {
-                        net.access_points
-                            .iter()
-                            .find(|a| &a.id == ap_id)
-                            .map(|ap| {
-                                let sealed = st
-                                    .and_then(|s| s.grille_states.get(ap_id))
-                                    .copied()
-                                    .unwrap_or(ap.sealed);
-                                AccessPointDebug {
-                                    id: ap.id.clone(),
-                                    kind: ap.kind,
-                                    room: ap.room.as_ref().map(|r| r.to_string()),
-                                    x: ap.x,
-                                    sealed,
-                                }
-                            })
+                        net.access_points.iter().find(|a| &a.id == ap_id).map(|ap| {
+                            let sealed = st
+                                .and_then(|s| s.grille_states.get(ap_id))
+                                .copied()
+                                .unwrap_or(ap.sealed);
+                            AccessPointDebug {
+                                id: ap.id.clone(),
+                                kind: ap.kind,
+                                room: ap.room.as_ref().map(|r| r.to_string()),
+                                x: ap.x,
+                                sealed,
+                            }
+                        })
                     })
                     .collect();
                 RouteDebugEntry {
@@ -459,17 +442,15 @@ fn secondary_mole_event(
             // The companion sim invents `cable_<x>` from position; resolve it
             // to a real authored cable. Nothing authored at that position
             // means the mole chewed dirt: no event, no node cut.
-            let x = cable_id.strip_prefix("cable_").and_then(|s| s.parse::<f64>().ok())?;
+            let x = cable_id
+                .strip_prefix("cable_")
+                .and_then(|s| s.parse::<f64>().ok())?;
             let cable_id = topology::resolve_sabotage_cable(net, x)?;
-            let Some(cable) = net
-                .cables
-                .iter()
-                .find(|c| c.id == cable_id)
-                .cloned()
-            else {
+            let Some(cable) = net.cables.iter().find(|c| c.id == cable_id).cloned() else {
                 return None;
             };
-            st.cable_states.insert(cable_id.clone(), CableState::Severed);
+            st.cable_states
+                .insert(cable_id.clone(), CableState::Severed);
             events.push(Event::Secondary {
                 secondary: SecondaryEvent::CableSabotaged {
                     cable_id: cable_id.clone(),
@@ -513,11 +494,7 @@ fn secondary_mole_event(
     }
 }
 
-fn secondary_transit(
-    net: &SecondarySpec,
-    st: &mut SecondaryState,
-    events: &mut Vec<Event>,
-) {
+fn secondary_transit(net: &SecondarySpec, st: &mut SecondaryState, events: &mut Vec<Event>) {
     let s = st.mole.state();
     let mole_x = s.x;
     let mole_target_x = s.target_x;
@@ -537,7 +514,9 @@ fn secondary_transit(
             if route_state == RouteState::Open {
                 let route_id = route.id.clone();
                 events.push(Event::Secondary {
-                    secondary: SecondaryEvent::RouteEntered { route_id: route_id.clone() },
+                    secondary: SecondaryEvent::RouteEntered {
+                        route_id: route_id.clone(),
+                    },
                 });
                 st.mole_route = Some(route_id);
                 st.mole_entry_ap = Some(ap.id.clone());
@@ -569,7 +548,10 @@ fn secondary_transit(
         // Surfaced: leaving is only valid at one of this route's access
         // points.
         if let Some(route_id) = st.mole_route.take() {
-            let network = RouteNetwork { spec: net, state: st };
+            let network = RouteNetwork {
+                spec: net,
+                state: st,
+            };
             let at_ap = network.route(&route_id).is_some_and(|route| {
                 route.access_points.iter().any(|id| {
                     network
@@ -698,8 +680,7 @@ fn secondary_transit(
                 }),
                 SpaceKind::DamagedCable => {
                     if let Some(ref_id) = &space.ref_id {
-                        let severed =
-                            st.cable_states.get(ref_id) == Some(&CableState::Severed);
+                        let severed = st.cable_states.get(ref_id) == Some(&CableState::Severed);
                         if severed && !st.reported_damage.contains(ref_id) {
                             st.reported_damage.insert(ref_id.clone());
                             events.push(Event::Secondary {
@@ -751,9 +732,9 @@ fn entry_route_at<'a>(
 mod tests {
     use super::*;
     use crate::scenario::command::{Command, TickInput};
-    use crate::scenario::{CableId, RouteId, RunConfig};
     use crate::scenario::event::Event;
     use crate::scenario::ghost_lobby::ghost_lobby_secondary;
+    use crate::scenario::{CableId, RouteId, RunConfig};
 
     const ROUTE_NAME: &str = "maint-hall-service";
     const CABLE_NAME: &str = "cable-substation-feed";
@@ -804,9 +785,8 @@ mod tests {
     /// scenario through the normal power-cascade systems.
     #[test]
     fn moletaire_enters_maintenance_route_sabotages_real_cable_and_returns() {
-        let mut sim =
-            GhostLobbySim::new(ghost_lobby_secondary(), RunConfig::standard(), 424242)
-                .expect("the authored floor builds");
+        let mut sim = GhostLobbySim::new(ghost_lobby_secondary(), RunConfig::standard(), 424242)
+            .expect("the authored floor builds");
         let mut log = Vec::new();
         let route = RouteId::from(ROUTE_NAME);
         let cable = CableId::from(CABLE_NAME);
@@ -876,10 +856,7 @@ mod tests {
             sim.state.dead_nodes
         );
         assert!(
-            sim.state
-                .dead_nodes
-                .iter()
-                .any(|n| n.starts_with("cam-")),
+            sim.state.dead_nodes.iter().any(|n| n.starts_with("cam-")),
             "cameras must lose power: {:?}",
             sim.state.dead_nodes
         );
@@ -887,10 +864,7 @@ mod tests {
             log.iter().any(|e| matches!(e, Event::PowerLost { .. })),
             "PowerLost must be in the log: {log:?}"
         );
-        assert!(
-            sim.state.lights_flicker > 0.0,
-            "the floor must go dark"
-        );
+        assert!(sim.state.lights_flicker > 0.0, "the floor must go dark");
 
         // The cable state names the real cable, not an id invented from
         // position.
@@ -902,10 +876,7 @@ mod tests {
         // Hunger, equipment and sensing survive the run intact.
         let mole = mole_state(&sim);
         assert!(mole.alive);
-        assert!(
-            mole.hunger > 0.0,
-            "hunger must not vanish"
-        );
+        assert!(mole.hunger > 0.0, "hunger must not vanish");
         assert_eq!(mole.equipped, None);
 
         // Reversing and returning to the entry grille.
@@ -916,7 +887,9 @@ mod tests {
             if log.iter().any(|e| {
                 matches!(
                     e,
-                    Event::Secondary { secondary: SecondaryEvent::RouteReversed { .. } }
+                    Event::Secondary {
+                        secondary: SecondaryEvent::RouteReversed { .. }
+                    }
                 )
             }) {
                 reversed = true;
@@ -947,7 +920,9 @@ mod tests {
             if log.iter().any(|e| {
                 matches!(
                     e,
-                    Event::Secondary { secondary: SecondaryEvent::RouteLeft { .. } }
+                    Event::Secondary {
+                        secondary: SecondaryEvent::RouteLeft { .. }
+                    }
                 )
             }) {
                 left = true;
@@ -963,7 +938,9 @@ mod tests {
             log.iter().any(|e| {
                 matches!(
                     e,
-                    Event::Secondary { secondary: SecondaryEvent::CableDamaged { .. } }
+                    Event::Secondary {
+                        secondary: SecondaryEvent::CableDamaged { .. }
+                    }
                 )
             }),
             "damaged-cable evidence missing: {log:?}"
@@ -973,13 +950,10 @@ mod tests {
     #[test]
     fn entry_is_refused_outside_an_access_point() {
         let mut sim =
-            GhostLobbySim::new(ghost_lobby_secondary(), RunConfig::standard(), 1)
-                .expect("builds");
+            GhostLobbySim::new(ghost_lobby_secondary(), RunConfig::standard(), 1).expect("builds");
         // Mid-floor, not at a grille: entry is refused and no route begins.
         tick_cmd(&mut sim, &mut Vec::new(), Command::MoleEnterRoute);
-        assert!(
-            sim.state.secondary.as_ref().unwrap().mole_route.is_none()
-        );
+        assert!(sim.state.secondary.as_ref().unwrap().mole_route.is_none());
         assert!(entry_refused(
             &sim.drain_events(),
             EntryRefusalReason::NotAtAccessPoint
@@ -989,15 +963,17 @@ mod tests {
     #[test]
     fn sealed_route_cannot_be_entered() {
         let mut sim =
-            GhostLobbySim::new(ghost_lobby_secondary(), RunConfig::standard(), 1)
-                .expect("builds");
+            GhostLobbySim::new(ghost_lobby_secondary(), RunConfig::standard(), 1).expect("builds");
         let route = RouteId::from(ROUTE_NAME);
         // Seal the route from outside play: the grille is dogged.
-        sim.state.secondary.as_mut().unwrap().route_states.insert(route, RouteState::Sealed);
+        sim.state
+            .secondary
+            .as_mut()
+            .unwrap()
+            .route_states
+            .insert(route, RouteState::Sealed);
         tick_cmd(&mut sim, &mut Vec::new(), Command::MoleEnterRoute);
-        assert!(
-            sim.state.secondary.as_ref().unwrap().mole_route.is_none()
-        );
+        assert!(sim.state.secondary.as_ref().unwrap().mole_route.is_none());
         let log = sim.drain_events();
         assert!(entry_refused(&log, EntryRefusalReason::RouteSealed));
     }

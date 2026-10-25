@@ -355,7 +355,10 @@ mod tests {
         Observation {
             agent_id: id,
             tick,
-            self_pos: Fx2 { x: to_fx(100.0), y: 0 },
+            self_pos: Fx2 {
+                x: to_fx(100.0),
+                y: 0,
+            },
             self_vel: Fx2::ZERO,
             health: FX_ONE,
             ammo: 3 * FX_ONE,
@@ -387,7 +390,10 @@ mod tests {
             kernel_version: EeVersion::default(),
             kernel_fingerprint: 0,
         };
-        assert_eq!(host.tick(&obs(9, 1)).unwrap_err(), WeevilError::AgentNotFound(9));
+        assert_eq!(
+            host.tick(&obs(9, 1)).unwrap_err(),
+            WeevilError::AgentNotFound(9)
+        );
     }
 
     #[test]
@@ -408,11 +414,17 @@ mod tests {
         };
         assert_eq!(
             host.tick(&obs(0, 0)).unwrap_err(),
-            WeevilError::StaleTick { expected: 1, got: 0 }
+            WeevilError::StaleTick {
+                expected: 1,
+                got: 0
+            }
         );
         assert_eq!(
             host.tick(&obs(0, 7)).unwrap_err(),
-            WeevilError::StaleTick { expected: 1, got: 7 }
+            WeevilError::StaleTick {
+                expected: 1,
+                got: 7
+            }
         );
         // A refused tick must not have advanced the agent's own counter.
         assert_eq!(host.agent(0).unwrap().tick_last, 0);

@@ -37,9 +37,7 @@ impl<'a> RouteNetwork<'a> {
             .access_points
             .iter()
             .filter(|ap| (ap.x - x).abs() <= reach)
-            .filter(|ap| {
-                room.map_or(true, |r| ap.room.as_ref().map(|rr| rr.as_str()) == Some(r))
-            })
+            .filter(|ap| room.map_or(true, |r| ap.room.as_ref().map(|rr| rr.as_str()) == Some(r)))
             .min_by(|a, b| {
                 ((a.x - x).abs())
                     .partial_cmp(&(b.x - x).abs())
@@ -128,7 +126,10 @@ mod tests {
                 id: RouteId::from("maint-hall-service"),
                 kind: SpaceKind::Duct,
                 label: "test duct".into(),
-                geometry: RouteGeometry { x_range: (390.0, 1190.0), depth: (0.1, 0.6) },
+                geometry: RouteGeometry {
+                    x_range: (390.0, 1190.0),
+                    depth: (0.1, 0.6),
+                },
                 clearance: Clearance { w: 22.0, h: 18.0 },
                 actors: ActorClassSet::only(ActorClass::Moletaire),
                 travel_cost_per_sec: 0.005,
@@ -197,7 +198,10 @@ mod tests {
 
     #[test]
     fn route_covering_returns_the_authored_route() {
-        let net = RouteNetwork { spec: &spec(), state: &state() };
+        let net = RouteNetwork {
+            spec: &spec(),
+            state: &state(),
+        };
         assert_eq!(
             net.route_covering(1180.0).map(|r| r.id.as_str()),
             Some("maint-hall-service")
@@ -207,7 +211,10 @@ mod tests {
 
     #[test]
     fn entry_point_near_restricts_to_room_and_reach() {
-        let net = RouteNetwork { spec: &spec(), state: &state() };
+        let net = RouteNetwork {
+            spec: &spec(),
+            state: &state(),
+        };
         let hall = net
             .access_point_near(400.0, Some("hall"), 16.0)
             .map(|ap| ap.id.as_str())

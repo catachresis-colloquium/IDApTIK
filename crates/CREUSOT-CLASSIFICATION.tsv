@@ -253,3 +253,10 @@ T	crates/idaptik-weevil/src/bin/weevil_replay.rs	headless replay driver binary
 T	crates/idaptik-weevil/tests/replay_repro.rs	replay reproducibility test over the adapter; observing it would be circular
 P	crates/idaptik-bevy/src/guard_weevil.rs	the Bevy half of the kernel integration: turns sim perception into observations and the returned intent into the guard action
 D	crates/idaptik-core/src/scenario/guard_brain.rs	the selectable brain seam: plain enums, contact ids and perception/decision records with no kernel dependency
+L	crates/idaptik-core/src/scenario/secondary_spaces/access.rs	actor access rules over routes: actor mask, clearance against the body box, route state and equipment
+L	crates/idaptik-core/src/scenario/secondary_spaces/host.rs	hosts secondary spaces inside the run tick, mirroring sim/signal.rs; inert when a floor declares no secondary spec
+L	crates/idaptik-core/src/scenario/secondary_spaces/mod.rs	secondary-spaces model surface and module wiring
+L	crates/idaptik-core/src/scenario/secondary_spaces/model.rs	authored secondary content and its static traversal rules
+L	crates/idaptik-core/src/scenario/secondary_spaces/topology.rs	spatial queries over the authored secondary network, and navigation invalidation
+D	crates/idaptik-core/src/scenario/secondary_spaces/events.rs	secondary event types and their log renderings
+D	crates/idaptik-core/src/scenario/secondary_spaces/fixture.rs	the authored Ghost Lobby secondary network: content, not physics

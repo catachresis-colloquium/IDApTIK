@@ -17,9 +17,7 @@ use crate::host::{AgentState, WeevilHost};
 use crate::intent::{Action, Intent};
 use crate::observation::{Contact, ContactSource, Observation};
 use crate::profile::Profile;
-use crate::replay::{
-    AppliedEffect, ContactRecord, ObservationRecord, ReplayEntry, ReplayRecorder,
-};
+use crate::replay::{AppliedEffect, ContactRecord, ObservationRecord, ReplayEntry, ReplayRecorder};
 
 /// One entity in the world.
 #[derive(Debug, Clone, Copy)]
@@ -78,7 +76,13 @@ impl HostWorld {
     /// The canonical test corridor: five contiguous rooms, four doors, a guard,
     /// a scripted player and one object.
     pub fn canonical(profile: &Profile) -> Self {
-        let rooms = vec![(0.0, 200.0), (200.0, 200.0), (400.0, 200.0), (600.0, 200.0), (800.0, 200.0)];
+        let rooms = vec![
+            (0.0, 200.0),
+            (200.0, 200.0),
+            (400.0, 200.0),
+            (600.0, 200.0),
+            (800.0, 200.0),
+        ];
         let doors = vec![200.0, 400.0, 600.0, 800.0];
         let mut w = Self {
             tick: 0,
@@ -290,8 +294,7 @@ impl HostWorld {
         // against a 1.6-fx ceiling and never bites — the guard would then run
         // at 8 canvas units per tick whatever the profile declared, and
         // `max_speed_world` would be a number nothing read.
-        let mut speed_world =
-            from_fx(intent.speed.max(0)) / profile.host.fx_per_world_unit;
+        let mut speed_world = from_fx(intent.speed.max(0)) / profile.host.fx_per_world_unit;
         if speed_world > profile.host.max_speed_world {
             speed_world = profile.host.max_speed_world;
         }
@@ -311,9 +314,13 @@ impl HostWorld {
                     } else {
                         let wp = waypoints[self.guard.patrol_index % waypoints.len()];
                         if (wp - self.guard.x).abs() < 4.0 {
-                            self.guard.patrol_index = (self.guard.patrol_index + 1) % waypoints.len();
+                            self.guard.patrol_index =
+                                (self.guard.patrol_index + 1) % waypoints.len();
                         }
-                        (waypoints[self.guard.patrol_index % waypoints.len()], "advance-patrol")
+                        (
+                            waypoints[self.guard.patrol_index % waypoints.len()],
+                            "advance-patrol",
+                        )
                     }
                 }
             }
@@ -325,7 +332,7 @@ impl HostWorld {
                         speed_applied: 0,
                         blocked: false,
                         reason: "attack-invalid-target".to_owned(),
-                    }
+                    };
                 }
             },
             Action::Flee => match self.resolve_target(intent, profile) {
@@ -339,7 +346,7 @@ impl HostWorld {
                         speed_applied: 0,
                         blocked: false,
                         reason: "flee-invalid-target".to_owned(),
-                    }
+                    };
                 }
             },
             Action::Investigate => {
@@ -422,8 +429,7 @@ impl HostWorld {
         // Host-side validation of the proposal. The kernel's speed is advisory
         // and the host's movement limit is applied when the effect is applied,
         // so the only speed condition worth refusing on is a negative one.
-        let accepted =
-            self.target_is_live(outcome.intent.target_id) && outcome.intent.speed >= 0;
+        let accepted = self.target_is_live(outcome.intent.target_id) && outcome.intent.speed >= 0;
         let applied = if accepted {
             self.apply(&outcome.intent, profile)
         } else {
@@ -460,7 +466,11 @@ impl HostWorld {
 impl HostWorld {
     /// The contacts the guard perceived this tick.
     pub fn contacts(&self, profile: &Profile) -> Vec<ContactRecord> {
-        self.observation(profile).contacts.iter().map(ContactRecord::from).collect()
+        self.observation(profile)
+            .contacts
+            .iter()
+            .map(ContactRecord::from)
+            .collect()
     }
 }
 
@@ -494,7 +504,7 @@ mod tests {
         let intent = Intent {
             action: Action::Attack,
             target_id: 9999,
-            move: Fx2::ZERO,
+            r#move: Fx2::ZERO,
             look: Fx2::ZERO,
             speed: 100,
             priority: 0,
@@ -514,7 +524,7 @@ mod tests {
         let intent = Intent {
             action: Action::Advance,
             target_id: 0,
-            move: Fx2::ZERO,
+            r#move: Fx2::ZERO,
             look: Fx2::ZERO,
             // The kernel's own advance speed: 1.0 fx, which the corridor turns
             // into 8 canvas units and then clamps to the profile's limit.
@@ -541,7 +551,7 @@ mod tests {
         let intent = Intent {
             action: Action::Advance,
             target_id: 0,
-            move: Fx2::ZERO,
+            r#move: Fx2::ZERO,
             look: Fx2::ZERO,
             speed: crate::abi::FX_ONE,
             priority: 0,
@@ -573,7 +583,9 @@ mod tests {
         });
         let obs = w.observation(&profile);
         assert!(
-            obs.contacts.iter().any(|c| c.source == ContactSource::Player),
+            obs.contacts
+                .iter()
+                .any(|c| c.source == ContactSource::Player),
             "the guard sees the player when it is in the same room and in range"
         );
         // A player in another room is not reported.

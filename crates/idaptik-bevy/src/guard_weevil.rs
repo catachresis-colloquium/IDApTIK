@@ -13,15 +13,15 @@
 //! plugin degrades to `Classic` and records why, rather than failing the app.
 
 use bevy::prelude::*;
+use idaptik_core::scenario::GhostLobbySim;
 use idaptik_core::scenario::guard_brain::{
     GuardApplyOutcome, GuardBrainKind, GuardContact, GuardDecision, GuardPerception,
 };
-use idaptik_core::scenario::GhostLobbySim;
+use idaptik_weevil::WeevilHost;
 use idaptik_weevil::fx::{Fx2, bearing_to, from_fx, to_fx};
 use idaptik_weevil::intent::Intent;
 use idaptik_weevil::observation::{Contact, ContactSource, Observation};
 use idaptik_weevil::profile::{Profile, ProfileSet};
-use idaptik_weevil::WeevilHost;
 
 use crate::driver::SimState;
 
