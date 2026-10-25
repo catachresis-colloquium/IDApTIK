@@ -75,7 +75,8 @@ and **name it**, so a reader can go and look:
 > — `docs/ARCHITECTURE.md`
 
 > The local half of this boundary is enforced by the `no-authoring-dependency`
-> invariant in `.machine_readable/contractiles/Mustfile.a2ml`.
+> clause in `.machine_readable/contractiles/must/must.k9.ncl`, executed by
+> `scripts/must_check.sh`.
 > — `docs/adr/0009-enaction-kernel-dependency-direction.md`
 
 Both are good: the claim is indicative, and it carries its own address. A bare

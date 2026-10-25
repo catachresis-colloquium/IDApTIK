@@ -439,3 +439,66 @@ pub const NOISE_PICK: f64 = 0.3;
 pub const EXTERIOR_SUPPORT: f64 = 0.9;
 /// The street's far end (body left edge), well beyond the front door.
 pub const STREET_LO: f64 = -230.0;
+
+// ---------------------------------------------------------------------------
+// Infrastructure consequences (a floor with an `InfraDef`).
+// ---------------------------------------------------------------------------
+//## Infrastructure
+// Original addition — not ported from the HTML prototype. These numbers have
+// no canonical source to check against; they are the first tuning pass for
+// the water/failure/alarm layer and are flagged for review exactly as the
+// Net View constants above are. A floor without an `InfraDef` reads none of
+// them, so every existing replay is untouched.
+/// Water level (0..=1) at which a flooding zone shorts the room's electrics.
+pub const WATER_SHORT_AT: f64 = 0.55;
+/// Water level (0..=1) at which wading starts to slow a body and splash.
+pub const WATER_WADE_AT: f64 = 0.15;
+/// Speed multiplier for a body wading through water: flat across the whole
+/// wade band, from `WATER_WADE_AT` to full depth.
+pub const WATER_WADE_SPEED: f64 = 0.62;
+/// The noise floor wading sets on the player's own noise meter while moving
+/// (above `NOISE_INVEST_NOISE`, so splashing betrays a wader to Billy's
+/// existing hearing — the guard reacts to the noise, not to the choice).
+pub const WATER_WADE_NOISE: f64 = 0.62;
+/// How loud a zone's fill splashes, as a noise intensity on the same scale as
+/// the player's noise meter, while the level is still climbing.
+pub const WATER_SPLASH_NOISE: f64 = 0.7;
+/// Seconds a shorted room's electrics spark and crack (a seen/heard failure).
+pub const WATER_SHORT_FLASH: f64 = 0.6;
+/// Water level (0..=1) at which a water-triggered alarm trips.
+pub const ALARM_WATER_TRIP_LEVEL: f64 = 0.25;
+/// Alert units per second a sounding alarm adds (scaled by the difficulty
+/// preset's `alert_gain`, exactly as `CALL_ALERT` is). A sustained flood
+/// alarm is pressure with a deadline: it climbs the alert toward the
+/// lockdown band, but slowly enough that a run in progress can finish.
+pub const ALARM_ALERT_RATE: f64 = 0.9;
+/// How loud a sounding alarm is, as a noise intensity: above every archetype's
+/// `invest_noise`, and heard floor-wide (no distance gate).
+pub const ALARM_NOISE: f64 = 1.0;
+/// How loud a sparking short is, as a noise intensity (distance-gated like
+/// every other source).
+pub const SHORT_FLASH_NOISE: f64 = 0.8;
+/// How close (world units, body centre) the infiltrator stands to reach a
+/// zone's manual valve handle.
+pub const VALVE_DIST: f64 = 40.0;
+/// Seconds of held interact that turn a manual handle and release its zone.
+pub const VALVE_TURN_HOLD: f64 = 1.5;
+
+//## Moletaire hosting (a floor with a `MoleHostDef`).
+// Original addition — the companion module is a port, but hosting it on a
+// scenario floor is new. Flagged for review like the blocks above.
+/// How loud the mole's synth diversion is, as a noise intensity: above
+/// Billy's `invest_noise`, so the existing hearing gate takes it seriously.
+pub const MOLE_SYNTH_NOISE: f64 = 0.8;
+/// Seconds a synth diversion keeps pulling attention after it plays.
+pub const MOLE_SYNTH_DURATION: f64 = 2.2;
+/// How loud the mole digging or chewing a cable is (quieter than the synth:
+/// it carries, but not across the floor).
+pub const MOLE_DIG_NOISE: f64 = 0.5;
+/// How close (world units) a sabotaged cable takes a device node down: the
+/// nearest light, camera or door node to the mole inside this radius loses
+/// power through the ordinary `DevicePowerLost` path.
+pub const MOLE_SABOTAGE_RADIUS: f64 = 90.0;
+/// The mole's hosted seed is the run seed folded with this constant, so its
+/// RNG stream is its own and the run's draw counts never move.
+pub const MOLE_SEED_FOLD: u32 = 0x4D4F_4C45;

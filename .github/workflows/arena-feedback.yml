@@ -1,0 +1,140 @@
+# TEMPORARY authoring aid (removed before merge): the authoring sandbox can
+# reach api.github.com but not the Azure blob host the Actions log API
+# redirects to, so this job runs a subset of `just test-ghost` (formatting and
+# core tests), plus core/TUI/net checks, and posts a compact PR digest. It does
+# not run TUI/FFI/net tests or warnings-denied Clippy.
+name: arena-feedback
+
+on:
+  push:
+    branches: [ "arena/9befe5c4-idaptik" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  feedback:
+    runs-on: ubuntu-latest
+    env:
+      DIGEST: /tmp/arena-digest.md
+    steps:
+      # Pinned to an immutable 40-hex commit (actions/checkout v4), matching
+      # abi-conformance.yml and creusot-proof.yml: an unonboarded workflow
+      # with a movable tag ref fails scripts/check-lock-sync.sh, and this
+      # temporary file is removed before merge rather than entered into the
+      # machine-generated actions.lock.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Provision pinned Rust toolchain
+        run: |
+          rustup show
+          : > "$DIGEST"
+      - name: fmt --check
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo fmt --all -- --check > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## fmt --check'
+            echo "Exit status: $status"
+            echo '```diff'
+            head -c 30000 "$output"
+            echo
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: check (short messages, all targets)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets --message-format short > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo check --all-targets (core/tui/net) — short'
+            echo "Exit status: $status"
+            echo '```'
+            head -160 "$output"
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: check (full context)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo check — full context (first 240 lines)'
+            echo "Exit status: $status"
+            echo '```'
+            head -240 "$output"
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: clippy (core/tui/net/weevil, -D warnings, short)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil \
+            --all-targets --message-format short -- -D warnings > "$output" 2>&1 || status=$?
+          {
+            echo '## cargo clippy (core/tui/net/evil-weevil --all-targets -D warnings) — short'
+            echo "Exit status: $status"
+            echo '```'
+            grep -E "error|warning" "$output" | grep -v "^ " | head -80
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: test (core/tui/ffi/net/weevil)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil'
+            echo "Exit status: $status"
+            echo '```'
+            grep -E "^test result:|panicked|error(\[|:)" "$output" | head -80
+            echo '--- failure details ---'
+            sed -n '/^failures:$/,$p' "$output" | head -300
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: evil-weevil-check (corpus gates)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          bash scripts/evil_weevil_check.sh > "$output" 2>&1 || status=$?
+          {
+            echo '## just evil-weevil-check (deterministic adversarial corpus)'
+            echo "Exit status: $status"
+            echo '```'
+            tail -40 "$output"
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: Post digest as PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -s "$DIGEST" || echo "no digest produced" > "$DIGEST"
+          head -c 60000 "$DIGEST" > digest-trimmed.md
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number -q '.[0].number')
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" --body-file digest-trimmed.md
+          else
+            echo "::error::No open PR for $GITHUB_REF_NAME"
+            cat digest-trimmed.md
+          fi

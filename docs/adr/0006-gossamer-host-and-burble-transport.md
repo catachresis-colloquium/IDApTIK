@@ -9,8 +9,10 @@ Issue #7 asks for the last layer of the vertical slice: wrap the Bevy Ghost
 Lobby frontend in the **gossamer** host window and carry the Phoenix session
 socket over **burble** transport, so two players launch a windowed build, join
 the same `session:<id>`, and play the two roles against one shared
-authoritative run. The issue is explicit that this is integration glue, the
-churniest layer, and must land **last**.
+authoritative run. That was the issue's intended target, not the behavior
+implemented by the relay-only decision in ADR-0005: today both clients run the
+simulation and Burble only relays. The issue is explicit that this is
+integration glue, the churniest layer, and must land **last**.
 
 Everything under it is now real:
 
@@ -139,15 +141,12 @@ carries the session frames.
 
 ### 3. Session bring-up: the relay is the rendezvous
 
-**The Phoenix relay is the rendezvous point.** Both clients dial *out* to a
-reachable server; no client ever needs an inbound path to the other. This is a
-structural choice, not a hedge: burble's own ADR-0005 records that
-hole-punching cannot serve peers who are not simultaneously coordinating
-through a rendezvous — an offline or not-yet-launched peer is unreachable by
-STUN/ICE *by definition*. Peer-to-peer hole punching is therefore **out of
-scope for session bring-up**, and nothing in this design assumes it later:
-if burble adds P2P upgrade for live sessions, it slots under
-`SessionTransport` without touching the join flow.
+**For this Phoenix transport path, the relay is the rendezvous point.** Both
+clients dial *out* to a reachable server; no client ever needs an inbound path
+to the other. This is a structural choice for the existing relay path, not a
+claim that every deployment must use a relay. ADR-0015 specifies an optional
+direct-peer topology; it does not promise automatic NAT traversal, and the
+current client has no direct-peer transport.
 
 Join flow:
 
@@ -346,3 +345,13 @@ This removes the duplicated Phoenix implementation. It does **not** claim the
 remaining gossamer hosting condition or a distinct voice/data-channel
 `BurbleTransport` is complete; those remain separate from using Burble's
 canonical client for the existing game-session WebSocket lane.
+
+## Status note (2026-10-24): topology scope clarified
+
+The current `game:<id>` Phoenix path remains a relay: both client processes
+run `GhostLobbySim`, and the loopback gate proves relay-backed lockstep,
+peer-loss handling, and resync—not server-authoritative simulation. The §3
+rendezvous language describes that transport path only. ADR-0015 defines the
+separate peer-to-peer and federated deployment contracts; neither direct peer
+transport nor a hosted authority/federation runtime is implemented in this
+checkout.

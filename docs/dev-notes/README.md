@@ -12,3 +12,7 @@ Unlike `docs/adr/` (decisions, immutable once accepted) and
   — provisional affective–cognitive–conative loop and Kautz terminology.
 - [vsm-relevance-hypothesis-2026-07-26.md](vsm-relevance-hypothesis-2026-07-26.md)
   — provisional VSM mapping for regulation, autonomy, recursion, and viability.
+- [tamper-testbed-handover-2026-10-25.md](tamper-testbed-handover-2026-10-25.md)
+  — handover for the physical-tampering testbed request: source-backed audit of
+  what exists, the open PRs it must reconcile with, a proposed M0–M6 plan, and
+  the owner rulings still needed.

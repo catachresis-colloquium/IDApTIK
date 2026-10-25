@@ -14,6 +14,7 @@ members = [
     "crates/idaptik-tui",
     "crates/idaptik-net",
     "crates/idaptik-evil-weevil",
+    "crates/idaptik-persist",
     "crates/idaptik-bevy",
 ]
 
@@ -32,10 +33,20 @@ serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` guarantees bit-exact f64 JSON round-trips (snapshots/exports).
 serde_json = { version = "1", features = ["float_roundtrip"] }
 libm = "0.2"
+# Durable session storage (crates/idaptik-persist). Pure Rust, single file,
+# MIT/Apache-2.0 — both licences already allowed in deny.toml, so this adds no
+# supply-chain exception.
+redb = "2.6"
 ratatui = "0.30"
 crossterm = "0.29"
 clap = { version = "4", features = ["derive"] }
-bevy = "0.20"
+# The frontend renders a 2D floor and Bevy UI only, so the 3D and audio feature
+# groups stay off. This is a security boundary, not only a build-size choice:
+# `3d_api` pulls the zstd decoder path, and the resolved `ruzstd 0.8.3` carries
+# RUSTSEC-2026-0344 (a decompression bomb: a sub-128 KB `.zst` can exhaust
+# memory). `cargo-deny` fails the supply-chain gate on it. Re-enable 3D only
+# together with a `ruzstd >= 0.9.1` resolution, and audio only when sound ships.
+bevy = { version = "0.20", default-features = false, features = ["2d", "ui"] }
 bevy_winit = { version = "0.20.0", default-features = false, features = ["wayland-csd-adwaita-notitle"] }
 # The client-side session transport (ADR-0006 §2): async runtime + WebSocket.
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }

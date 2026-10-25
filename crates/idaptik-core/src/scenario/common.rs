@@ -138,6 +138,18 @@ pub enum DenyReason {
     NoRoute,
 }
 
+/// Why an order to the hosted Moletaire companion was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MoleDenyReason {
+    /// This floor hosts no companion; the order has nothing to reach.
+    NotHosted,
+    /// The mole is dead — the archive's permadeath is honoured here.
+    Gone,
+    /// The order cannot run right now (no such synth sound, too shallow to
+    /// dig or chew, the mole is busy resisting hunger).
+    Unavailable,
+}
+
 /// Derived objective status for the ledger.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ObjectiveStatus {

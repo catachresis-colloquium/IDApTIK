@@ -1,14 +1,15 @@
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
-#   just test-ghost           -> cargo test (core/tui/ffi) + clippy -D warnings + fmt --check
+#   just test-ghost           -> cargo test (core/tui/ffi/net/evil-weevil) + clippy -D warnings + fmt --check
 #   just evil-weevil-check    -> ADR-0013 deterministic adversarial corpus (offline, no sockets)
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
 #   session loopback          -> relay tests + two-seat determinism/resync
-#   fixture suites            -> shell fixtures (doctor, launcher, vendor gate)
-#   must-check                -> Mustfile physical-state probes
+#   fixture suites            -> offline shell, toolchain, coordination, and migration fixtures
+#   must-check                -> K9 Must component physical-state probes
+#   machine-readable          -> pinned DEED/K9/Nickel and coordination checks
 #
 # The Rust toolchain (channel + clippy/rustfmt/rust-src + wasm32 target) is pinned
 # by rust-toolchain.toml, which rustup installs automatically on first use.
@@ -66,9 +67,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Shell fixture suites + Mustfile probes. These need nothing but the checkout
-  # and (for the rust-formatted probe) the pinned Rust toolchain, so they run
-  # before anything slow.
+  # Shell fixture suites + K9 Must probes. The pinned Rust toolchain is needed
+  # for rustfmt; this gate runs before the slower compiler/bootstrap jobs.
+  # Preserve the established check-run name for branch-protection compatibility;
+  # "Mustfile probes" is a historical label, while the runner below reads K9.
   fixtures-and-must:
     name: fixtures-and-must (shell suites + Mustfile probes)
     runs-on: ubuntu-latest
@@ -140,8 +142,14 @@ jobs:
       # pass over ten small files, about a second.
       - name: Actions lockfile synchronisation (issue #142 class of failure)
         run: ./scripts/check-lock-sync.sh
-      - name: Mustfile physical-state probes
+      - name: Coordination K9 structural fixtures
+        run: bash tests/coordination_k9_check_test.sh
+      - name: Machine-readable migration layout fixtures
+        run: bash tests/machine_readable_migration_test.sh
+      - name: K9 Must component physical-state probes
         run: bash scripts/must_check.sh
+      - name: K9 Must probe rejection fixtures
+        run: bash tests/must_check_test.sh
       # The proof-escape scan needs no Idris2 toolchain, so it lives here
       # rather than in abi-model: a `believe_me` is then caught on every
       # pull request, not only on the ones where the 20-25 minute compiler
@@ -163,6 +171,30 @@ jobs:
         run: ./scripts/doc_claims_check.sh --self-test
       - name: Documentation-claims scan (digest coverage + step-name claims)
         run: ./scripts/doc_claims_check.sh
+
+  machine-readable-conformance:
+    name: machine-readable (DEED, K9, Nickel, coordination)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Pinned DEED/K9 and coordination conformance
+        run: |
+          set +e
+          bash scripts/machine_readable_check.sh > /tmp/machine-readable.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/machine-readable.log
+          if [ "$rc" -ne 0 ]; then
+            detail="$(tail -n 30 /tmp/machine-readable.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+            echo "::error::machine-readable rc=$rc -- $detail"
+            exit "$rc"
+          fi
 
 # Idris2 ABI model gate (issue #103): bootstrap Idris 2 0.8.0 with a source
 # built Chez (no system deps beyond libc), then run the model gate.
@@ -285,6 +317,16 @@ jobs:
     name: fmt (rustfmt --check)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      # checks: write publishes the rustfmt diff into this job's own check-run
+      # output. `cargo fmt -- --check` prints the offending hunks to stdout and
+      # exits 1; without this the failure is a bare "exit code 1" that no one
+      # outside the runner can read.
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         run: |
@@ -295,11 +337,48 @@ jobs:
       - name: Provision pinned Rust toolchain (rust-toolchain.toml)
         run: rustup show
       - name: cargo fmt --all -- --check
-        run: cargo fmt --all -- --check
+        run: |
+          set +e
+          cargo fmt --all -- --check > /tmp/fmt.out 2>&1
+          rc=$?
+          set -e
+          cat /tmp/fmt.out
+          if [ "$rc" -ne 0 ]; then
+            # The diff comes first: a truncated annotation must show the hunks
+            # that are actually unformatted, not the tail of a passing run.
+            {
+              echo '### cargo fmt --all -- --check failed (rc='"$rc"')'
+              echo '```diff'
+              head -n 120 /tmp/fmt.out
+              echo '```'
+            } > /tmp/fmt-detail.md
+            cat /tmp/fmt-detail.md >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            detail="$(grep -nE '^Diff in |^error' /tmp/fmt.out | head -20 | tr '\n' ' ' | head -c 1200)"
+            echo "::error::fmt rc=$rc -- $detail"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "fmt (rustfmt --check)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "rustfmt found unformatted code" --arg rc "$rc" --rawfile body /tmp/fmt-detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: $body}}' > /tmp/fmt_patch.json \
+                && gh api --input /tmp/fmt_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
 
   supply-chain:
     name: supply-chain (cargo-deny)
+    permissions:
+      actions: read
+      contents: read
+      # checks: write is used only to publish this job's own failure detail
+      # into its check-run output: this estate's runner pool does not expose
+      # ::error:: annotations through the check-runs API (verified across 83
+      # failed jobs), so without it the verdict of a failing gate is
+      # unreadable by anyone without run-log access. The token writes only
+      # this check-run's output.title/output.summary.
+      checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -313,7 +392,31 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.20.2 --locked
       - name: Check advisories, dependencies, licences, and sources
-        run: cargo deny check --hide-inclusion-graph
+        run: |
+          # Same failure-capture pattern as the vendor-parity step: cargo
+          # deny's verdict exists only in the run log, which a remote
+          # operator (or a sandbox without log egress) cannot read.
+          set +e
+          cargo deny check --hide-inclusion-graph 2>&1 | tee /tmp/deny_out.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### cargo-deny failed (rc='"$rc"') -- last output lines'
+              echo '```'
+              tail -40 /tmp/deny_out.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            tail -40 /tmp/deny_out.txt > /tmp/cargo_deny_detail.md
+            echo "::error::cargo-deny rc=$rc -- $(tail -3 /tmp/deny_out.txt | tr '\n' ' | ')"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "supply-chain (cargo-deny)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "cargo-deny failed" --arg rc "$rc" --rawfile body /tmp/cargo_deny_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/cargo_deny_patch.json \
+                && gh api --input /tmp/cargo_deny_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
 
   # Gate for the vendored bevy_winit feature patch (issue #105): source and
   # manifest parity with the published crate, font-parser-free resolved graph,
@@ -321,7 +424,19 @@ jobs:
   # job covers that the selected Wayland+X11 build actually compiles.
   vendor-parity:
     name: vendor-parity (bevy_winit patch gate)
+    permissions:
+      actions: read
+      contents: read
+      # checks: write is used only to publish this job's own failure detail
+      # into its check-run output: this estate's runner pool does not expose
+      # ::error:: annotations through the check-runs API (verified across 83
+      # failed jobs), so without it the verdict of a failing gate is
+      # unreadable by anyone without run-log access. The token writes only
+      # this check-run's output.title/output.summary.
+      checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -335,14 +450,87 @@ jobs:
       - name: Fixture self-test (clean + firing fixtures, no network)
         run: bash tests/vendor_winit_check_test.sh
       - name: Vendored copy matches the published crate
-        run: bash scripts/vendor_bevy_winit_check.sh parity
+        run: |
+          # Capture the raw exit code and the last lines of output: the
+          # checker's own die() carries the detail, but any failure path that
+          # slips past it (a set -e trip on an unguarded command) must still
+          # be diagnosable without run-log access.
+          set +e
+          bash scripts/vendor_bevy_winit_check.sh parity 2>&1 | tee /tmp/parity_out.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### vendor-parity failed (rc='"$rc"') -- last output lines'
+              echo '```'
+              tail -40 /tmp/parity_out.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            tail -40 /tmp/parity_out.txt > /tmp/vendor_parity_detail.md
+            echo "::error::vendor-parity rc=$rc -- $(tail -3 /tmp/parity_out.txt | tr '\n' ' | ')"
+            # Check-run output is the API-readable failure channel (see the
+            # permissions note above). Best-effort: the step summary is the
+            # fallback for UI readers either way.
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "vendor-parity (bevy_winit patch gate)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "vendor-parity failed" --arg rc "$rc" --rawfile body /tmp/vendor_parity_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/vendor_parity_patch.json \
+                && gh api --input /tmp/vendor_parity_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
       - name: Font-parser-free graph with title-free CSD active
-        run: bash scripts/vendor_bevy_winit_check.sh graph
+        run: |
+          cp Cargo.lock /tmp/Cargo.lock.before
+          set +e
+          bash scripts/vendor_bevy_winit_check.sh graph > /tmp/vendor-graph.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/vendor-graph.log
+          if [ "$rc" -ne 0 ]; then
+            set +e
+            cargo metadata --format-version 1 > /tmp/unlocked-metadata.json 2> /tmp/unlocked-metadata.err
+            metadata_rc=$?
+            set -e
+            if [ "$metadata_rc" -eq 0 ]; then
+              diff -u /tmp/Cargo.lock.before Cargo.lock > /tmp/Cargo.lock.diff || true
+              cat /tmp/Cargo.lock.diff
+              detail="$(head -c 50000 /tmp/Cargo.lock.diff | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')"
+              echo "::error::Cargo.lock diff proposed by unlocked metadata: $detail"
+              {
+                echo '### Cargo.lock diff proposed by unlocked cargo metadata'
+                echo '```diff'
+                cat /tmp/Cargo.lock.diff
+                echo '```'
+              } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "vendor-parity (bevy_winit patch gate)") | .id' 2>/dev/null | head -1)"
+              if [ -n "$cr_id" ]; then
+                jq -n --arg title "Cargo.lock diff proposed by unlocked metadata" --rawfile body /tmp/Cargo.lock.diff \
+                  '{output: {title: $title, summary: ("```diff\n" + $body + "```")}}' > /tmp/lock-drift-patch.json \
+                  && gh api --input /tmp/lock-drift-patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+              fi
+            else
+              cat /tmp/unlocked-metadata.err
+              detail="$(tail -n 30 /tmp/unlocked-metadata.err | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+              echo "::error::unlocked cargo metadata also failed (rc=$metadata_rc) -- $detail"
+            fi
+            exit "$rc"
+          fi
 
   test-ghost:
     name: test-ghost (core/tui/ffi + clippy + fmt)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      # checks: write publishes this job's own failure detail into its check-run
+      # output: annotations are capped at ~4 KB and the runner pool does not
+      # expose ::error:: text through the API, so a truncated annotation used to
+      # show 4 KB of *passing* test output before the actual failure.
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         run: |
@@ -355,7 +543,37 @@ jobs:
       - name: Install just (task runner, same recipe as local)
         run: cargo install just --version 1.46.0 --locked
       - name: just test-ghost
-        run: just test-ghost
+        run: |
+          set +e
+          just test-ghost > /tmp/test-ghost.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/test-ghost.log
+          if [ "$rc" -ne 0 ]; then
+            # Lead with the diagnostic lines, not with the tail: the annotations
+            # API keeps only the first ~4 KB, and the old tail-first capture spent
+            # that budget on passing tests so the real failure was unreadable.
+            {
+              echo '### test-ghost failed (rc='"$rc"') -- error lines'
+              echo '```'
+              grep -nE '^(error(\[|:)|warning: unused|thread .main.|failures:|test .* FAILED)' /tmp/test-ghost.log | head -40 || true
+              echo '```'
+              echo '### last 25 lines'
+              echo '```'
+              tail -n 25 /tmp/test-ghost.log
+              echo '```'
+            } > /tmp/test-ghost-detail.md
+            cat /tmp/test-ghost-detail.md >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            detail="$(tr '\n' ' ' < /tmp/test-ghost-detail.md | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 3600)"
+            echo "::error::test-ghost rc=$rc -- $detail"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "test-ghost (core/tui/ffi + clippy + fmt)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "test-ghost failed" --arg rc "$rc" --rawfile body /tmp/test-ghost-detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: $body}}' > /tmp/test_ghost_patch.json \
+                && gh api --input /tmp/test_ghost_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
       # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
       # (binary, redacted artifacts, secret-shape and byte-identical
       # determinism gates), not only the crate's tests already run above.
@@ -365,7 +583,19 @@ jobs:
 
   bevy-frontend:
     name: bevy-frontend (tests + clippy)
+    permissions:
+      actions: read
+      contents: read
+      # checks: write is used only to publish this job's own failure detail
+      # into its check-run output: this estate's runner pool does not expose
+      # ::error:: annotations through the check-runs API (verified across 83
+      # failed jobs), so without it the verdict of a failing gate is
+      # unreadable by anyone without run-log access. The token writes only
+      # this check-run's output.title/output.summary.
+      checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 40
     steps:
       - name: Checkout
@@ -381,9 +611,55 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
       - name: Test selected frontend
-        run: cargo test -p idaptik-bevy
+        run: |
+          set +e
+          cargo test -p idaptik-bevy 2>&1 | tee /tmp/bevy_test.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### bevy-frontend cargo test failed (rc='"$rc"')'
+              echo '```'
+              grep -n -m 4 -A 12 -E '^error' /tmp/bevy_test.txt | head -70
+              echo '--- tail ---'
+              tail -15 /tmp/bevy_test.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            { grep -m 4 -A 12 -E '^error' /tmp/bevy_test.txt | head -70; echo '--- tail ---'; tail -15 /tmp/bevy_test.txt; } > /tmp/bevy_test_detail.md
+            echo "::error::bevy-test rc=$rc -- $(grep -m1 -E '^error' /tmp/bevy_test.txt | head -c 300)"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "bevy-frontend (tests + clippy)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "bevy-frontend test failed" --arg rc "$rc" --rawfile body /tmp/bevy_test_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/bevy_test_patch.json \
+                && gh api --input /tmp/bevy_test_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
       - name: Lint selected frontend
-        run: cargo clippy -p idaptik-bevy --all-targets -- -D warnings
+        run: |
+          set +e
+          cargo clippy -p idaptik-bevy --all-targets -- -D warnings 2>&1 | tee /tmp/bevy_clippy.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '### bevy-frontend clippy failed (rc='"$rc"')'
+              echo '```'
+              grep -n -m 4 -A 12 -E '^(error|warning: unused|error\[)' /tmp/bevy_clippy.txt | head -70
+              echo '--- tail ---'
+              tail -15 /tmp/bevy_clippy.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            { grep -m 4 -A 12 -E '^(error|warning: unused|error\[)' /tmp/bevy_clippy.txt | head -70; echo '--- tail ---'; tail -15 /tmp/bevy_clippy.txt; } > /tmp/bevy_clippy_detail.md
+            echo "::error::bevy-clippy rc=$rc -- $(grep -m1 -E '^error' /tmp/bevy_clippy.txt | head -c 300)"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "bevy-frontend (tests + clippy)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "bevy-frontend clippy failed" --arg rc "$rc" --rawfile body /tmp/bevy_clippy_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/bevy_clippy_patch.json \
+                && gh api --input /tmp/bevy_clippy_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
+            exit "$rc"
+          fi
 
   session-loopback:
     name: session-loopback (Burble relay + two-seat determinism gate)

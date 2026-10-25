@@ -13,7 +13,7 @@ merge_protections_settings:
   # difference was measured on PR #148 within three minutes of PR #147 landing:
   #
   #     actions.lock is in sync with the workflow YAML   failure
-  #     fixtures-and-must (shell suites + Mustfile...)   failure
+  #     fixtures-and-must (shell suites + then-active legacy Mustfile...)   failure
   #     build  (GitHub Pages)                            failure
   #     abi-model, test-ghost, session-loopback,
   #     supply-chain, bevy-frontend, config-scenario...  in_progress

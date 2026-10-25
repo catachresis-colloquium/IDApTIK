@@ -1,7 +1,8 @@
 # Choosing a database for IDApTIK
 
-Status: **analysis, not a decision.** Nothing here is adopted yet. The numbers
-are measured from this tree; the external facts are dated and sourced.
+Status: **Tier 1 is built; Tiers 2–3 are still analysis.** See
+§*What was actually built* at the end. The numbers are measured from this tree;
+the external facts are dated and sourced.
 
 ## What the game actually stores
 
@@ -230,3 +231,55 @@ instance already running rather than a second engine.
 - SurrealDB embedded's build size and cold-start, which I cite as "heavy"
   qualitatively.
 - Whether burble needs local durable state at all. That is a burble question.
+
+
+## What was actually built
+
+Tier 1 shipped as `crates/idaptik-persist` (PR #171). Tiers 2 and 3 are
+untouched: no VeriSimDB, no document store, no service.
+
+Three parts of the plan above did not survive contact with the source, and the
+corrections are worth recording because each was found by reading rather than by
+assuming:
+
+**1. The key is `seq`, not `tick`.** `GhostLobbySim::reset` sets `self.tick = 0`,
+and `Command::Restart` calls it. Keying the log on `(session, tick)` would have
+made a post-restart tick 5 silently overwrite the pre-restart tick 5, in both
+the command table and the checkpoint table, with nothing to report it. The key
+is a store-assigned `seq` that never rewinds; `tick` and `epoch` are payload.
+
+**2. `held` had to be stored, and rebuilt through `fold`.** Buttons live in the
+Bevy layer (`CommandQueue.held`), not in `RuntimeSnapshot`. A resume that
+restored only the snapshot would come back with no keys held and diverge on the
+first tick — while `verify`, replaying from `seq 0`, would still pass. So a
+checkpoint records `held`, and `resume` advances it through
+`idaptik_core::scenario::fold` rather than re-deciding which command touches
+which button.
+
+**3. `last_seq` is `Option<u64>`, not `u64`.** The first draft used `0` as
+"empty", which made `seq 0` unwritable — the first batch could only be 1, and
+the log then never started at zero. Its own `NonZeroStart` check caught this,
+and a test failed on it before any of it shipped.
+
+### What is proven
+
+`cargo test -p idaptik-persist`: **18 passing** (5 unit, 13 integration),
+including the two that matter most:
+
+* `resume_restores_held_buttons` — a checkpoint taken with `Left|Sprint` held
+  resumes with them held;
+* `verify_can_fail` — a checkpoint whose recorded `held` is not what the log
+  replays to is reported as `HeldMismatch`. A verification that cannot fail is
+  not verification.
+
+### What is not proven
+
+* The crate has not been run against a live `idaptik-bevy` process; the plugin
+  (PR B) does not exist yet.
+* `BuildingSim` sessions can be written, listed and verified, but there is no
+  typed `resume` for them — `Store::resume` returns `UnsupportedSimKind`.
+  That arrives with the runtime that consumes the payload, not before.
+* `MoletaireSim` is excluded for the reason given above: its snapshot carries no
+  per-tick `dt`, so it is not replayable yet.
+* The digest is FNV-1a 64. Identity and corruption detection, not a security
+  property.

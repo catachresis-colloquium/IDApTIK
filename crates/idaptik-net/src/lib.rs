@@ -17,6 +17,8 @@
 //!   only `seq`).
 //! - [`seat`] — splits one headless script across the two seats and rebuilds
 //!   the merged per-tick input identically on both sides.
+//! - [`deployment`] — declarative topology/administration/authority axes and
+//!   per-state-class placement contracts (ADR-0015); not a runtime server.
 //! - [`session`] — the seat state machine: join → hello → stream/collect →
 //!   deterministic run → digest cross-check, with the ADR-0006 §3 loss states
 //!   (`WaitingForPeer` → `Live` → `PeerLost` → clean `Ended`).
@@ -34,6 +36,7 @@
 //!   [`live`] is the paced async driver; [`interactive`] is the terminal
 //!   frontend reusing `idaptik-tui`'s render/keymap/input pipeline.
 
+pub mod deployment;
 pub mod envelope;
 pub mod error;
 pub mod interactive;
