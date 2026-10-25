@@ -148,8 +148,8 @@ the flow grows with the head above it, and it never exceeds the link's rating.
   presence, but it is not the room: a duct run, sump or riser shaft can be its
   own compartment inside one room.
 - `full_depth_mm = air_l × 10 000 / floor_cm2` is the depth at which a
-  compartment of that volume is full, used by the acceptance tests as the
-  bound a run may never exceed.
+  compartment of that volume is full; future acceptance tests would use it as
+  the bound a run may never exceed.
 
 None of this exists in code. `full_depth_mm`, `aperture_cm2` and `weir` have
 zero occurrences under `crates/`.

@@ -131,7 +131,8 @@ them; it has three fixed-order integer systems.
 - `infrastructure-level-2.md` references **6** cues — **0** exist in `CueKind`.
 
 The levels, as written, cannot run against the shipped code. Making them run
-means adding 19 `CueKind` variants or rewriting both levels.
+means adding the `CueKind` variants missing from those levels or rewriting
+both levels.
 
 ### 4.5 What did *not* turn out to be a defect
 
