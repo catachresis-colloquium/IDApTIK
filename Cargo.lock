@@ -3604,6 +3604,7 @@ dependencies = [
  "idaptik-core",
  "idaptik-net",
  "idaptik-tui",
+ "idaptik-weevil",
  "serde_json",
  "tokio",
 ]
@@ -3683,6 +3684,14 @@ dependencies = [
  "crossterm",
  "idaptik-core",
  "ratatui",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "idaptik-weevil"
+version = "0.1.0"
+dependencies = [
  "serde",
  "serde_json",
 ]
