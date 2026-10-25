@@ -35,6 +35,10 @@ use crate::scenario::common::{
 use crate::scenario::constants as c;
 use crate::scenario::definition::{RoomDef, ScenarioDefinition, ValidationError};
 use crate::scenario::event::Event;
+use crate::scenario::guard_brain::{
+    GuardApplyOutcome, GuardBrainKind, GuardContact, GuardDecision, GuardPerception,
+    contact_id,
+};
 use crate::scenario::floor_graph::{
     VACUUM_NODE_ID, camera_node_id, door_node_id, floor_graph, inside_vantage, light_node_id,
     pivot_host,
@@ -79,6 +83,16 @@ pub struct GhostLobbySim {
     mole: Option<MoletaireSim>,
     paused: bool,
     events: Vec<Event>,
+    /// Which brain drives the guard. `Classic` (the FSM) by default; the kernel
+    /// is opt-in and can be selected or rolled back at run time without a rebuild.
+    guard_brain: GuardBrainKind,
+    /// A decision queued by the host for the tick about to run. The host builds
+    /// the perception from the *pre-tick* state, so the kernel's proposal is
+    /// applied one tick after it was observed — a normal one-frame control lag.
+    guard_decision: Option<GuardDecision>,
+    /// The most recent outcome of applying a kernel proposal. Read by the
+    /// developer view; cleared on reset.
+    last_guard_outcome: Option<GuardApplyOutcome>,
 }
 
 /// A last-resort preset so construction stays total even if a preset is missing;
@@ -145,6 +159,9 @@ impl GhostLobbySim {
             mole: None,
             paused: false,
             events: Vec::new(),
+            guard_brain: GuardBrainKind::default(),
+            guard_decision: None,
+            last_guard_outcome: None,
         };
         sim.build_mole();
         sim.emit_start();
@@ -187,9 +204,10 @@ impl GhostLobbySim {
             mole: None,
             paused: snap.paused,
             events: Vec::new(),
-        };
-        sim.adopt_mole();
-        Ok(sim)
+            guard_brain: GuardBrainKind::default(),
+            guard_decision: None,
+            last_guard_outcome: None,
+        })
     }
 
     /// Restart from `seed`, re-rolling the reset and emitting the start events.
@@ -201,6 +219,9 @@ impl GhostLobbySim {
         self.state = RuntimeState::initial(&self.def, &roll, self.cfg, &self.preset);
         self.build_mole();
         self.paused = false;
+        // A decision queued for the previous run is meaningless after a reset.
+        self.guard_decision = None;
+        self.last_guard_outcome = None;
         self.emit_start();
     }
 
@@ -219,6 +240,228 @@ impl GhostLobbySim {
     /// Borrow the runtime state.
     pub fn state(&self) -> &RuntimeState {
         &self.state
+    }
+
+    // --- guard brain seam -------------------------------------------------
+
+    /// Which brain is driving the guard right now.
+    pub fn guard_brain(&self) -> GuardBrainKind {
+        self.guard_brain
+    }
+
+    /// Select the guard brain. The classic FSM is the default and the rollback
+    /// path; switching to the kernel changes no world state, and a pending
+    /// kernel proposal is dropped.
+    pub fn set_guard_brain(&mut self, kind: GuardBrainKind) {
+        self.guard_brain = kind;
+        self.guard_decision = None;
+    }
+
+    /// Whether a kernel proposal is queued for the tick about to run.
+    pub fn has_guard_decision(&self) -> bool {
+        self.guard_decision.is_some()
+    }
+
+    /// Queue, or clear, the kernel's proposal for the tick about to run.
+    pub fn set_guard_decision(&mut self, decision: Option<GuardDecision>) {
+        self.guard_decision = decision;
+    }
+
+    /// The most recent outcome of applying a kernel proposal, for the
+    /// developer view.
+    pub fn last_guard_outcome(&self) -> Option<GuardApplyOutcome> {
+        self.last_guard_outcome
+    }
+
+    /// Build the guard's perception from the *current* (pre-tick) state.
+    ///
+    /// This is a perception, not the world's truth: a contact the guard cannot
+    /// see is not reported, and the vacuum is reported as a decoy — real to
+    /// perception, false to the world. The caller owns the kernel's capability
+    /// mask, which is a host property rather than world state.
+    pub fn guard_perception(&self) -> GuardPerception {
+        let b = &self.state.billy;
+        let room = Self::room_index_at(&self.def, b.x);
+        let mut contacts = Vec::new();
+
+        if self.can_billy_see_player() {
+            let p = &self.state.player;
+            contacts.push(GuardContact {
+                id: contact_id::PLAYER,
+                source: "player".to_owned(),
+                x: p.x,
+                y: p.y,
+                distance: (p.x - b.x).abs(),
+                threat: 1.0,
+                confidence: 1.0,
+                age_ticks: 0,
+            });
+        }
+
+        if !self.state.note.held
+            && !b.has_note
+            && Self::room_index_at(&self.def, self.state.note.x) == room
+        {
+            contacts.push(GuardContact {
+                id: contact_id::NOTE,
+                source: format!("object:{}", contact_id::NOTE),
+                x: self.state.note.x,
+                y: self.state.note.y,
+                distance: (self.state.note.x - b.x).abs(),
+                threat: 0.2,
+                confidence: 0.8,
+                age_ticks: 0,
+            });
+        }
+
+        if !self.state.usb.held
+            && !b.has_usb
+            && !self.state.usb.thrown
+            && Self::room_index_at(&self.def, self.state.usb.x) == room
+        {
+            contacts.push(GuardContact {
+                id: contact_id::USB,
+                source: format!("object:{}", contact_id::USB),
+                x: self.state.usb.x,
+                y: self.state.usb.y,
+                distance: (self.state.usb.x - b.x).abs(),
+                threat: 0.2,
+                confidence: 0.8,
+                age_ticks: 0,
+            });
+        }
+
+        // The vacuum is the controlled deception: it is a contact the guard
+        // perceives, labelled as a decoy, while the world's truth about it is
+        // that it is a machine doing its rounds.
+        if self.state.vacuum.active
+            && !self.state.vacuum.fallen
+            && Self::room_index_at(&self.def, self.state.vacuum.x) == room
+        {
+            contacts.push(GuardContact {
+                id: contact_id::VACUUM,
+                source: "decoy".to_owned(),
+                x: self.state.vacuum.x,
+                y: self.state.vacuum.y,
+                distance: (self.state.vacuum.x - b.x).abs(),
+                threat: 0.4,
+                confidence: 0.6,
+                age_ticks: 0,
+            });
+        }
+
+        GuardPerception {
+            tick: self.tick,
+            self_x: b.x,
+            self_y: b.y,
+            facing: b.facing,
+            // The simulation does not damage the guard, so the kernel always
+            // sees a healthy, fully-loaded guard. Reported honestly rather than
+            // synthesised from a number the game does not have.
+            health: 1.0,
+            ammo: 3.0,
+            contacts,
+        }
+    }
+
+    /// Resolve a contact id to the world x the game owns for it.
+    fn contact_x(&self, id: u32) -> Option<f64> {
+        match id {
+            contact_id::PLAYER => Some(self.state.player.x),
+            contact_id::NOTE => Some(self.state.note.x),
+            contact_id::USB => Some(self.state.usb.x),
+            contact_id::VACUUM => Some(self.state.vacuum.x),
+            _ => None,
+        }
+    }
+
+    /// Whether the game still owns a live entity with this contact id. This is
+    /// the host's authoritative target validation: an id no live entity owns is
+    /// refused before any movement is computed.
+    fn is_live_target(&self, id: u32) -> bool {
+        match id {
+            0 => true,
+            contact_id::PLAYER => true,
+            contact_id::NOTE => !self.state.note.held && !self.state.billy.has_note,
+            contact_id::USB => {
+                !self.state.usb.held && !self.state.usb.thrown && !self.state.billy.has_usb
+            }
+            contact_id::VACUUM => self.state.vacuum.active && !self.state.vacuum.fallen,
+            _ => false,
+        }
+    }
+
+    /// The world x the kernel's action is aimed at. The kernel remembers a
+    /// bearing, never a position, so the host owns the last-known position and
+    /// supplies it for `INVESTIGATE`.
+    fn decision_target_x(&self, d: &GuardDecision) -> f64 {
+        let b = &self.state.billy;
+        match d.action.as_str() {
+            "INVESTIGATE" => b.last_known_x,
+            "ATTACK" => self.contact_x(d.target_id).unwrap_or(b.last_known_x),
+            "FLEE" => match self.contact_x(d.target_id) {
+                Some(x) if x > b.x => c::BILLY_CLAMP_LO,
+                Some(_) => c::BILLY_CLAMP_HI,
+                None => b.x,
+            },
+            "ADVANCE" => self.contact_x(d.target_id).unwrap_or(b.patrol_target),
+            _ => b.x,
+        }
+    }
+
+    /// The FSM mode that corresponds to a kernel action, for the developer
+    /// view. A kernel brain still reports its behaviour in the game's own
+    /// vocabulary.
+    fn decision_mode(action: &str) -> Option<BillyMode> {
+        match action {
+            "ADVANCE" | "HOLD" | "IDLE" | "RELOAD" | "TAKE_COVER" | "REGROUP" => {
+                Some(BillyMode::Guard)
+            }
+            "ATTACK" => Some(BillyMode::Pursue),
+            "FLEE" => Some(BillyMode::Assess),
+            "INVESTIGATE" => Some(BillyMode::Investigate),
+            _ => None,
+        }
+    }
+
+    /// Apply a kernel proposal to Billy.
+    ///
+    /// The host is authoritative: the target must be a live entity, the speed
+    /// is clamped to the game's movement limit, and the movement is subject to
+    /// the game's own door collision. The kernel never moves the guard.
+    fn apply_guard_decision(&mut self, d: &GuardDecision) -> GuardApplyOutcome {
+        if !self.is_live_target(d.target_id) {
+            let outcome = GuardApplyOutcome {
+                accepted: false,
+                moved: false,
+                blocked: false,
+                reason: "invalid-target",
+            };
+            self.last_guard_outcome = Some(outcome);
+            return outcome;
+        }
+        if let Some(mode) = Self::decision_mode(&d.action) {
+            self.set_billy_mode(mode);
+        }
+        let speed = d.speed.clamp(0.0, self.preset.billy_speed);
+        let target_x = self.decision_target_x(d);
+        let before = self.state.billy.x;
+        self.move_billy_toward(target_x, speed);
+        let moved = (self.state.billy.x - before).abs() > f64::EPSILON;
+        let blocked = self.state.billy.blocked_door.is_some();
+        let reason = if blocked {
+            "blocked-by-door"
+        } else {
+            "applied"
+        };
+        let outcome = GuardApplyOutcome {
+            accepted: true,
+            moved,
+            blocked,
+            reason,
+        };
+        self.last_guard_outcome = Some(outcome);
+        outcome
     }
 
     /// Borrow the definition.
@@ -1470,6 +1713,7 @@ impl GhostLobbySim {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scenario::command::{Buttons, fold};
     use crate::scenario::ghost_lobby::ghost_lobby;
 
     /// A standard run with the hacker already pivoted onto the floor, so that an
@@ -1980,5 +2224,80 @@ mod tests {
             sim.state.stats.failed_actions, 3,
             "every attempt still counts as a failure, even when its event is throttled"
         );
+    }
+
+    // --- guard brain seam -------------------------------------------------
+
+    /// A sim in crisis with Billy past the Entering/Shock warm-up, so the
+    /// behaviour chain is what a queued decision would hit.
+    fn crisis_sim() -> GhostLobbySim {
+        let mut sim = GhostLobbySim::new(ghost_lobby(), RunConfig::standard(), 7)
+            .expect("the canonical definition is valid");
+        let _ = sim.drain_events();
+        sim.begin_crisis(CrisisReason::Usb);
+        sim.set_billy_mode(BillyMode::Assess);
+        sim
+    }
+
+    fn idle_input() -> TickInput {
+        fold(&[], &mut Buttons::default())
+    }
+
+    #[test]
+    fn the_classic_brain_is_the_default_and_a_queued_decision_is_ignored() {
+        let mut sim = crisis_sim();
+        assert_eq!(sim.guard_brain(), GuardBrainKind::Classic);
+        let before = sim.state().billy.x;
+        sim.set_guard_decision(Some(GuardDecision::new("ADVANCE", 0, 0.0, 0.0, 10.0)));
+        let _ = sim.tick(&idle_input());
+        // The classic FSM never consumes a queued kernel proposal.
+        assert!(sim.has_guard_decision(), "classic brain must leave the proposal queued");
+        assert_eq!(sim.last_guard_outcome(), None);
+        assert_ne!(sim.state().billy.x, before);
+    }
+
+    #[test]
+    fn the_kernel_brain_applies_a_validated_proposal_and_clears_it() {
+        let mut sim = crisis_sim();
+        sim.set_guard_brain(GuardBrainKind::Kernel);
+        let before = sim.state().billy.x;
+        sim.set_guard_decision(Some(GuardDecision::new("ADVANCE", 0, 900.0, 0.0, 60.0)));
+        let _ = sim.tick(&idle_input());
+        assert!(!sim.has_guard_decision(), "the sim consumes the proposal it applies");
+        let outcome = sim.last_guard_outcome().expect("an outcome was recorded");
+        assert!(outcome.accepted, "a valid target is accepted");
+        assert_ne!(sim.state().billy.x, before, "the guard moved under the kernel's proposal");
+    }
+
+    #[test]
+    fn the_kernel_brain_refuses_a_target_no_entity_owns() {
+        let mut sim = crisis_sim();
+        sim.set_guard_brain(GuardBrainKind::Kernel);
+        let before = sim.state().billy.x;
+        sim.set_guard_decision(Some(GuardDecision::new("ATTACK", 9999, 900.0, 0.0, 60.0)));
+        let _ = sim.tick(&idle_input());
+        let outcome = sim.last_guard_outcome().expect("an outcome was recorded");
+        assert!(!outcome.accepted, "an unknown target is refused");
+        assert_eq!(outcome.reason, "invalid-target");
+        assert_eq!(sim.state().billy.x, before, "a refused proposal moves nothing");
+    }
+
+    #[test]
+    fn the_perception_reports_the_decoy_as_a_decoy() {
+        let sim = crisis_sim();
+        // The vacuum is the controlled deception: real to perception, labelled
+        // as a decoy, and separate from the world's truth about it.
+        let perc = sim.guard_perception();
+        let vacuum = perc
+            .contacts
+            .iter()
+            .find(|c| c.id == contact_id::VACUUM)
+            .expect("the vacuum is reported to the guard");
+        assert_eq!(vacuum.source, "decoy");
+        assert!(
+            sim.is_live_target(contact_id::VACUUM),
+            "the host resolves the decoy's id against its own entity lifecycle"
+        );
+        assert!(!sim.is_live_target(9999), "an id no entity owns is not live");
     }
 }

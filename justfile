@@ -308,3 +308,86 @@ config-regen:
     cargo test -p idaptik-core regenerate_ghost_lobby_floor_json -- --ignored
     cargo test -p idaptik-core regenerate_floor_graph_json -- --ignored
     @echo "config: goldens regenerated"
+
+# --- Evil Weevil guard brain (vertical slice) --------------------------------
+#
+# The kernel is a separate checkout (catachresis-colloquium/evil-weevil).
+# scripts/weevil_kernel.sh locates it, pins the Zig it needs and runs its gates;
+# these recipes are thin wrappers so the resolution logic lives in one readable
+# place. Every one of them FAILS loudly rather than falling back to the classic
+# FSM — a silent fallback would make the comparison the integration exists for
+# meaningless, so a missing kernel is an error and never a skip.
+#
+# Read docs/dev-notes/weevil-local-setup.md for first-time setup and
+# docs/dev-notes/weevil-play.md for running the game and reading the developer
+# view.
+
+# Report every prerequisite: checkout, Zig, cargo, adapter. Exits non-zero if any
+# is missing, so a fresh machine gets the whole picture in one run.
+weevil-doctor:
+    bash scripts/weevil_kernel.sh doctor
+
+# Build the native kernel library (libevil_weevil.a).
+weevil-kernel:
+    bash scripts/weevil_kernel.sh build
+
+# The kernel's own gates: its Zig test suite, then the C null host.
+weevil-kernel-check:
+    bash scripts/weevil_kernel.sh check
+
+# The Rust #[repr(C)] transcription against the generated ee.h. Needs no
+# compiler, so it runs anywhere Python does — including a machine that has not
+# built the kernel yet.
+weevil-abi-mirror:
+    @root="$$(bash scripts/weevil_kernel.sh locate)" && python3 tools/verify_abi_mirror.py "$root/include/evil_weevil/ee.h" crates/idaptik-weevil/src/abi.rs
+
+# Build the adapter crate (links the native kernel).
+weevil-build:
+    cargo build -p idaptik-weevil
+
+# The adapter's tests: the headless replay and its correctness checks. This is
+# the gate that exercises the defects recorded in
+# docs/evidence/weevil-integration-evidence.md, so run it after any change there.
+weevil-test:
+    cargo test -p idaptik-weevil
+
+# The game's own suite. This is the one that proves the classic FSM is unchanged
+# by the seam: the seam is additive and opt-in, and this suite is the check.
+weevil-core-test:
+    cargo test -p idaptik-core
+
+# The whole slice, in order: kernel gates, ABI mirror, adapter tests, game suite.
+weevil-check: weevil-kernel-check weevil-abi-mirror weevil-test weevil-core-test
+
+# --- Headless replay ---------------------------------------------------------
+#
+# No window, no game, no server: the kernel, the adapter and a recorded decision
+# sequence. This is the reproducible half of the milestone and the thing to run
+# first when the adapter will not build.
+
+# Print a decision summary: actions, memory use, blocked and rejected ticks.
+weevil-replay TICKS="200" PROFILE="cautious-sentry" SEED="7":
+    cargo run -q -p idaptik-weevil --bin idaptik-weevil-replay -- --ticks {{TICKS}} --profile {{PROFILE}} --seed {{SEED}}
+
+# Write the replay to JSON.
+weevil-replay-out TICKS="200" PROFILE="cautious-sentry" SEED="7" OUT="/tmp/weevil-replay.json":
+    cargo run -q -p idaptik-weevil --bin idaptik-weevil-replay -- --ticks {{TICKS}} --profile {{PROFILE}} --seed {{SEED}} --out {{OUT}}
+
+# Reproducibility gate: a fresh run must equal the stored replay. The ticks,
+# profile and seed must be the ones the file was written with.
+weevil-replay-check FILE="/tmp/weevil-replay.json" TICKS="200" PROFILE="cautious-sentry" SEED="7":
+    cargo run -q -p idaptik-weevil --bin idaptik-weevil-replay -- --ticks {{TICKS}} --profile {{PROFILE}} --seed {{SEED}} --check {{FILE}}
+
+# --- The game ---------------------------------------------------------------
+
+# Run the game on the kernel brain. Needs a display; on Linux run
+# `just bevy-linux-deps` first. The profile and seed are environment variables,
+# so a player can compare runs without rebuilding.
+weevil-run PROFILE="cautious-sentry" SEED="7":
+    IDAPTIK_WEEVIL_PROFILE={{PROFILE}} IDAPTIK_WEEVIL_SEED={{SEED}} cargo run -q -p idaptik-bevy --features weevil
+
+# The same game on the classic FSM, for the comparison and the rollback. Nothing
+# to configure: the brain is Classic unless the plugin loaded the kernel, so this
+# is the build without the feature.
+weevil-run-classic:
+    cargo run -q -p idaptik-bevy

@@ -1,0 +1,26 @@
+[package]
+name = "idaptik-weevil"
+description = "Thin Rust host adapter over the Evil Weevil native C ABI: the game owns world truth and applies intents, the kernel owns per-agent memory and proposes intents."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "idaptik_weevil"
+path = "src/lib.rs"
+
+# The headless replay driver. It links the same native kernel the game does; it
+# only swaps the host-side world for a small deterministic corridor model so a
+# replay can be produced and checked without a window (see `src/world.rs`).
+[[bin]]
+name = "idaptik-weevil-replay"
+path = "src/bin/weevil_replay.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

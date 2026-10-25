@@ -170,6 +170,24 @@ pub fn setup_hud(mut commands: Commands) {
         LogText,
     ));
 
+    // The guard-brain developer view, drawn top-right. It shows what the guard
+    // perceived, what the kernel proposed, and what the host did with it —
+    // including whether the proposal was refused and why.
+    #[cfg(feature = "weevil")]
+    commands.spawn((
+        GhostLobbyHudMarker,
+        crate::deck::InPane::hud(Some(10.0), Some(160.0), Some(10.0), None),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(8.0),
+            right: Val::Px(10.0),
+            ..Default::default()
+        },
+        Text::new(""),
+        hud_text(11.0),
+        GuardBrainText,
+    ));
+
     commands.spawn((
         GhostLobbyHudMarker,
         crate::deck::InPane::hud(Some(10.0), None, Some(10.0), Some(8.0)),
@@ -315,4 +333,61 @@ pub fn update_result_text(
         "{verdict} — GRADE {:?}   SCORE {}\n{}\n{}\n(R restarts from the same seed)",
         d.grade, d.score, d.title, d.summary
     );
+}
+
+/// The guard-brain developer view: what the guard perceived, what the kernel
+/// proposed, and what the host did with it. Every line is read straight off
+/// the adapter; nothing is re-derived.
+#[cfg(feature = "weevil")]
+#[derive(Component)]
+pub struct GuardBrainText;
+
+/// Refresh the guard-brain panel from the adapter's own state.
+///
+/// When the weevil feature is off the panel is not spawned and this system is
+/// not registered, so a classic run shows nothing new.
+#[cfg(feature = "weevil")]
+pub fn update_guard_brain_text(
+    guard: Option<Res<crate::guard_weevil::GuardBrain>>,
+    mut text: Query<&mut Text, With<GuardBrainText>>,
+) {
+    let Ok(mut text) = text.single_mut() else {
+        return;
+    };
+    let Some(guard) = guard else {
+        text.0 = "guard: classic fsm".to_owned();
+        return;
+    };
+    let s = &guard.state;
+    let profile = s.profile_id.clone().unwrap_or_else(|| "?".to_owned());
+    let version = s
+        .kernel_version
+        .map(|v| format!("{}.{}.{}", v.0, v.1, v.2))
+        .unwrap_or_else(|| "-".to_owned());
+    let contacts = if s.contacts.is_empty() {
+        "none".to_owned()
+    } else {
+        s.contacts
+            .iter()
+            .map(|c| format!("{}#{}({})", c.source, c.id, c.distance as i64))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let decision = s
+        .last_decision
+        .as_ref()
+        .map(|d| format!("{} t={}", d.action, d.target_id))
+        .unwrap_or_else(|| "-".to_owned());
+    let outcome = s
+        .last_outcome
+        .map(|o| {
+            if o.accepted {
+                format!("applied/{}", o.reason)
+            } else {
+                format!("refused/{}", o.reason)
+            }
+        })
+        .unwrap_or_else(|| "-".to_owned());
+    let error = s.last_error.as_deref().map(|e| format!(" ERR {e}")).unwrap_or_default();
+    text.0 = format!("weevil {profile} v{version}\nsee: {contacts}\nwant: {decision}\nhost: {outcome}{error}");
 }
