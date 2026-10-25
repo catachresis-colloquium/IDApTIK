@@ -83,7 +83,7 @@
 # Usage:
 #   scripts/check-lock-sync.sh                # check this repository
 #   scripts/check-lock-sync.sh DIR            # check another workflows dir
-#   scripts/check-lock-sync.sh --self-test    # 13 controls, 12 of them mutants
+#   scripts/check-lock-sync.sh --self-test    # clean controls and failing mutants
 
 set -euo pipefail
 command -v yq >/dev/null || { printf 'yq is required (mise install)\n' >&2; exit 1; }
@@ -96,6 +96,18 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # The checker. yq reads YAML (Y-1); awk compares the extracted semantic records.
 # POSIX awk only — no match(s,r,arr), no gensub, no {n} intervals, no asort.
 # ─────────────────────────────────────────────────────────────────────────────
+reject_duplicate_yaml_keys() { # $1 YAML file
+  local duplicates
+  # Inspect YAML mapping nodes before JSON conversion can collapse equal keys.
+  duplicates="$(yq -p yaml -o=json -I=0 '
+    .. | select(tag == "!!map") | keys | group_by(.) | .[] |
+    select(length > 1) | .[0]' "$1")" || return 1
+  if [ -n "$duplicates" ]; then
+    printf 'check-lock-sync: duplicate YAML mapping keys in %s: %s\n' "$1" "$duplicates" >&2
+    return 1
+  fi
+}
+
 run_check() { # $1 = workflows dir
   local wf_dir="$1" lock="$1/actions.lock"
   if [ ! -f "$lock" ]; then
@@ -117,11 +129,13 @@ run_check() { # $1 = workflows dir
   fi
   local records
   records="$(
+    reject_duplicate_yaml_keys "$lock" || exit 1
     yq -p yaml -o=json -I=0 '.' "$lock" | jq -r '
       (.workflows // {} | to_entries[] | ["W", .key] | @tsv),
       (.workflows // {} | to_entries[] | .key as $wf | .value[] | ["L", $wf, .] | @tsv),
       (.dependencies // {} | to_entries[] | ["D", .key, (.value.commit // "")] | @tsv)' || exit 1
     for f in "${files[@]}"; do
+      reject_duplicate_yaml_keys "$f" || exit 1
       local key=".github/workflows/${f##*/}"
       printf 'F\t%s\n' "$key"
       yq -p yaml -o=json -I=0 '.' "$f" | jq -r --arg key "$key" '
@@ -428,6 +442,16 @@ LOCK
   fi
 
   printf 'mutants that must kill the gate:\n'
+  fixture="$(new_case duplicate-uses)"
+  sed -i '/uses: erlef\/setup-beam@v1.24.1/a\        uses: erlef/setup-beam@v1.24.1' "$fixture/ci.yml"
+  expect_fail 'a repeated uses key in a workflow is rejected' \
+    'duplicate YAML mapping keys' "$fixture"
+
+  fixture="$(new_case duplicate-lock-key)"
+  sed -i "/ref: 'v1.24.1'/a\        ref: 'v1.24.1'" "$fixture/actions.lock"
+  expect_fail 'a repeated dependency field in actions.lock is rejected' \
+    'duplicate YAML mapping keys' "$fixture"
+
   fixture="$(new_case kyaml)"
   for f in "$fixture"/*.yml "$fixture/actions.lock"; do
     yq -p yaml -o=kyaml '.' "$f" > "$f.converted"

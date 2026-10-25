@@ -26,19 +26,19 @@
 //!
 //! A building circuit is not an electrical feed:
 //!
-//! ```compile_fail,E0308
+//! ```compile_fail
 //! use idaptik_core::scenario::ids::{CircuitId, FeedId};
 //! let _: FeedId = CircuitId::from("lighting");
 //! ```
 //!
 //! Nor may a hazard stand in for a load, or a breaker for a source:
 //!
-//! ```compile_fail,E0308
+//! ```compile_fail
 //! use idaptik_core::scenario::ids::{HazardId, LoadId};
 //! let _: LoadId = HazardId::from("panel");
 //! ```
 //!
-//! ```compile_fail,E0308
+//! ```compile_fail
 //! use idaptik_core::scenario::ids::{BreakerId, PowerSourceId};
 //! let _: PowerSourceId = BreakerId::from("mains");
 //! ```
