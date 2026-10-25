@@ -222,3 +222,12 @@ T	crates/idaptik-evil-weevil/src/wire.rs	raw payload fixtures for production wir
 T	crates/idaptik-net/tests/evil_weevil_relay.rs	loopback regression test comparing the offline relay model to Burble
 T	crates/idaptik-evil-weevil/tests/corpus.rs	fixed adversarial corpus acceptance tests
 T	crates/idaptik-evil-weevil/tests/regression.rs	adversarial adapter invariant and regression tests
+T	crates/idaptik-bevy/tests/button_activation.rs	deck button activation test; observes the presentation layer, defines nothing
+T	crates/idaptik-net/tests/deployment_contract.rs	ADR-0015 state-class contract table; a test of the policy, not the policy
+L	crates/idaptik-persist/src/digest.rs	definition digesting for stored sessions; a wrong answer is loud -- restore refuses a mismatch
+D	crates/idaptik-persist/src/error.rs	stored-session error enum; data only, exercised by the persist round-trip tests
+L	crates/idaptik-persist/src/lib.rs	durable-session crate surface and module wiring; no arithmetic of its own
+L	crates/idaptik-persist/src/record.rs	append-only command log records and their ordering rules; the persist tests observe a regression directly
+D	crates/idaptik-persist/src/schema.rs	table definitions for the durable store; declarative, exercised by the round-trip tests
+L	crates/idaptik-persist/src/store.rs	checkpoint and log durability over redb; a wrong answer is loud -- the reopen tests see it
+T	crates/idaptik-persist/tests/persist.rs	reopen, replay and corruption tests for the durable session store
