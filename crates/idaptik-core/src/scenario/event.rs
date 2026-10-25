@@ -417,7 +417,7 @@ pub fn log_view(e: &Event, tick: u64, t: f64) -> Option<LogLine> {
 
         Event::Secondary { secondary } => secondary
             .describe()
-            .map(|(text, severity)| line(text, severity, Log)),
+            .and_then(|(text, severity)| line(text, severity, Log)),
 
         // Structural / telemetry / session — present in the event stream, but
         // not rendered as log lines.

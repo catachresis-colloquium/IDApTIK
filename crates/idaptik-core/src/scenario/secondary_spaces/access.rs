@@ -10,7 +10,7 @@ use crate::companion::Equipment;
 use crate::scenario::secondary_spaces::model::*;
 
 /// The result of asking whether an actor may traverse a route right now.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RouteAccess {
     Allowed,
     Denied { reason: AccessDenial },

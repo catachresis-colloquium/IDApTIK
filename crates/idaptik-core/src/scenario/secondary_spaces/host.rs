@@ -171,10 +171,10 @@ impl GhostLobbySim {
             return;
         }
         let room = GhostLobbySim::room_id_at(&self.def, s.x);
-        let ap = {
-            let network = RouteNetwork { spec: net, state: st };
-            network.access_point_near(s.x, room.as_deref(), ENTRY_REACH)
-        };
+        let ap = net.access_points.iter().find(|ap| {
+            (ap.x - s.x).abs() <= ENTRY_REACH
+                && room.map_or(true, |r| ap.room.as_ref().map(|rr| rr.as_str()) == Some(r))
+        });
         let Some(ap) = ap else {
             self.events.push(Event::Secondary {
                 secondary: SecondaryEvent::EntryRefused {
@@ -313,11 +313,15 @@ impl GhostLobbySim {
             return;
         }
         let s = st.mole.state();
-        let network = RouteNetwork { spec: net, state: st };
         let entry_x = st
             .mole_entry_ap
-            .and_then(|id| network.access_point(&id))
-            .map(|ap| ap.x)
+            .as_ref()
+            .and_then(|id| {
+                net.access_points
+                    .iter()
+                    .find(|ap| &ap.id == id)
+                    .map(|ap| ap.x)
+            })
             .unwrap_or(s.x);
         st.mole.order_move_to(entry_x, true);
         // RouteReversed surfaces on the next tick when the target flips.
@@ -515,6 +519,8 @@ fn secondary_transit(
     events: &mut Vec<Event>,
 ) {
     let s = st.mole.state();
+    let mole_x = s.x;
+    let mole_target_x = s.target_x;
     let now_underground = st.mole.is_underground();
 
     if !st.mole_was_underground && now_underground && st.mole_route.is_none() {
@@ -522,7 +528,7 @@ fn secondary_transit(
         // at an authored access point. (MoleEnterRoute records the entry
         // itself at the access point, so this branch is a guardrail for any
         // other path underground.)
-        if let Some((route, ap)) = entry_route_at(net, st, s.x) {
+        if let Some((route, ap)) = entry_route_at(net, st, mole_x) {
             let route_state = st
                 .route_states
                 .get(&route.id)
@@ -568,7 +574,7 @@ fn secondary_transit(
                 route.access_points.iter().any(|id| {
                     network
                         .access_point(id)
-                        .is_some_and(|ap| (ap.x - s.x).abs() <= ENTRY_REACH)
+                        .is_some_and(|ap| (ap.x - mole_x).abs() <= ENTRY_REACH)
                 })
             });
             if at_ap {
@@ -593,18 +599,22 @@ fn secondary_transit(
     // around mid-route). `target_x` is `None` right after he arrives at
     // egress, so a fresh `None -> Some` heading back toward the entry counts.
     if let Some(route_id) = &st.mole_route {
-        let target = s.target_x;
-        let network = RouteNetwork { spec: net, state: st };
+        let target = mole_target_x;
         let entry_x = st
             .mole_entry_ap
-            .and_then(|id| network.access_point(&id))
-            .map(|ap| ap.x)
-            .unwrap_or(s.x);
-        let entry_dir = (entry_x - s.x).signum();
+            .as_ref()
+            .and_then(|id| {
+                net.access_points
+                    .iter()
+                    .find(|ap| &ap.id == id)
+                    .map(|ap| ap.x)
+            })
+            .unwrap_or(mole_x);
+        let entry_dir = (entry_x - mole_x).signum();
         match (st.mole_target_x.take(), target) {
             (Some(prev), Some(curr)) => {
-                let prev_dir = (prev - s.x).signum();
-                let curr_dir = (curr - s.x).signum();
+                let prev_dir = (prev - mole_x).signum();
+                let curr_dir = (curr - mole_x).signum();
                 let reversed = (curr_dir != 0.0)
                     && ((prev_dir != 0.0 && curr_dir != prev_dir)
                         || (prev_dir == 0.0 && curr_dir == entry_dir));
@@ -617,7 +627,7 @@ fn secondary_transit(
                 }
             }
             (None, Some(curr)) => {
-                let curr_dir = (curr - s.x).signum();
+                let curr_dir = (curr - mole_x).signum();
                 if entry_dir != 0.0 && curr_dir == entry_dir {
                     events.push(Event::Secondary {
                         secondary: SecondaryEvent::RouteReversed {
@@ -668,7 +678,7 @@ fn secondary_transit(
             if space.route_id != *route_id {
                 continue;
             }
-            if s.x < space.x_range.0 || s.x > space.x_range.1 {
+            if mole_x < space.x_range.0 || mole_x > space.x_range.1 {
                 continue;
             }
             match space.kind {
@@ -783,7 +793,7 @@ mod tests {
                 Event::Secondary {
                     secondary: SecondaryEvent::EntryRefused { reason: r, .. },
                 }
-                if r == reason
+                if *r == reason
             )
         })
     }
