@@ -2,8 +2,8 @@
 //! fail — see `verify_can_fail`.
 
 use idaptik_core::scenario::{
-    Button, Buttons, Command, GhostLobbySim, RunConfig, RuntimeSnapshot, SNAPSHOT_FORMAT, fold,
-    ghost_lobby,
+    Button, Buttons, Command, ExtractMethod, FailReason, GhostLobbySim, RunConfig, RuntimeSnapshot,
+    SNAPSHOT_FORMAT, fold, ghost_lobby,
 };
 use idaptik_persist::{
     CheckpointRecord, FlushPolicy, PersistError, SessionId, SessionRecord, SessionStatus, SimKind,
@@ -1322,4 +1322,373 @@ fn checkpoint_tick_checks_exclude_the_first_unapplied_batch() {
         );
         assert_eq!(report.replayed, if at == 0 { 1 } else { 0 });
     }
+}
+
+#[test]
+fn replay_from_a_nonzero_baseline_can_continue_with_the_restored_held_buttons() {
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-nonzero-baseline");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+    let mut s = sim();
+    let mut held = Buttons::default();
+    let script = [
+        vec![Command::SetButton {
+            button: Button::Right,
+            down: true,
+        }],
+        vec![],
+        vec![Command::Jump],
+        vec![],
+        vec![],
+    ];
+    for (seq, cmds) in script.iter().enumerate() {
+        store
+            .append_commands(&id, seq as u64, 0, s.snapshot().tick, cmds)
+            .expect("append");
+        step(&mut s, &mut held, cmds);
+        if seq == 1 || seq == 3 {
+            store
+                .checkpoint(&id, seq as u64 + 1, 0, &s.snapshot(), held, false)
+                .expect("checkpoint");
+        }
+    }
+
+    // Batches before the first checkpoint must not be executed a second time.
+    let report = store.verify(&id).expect("verify");
+    assert!(report.ok(), "{:?}", report.issues);
+    assert_eq!(
+        (report.commands, report.checkpoints, report.replayed),
+        (5, 2, 3)
+    );
+    let resumed = store.resume(&id).expect("resume");
+    assert_eq!(resumed.snapshot, s.snapshot());
+    assert_eq!(resumed.held, held);
+    assert_eq!((resumed.checkpoint_at, resumed.next_seq), (4, 5));
+    assert_eq!(resumed.replayed_batches, 1);
+
+    // Continue without a new key press: the frontend state must survive too.
+    let mut continued =
+        GhostLobbySim::restore(resumed.snapshot.definition.clone(), resumed.snapshot)
+            .expect("restore resumed run");
+    let mut continued_held = resumed.held;
+    step(&mut continued, &mut continued_held, &[]);
+    step(&mut s, &mut held, &[]);
+    assert_eq!(continued.snapshot(), s.snapshot());
+    assert_eq!(continued_held, held);
+}
+
+#[test]
+fn verify_keeps_replaying_the_log_after_an_intermediate_checkpoint_diverges() {
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-intermediate-drift");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+    let mut s = sim();
+    let mut held = Buttons::default();
+    store
+        .checkpoint(&id, 0, 0, &s.snapshot(), held, false)
+        .expect("base");
+    let press = [Command::SetButton {
+        button: Button::Right,
+        down: true,
+    }];
+    for seq in 0..3 {
+        let cmds = if seq == 0 { press.as_slice() } else { &[] };
+        store
+            .append_commands(&id, seq, 0, s.snapshot().tick, cmds)
+            .expect("append");
+        step(&mut s, &mut held, cmds);
+        if seq < 2 {
+            let mut snapshot = s.snapshot();
+            let checkpoint_held = if seq == 0 {
+                snapshot.seed += 1;
+                Buttons::default()
+            } else {
+                held
+            };
+            store
+                .checkpoint(&id, seq + 1, 0, &snapshot, checkpoint_held, false)
+                .expect("checkpoint");
+        }
+    }
+
+    let report = store.verify(&id).expect("verify");
+    assert_eq!(
+        (report.commands, report.checkpoints, report.replayed),
+        (3, 3, 3)
+    );
+    // A checkpoint is evidence to compare, never a replacement replay baseline.
+    assert_eq!(
+        report.issues,
+        vec![
+            VerifyIssue::HeldMismatch {
+                at: 1,
+                recorded: Buttons::default(),
+                replayed: held,
+            },
+            VerifyIssue::StateMismatch {
+                at: 1,
+                field: "seed".to_owned(),
+                replayed: "7".to_owned(),
+                recorded: "8".to_owned(),
+            },
+        ]
+    );
+    assert!(!report.ok());
+    assert_eq!(store.verify(&id).expect("repeat verify"), report);
+    assert_eq!(
+        store
+            .resume(&id)
+            .expect("resume later good checkpoint")
+            .snapshot,
+        s.snapshot()
+    );
+}
+
+#[test]
+fn resume_decodes_only_commands_not_already_covered_by_the_checkpoint() {
+    use idaptik_persist::schema::COMMANDS;
+
+    // The same damaged row is harmless to resume before the boundary, fatal at it.
+    for corrupt_seq in [0, 2] {
+        let dir = tmp();
+        let store = Store::open(dir.path()).expect("open");
+        let id = SessionId::new("s-covered-corruption");
+        store
+            .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+            .expect("begin");
+        let mut s = sim();
+        let mut held = Buttons::default();
+        for seq in 0..3 {
+            let cmds = [Command::SetButton {
+                button: Button::Right,
+                down: true,
+            }];
+            store
+                .append_commands(&id, seq, 0, s.snapshot().tick, &cmds)
+                .expect("append");
+            step(&mut s, &mut held, &cmds);
+            if seq == 1 {
+                store
+                    .checkpoint(&id, 2, 0, &s.snapshot(), held, false)
+                    .expect("checkpoint");
+            }
+        }
+        drop(store);
+        {
+            let db = redb::Database::create(dir.path().join("idaptik.redb")).expect("raw database");
+            let txn = db.begin_write().expect("write");
+            {
+                let mut table = txn.open_table(COMMANDS).expect("commands");
+                table
+                    .insert((id.as_str(), corrupt_seq), b"not JSON".as_slice())
+                    .expect("damage command");
+            }
+            txn.commit().expect("commit");
+        }
+        let store = Store::open(dir.path()).expect("reopen");
+        if corrupt_seq == 0 {
+            let resumed = store.resume(&id).expect("covered history need not decode");
+            assert_eq!(resumed.snapshot, s.snapshot());
+            assert_eq!(resumed.held, held);
+            assert_eq!((resumed.checkpoint_at, resumed.next_seq), (2, 3));
+            assert_eq!(resumed.replayed_batches, 1);
+        } else {
+            assert!(matches!(store.resume(&id), Err(PersistError::Decode(_))));
+        }
+
+        let report = store
+            .verify(&id)
+            .expect("verification still reports damaged history");
+        assert!(!report.ok());
+        assert_eq!((report.commands, report.checkpoints), (2, 1));
+        assert_eq!(report.replayed, usize::from(corrupt_seq == 0));
+        assert!(report.issues.iter().any(|issue| matches!(
+            issue,
+            VerifyIssue::UndecodableCommand { seq, detail }
+                if *seq == corrupt_seq && !detail.is_empty()
+        )));
+        assert!(
+            !report.issues.iter().any(|issue| matches!(
+                issue,
+                VerifyIssue::HeldMismatch { .. } | VerifyIssue::StateMismatch { .. }
+            )),
+            "{:?}",
+            report.issues
+        );
+    }
+}
+
+#[test]
+fn verify_uses_the_earliest_decodable_checkpoint_after_a_damaged_initial_row() {
+    use idaptik_persist::schema::CHECKPOINTS;
+
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-fallback-baseline");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+    let mut s = sim();
+    let mut held = Buttons::default();
+    store
+        .checkpoint(&id, 0, 0, &s.snapshot(), held, false)
+        .expect("initial checkpoint");
+    for seq in 0..4 {
+        let cmds = [Command::SetButton {
+            button: Button::Right,
+            down: true,
+        }];
+        store
+            .append_commands(&id, seq, 0, s.snapshot().tick, &cmds)
+            .expect("append");
+        step(&mut s, &mut held, &cmds);
+        if seq == 1 || seq == 2 {
+            store
+                .checkpoint(&id, seq + 1, 0, &s.snapshot(), held, false)
+                .expect("later checkpoint");
+        }
+    }
+    drop(store);
+    {
+        let db = redb::Database::create(dir.path().join("idaptik.redb")).expect("raw database");
+        let txn = db.begin_write().expect("write");
+        {
+            let mut table = txn.open_table(CHECKPOINTS).expect("checkpoints");
+            table
+                .insert((id.as_str(), 0), b"not JSON".as_slice())
+                .expect("damage initial checkpoint");
+        }
+        txn.commit().expect("commit");
+    }
+    let store = Store::open(dir.path()).expect("reopen");
+    let report = store.verify(&id).expect("verify from boundary 2");
+    assert!(!report.ok());
+    assert_eq!(
+        (report.commands, report.checkpoints, report.replayed),
+        (4, 2, 2)
+    );
+    assert!(
+        matches!(
+            report.issues.as_slice(),
+            [VerifyIssue::UndecodableCheckpoint { at: 0, detail }] if !detail.is_empty()
+        ),
+        "{:?}",
+        report.issues
+    );
+    assert_eq!(
+        store
+            .resume(&id)
+            .expect("resume latest checkpoint")
+            .snapshot,
+        s.snapshot()
+    );
+}
+
+#[test]
+fn replay_applies_edge_and_terminal_commands_and_counts_batches_after_the_run_ends() {
+    for terminal in [
+        Command::ForceExtract {
+            method: ExtractMethod::ServiceExit,
+        },
+        Command::ForceFail {
+            reason: FailReason::Caught,
+        },
+    ] {
+        let dir = tmp();
+        let store = Store::open(dir.path()).expect("open");
+        let id = SessionId::new("s-terminal-replay");
+        store
+            .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+            .expect("begin");
+        let mut s = sim();
+        let mut held = Buttons::default();
+        store
+            .checkpoint(&id, 0, 0, &s.snapshot(), held, false)
+            .expect("base");
+        let initial_y = s.snapshot().state.player.y;
+        for (seq, cmds) in [
+            vec![Command::Jump],
+            vec![Command::ForceCrisis],
+            vec![terminal],
+            vec![],
+        ]
+        .iter()
+        .enumerate()
+        {
+            store
+                .append_commands(&id, seq as u64, 0, s.snapshot().tick, cmds)
+                .expect("append");
+            step(&mut s, &mut held, cmds);
+            if seq == 0 {
+                assert_ne!(
+                    s.snapshot().state.player.y,
+                    initial_y,
+                    "jump fixture must take effect"
+                );
+            }
+        }
+        let resumed = store.resume(&id).expect("replay all actions");
+        assert_eq!(resumed.snapshot, s.snapshot(), "{terminal:?}");
+        assert!(resumed.snapshot.state.ended);
+        assert_eq!(
+            resumed.snapshot.tick, 2,
+            "terminal and ended batches do not advance time"
+        );
+        assert_eq!(resumed.held, Buttons::default());
+        assert_eq!((resumed.next_seq, resumed.replayed_batches), (4, 4));
+
+        store
+            .checkpoint(&id, 4, 0, &s.snapshot(), held, false)
+            .expect("terminal checkpoint");
+        let report = store.verify(&id).expect("verify terminal replay");
+        assert!(report.ok(), "{terminal:?}: {:?}", report.issues);
+        assert_eq!(
+            (report.commands, report.checkpoints, report.replayed),
+            (4, 2, 4)
+        );
+    }
+}
+
+#[test]
+fn verify_reports_a_later_snapshot_format_change_as_state_drift() {
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-format-drift");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+    let mut s = sim();
+    let mut held = Buttons::default();
+    store
+        .checkpoint(&id, 0, 0, &s.snapshot(), held, false)
+        .expect("base");
+    store.append_commands(&id, 0, 0, 0, &[]).expect("append");
+    step(&mut s, &mut held, &[]);
+    store
+        .checkpoint(&id, 1, 0, &s.snapshot(), held, false)
+        .expect("later checkpoint");
+    drop(store);
+    rewrite_checkpoint(dir.path(), &id, 1, |cp| {
+        cp.body["format"] = serde_json::json!("idaptik-ghost-lobby-runtime-v2");
+    });
+    let store = Store::open(dir.path()).expect("reopen");
+    let report = store.verify(&id).expect("verify");
+    assert!(!report.ok());
+    assert_eq!(report.replayed, 1);
+    assert_eq!(
+        report.issues,
+        vec![VerifyIssue::StateMismatch {
+            at: 1,
+            field: "format".to_owned(),
+            replayed: SNAPSHOT_FORMAT.to_owned(),
+            recorded: "idaptik-ghost-lobby-runtime-v2".to_owned(),
+        }]
+    );
+    assert!(matches!(store.resume(&id), Err(PersistError::Restore(_))));
 }
