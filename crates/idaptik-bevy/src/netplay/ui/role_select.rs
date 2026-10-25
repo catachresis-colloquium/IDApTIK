@@ -150,7 +150,7 @@ pub fn setup_role_selection_ui(mut commands: Commands) {
                     RoleButton {
                         role: Role::Infiltrator,
                     },
-                    UiButton::default(),
+                    UiButton,
                     button_node(),
                     button_normal_color(),
                 ))
@@ -163,7 +163,7 @@ pub fn setup_role_selection_ui(mut commands: Commands) {
             parent
                 .spawn((
                     RoleButton { role: Role::Hacker },
-                    UiButton::default(),
+                    UiButton,
                     button_node(),
                     button_normal_color(),
                 ))

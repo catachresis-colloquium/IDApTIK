@@ -218,7 +218,7 @@ pub fn setup_deck(mut commands: Commands) {
                     card.spawn((CardText::State, line("", DIM)));
                     card.spawn((
                         CardVerb,
-                        UiButton::default(),
+                        UiButton,
                         Node {
                             padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)),
                             ..Default::default()
