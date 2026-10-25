@@ -97,10 +97,7 @@ fn unrelated_activation_preserves_role_selection_and_its_pending_state() {
         .resource_mut::<RoleSelectionState>()
         .selected_role = Some(Role::Infiltrator);
     let background = BackgroundColor(Color::srgb(0.1, 0.2, 0.3));
-    let target = app
-        .world_mut()
-        .spawn((UiButton, background))
-        .id();
+    let target = app.world_mut().spawn((UiButton, background)).id();
     app.world_mut().trigger(Activate { entity: target });
     let selection = app.world().resource::<RoleSelectionState>();
     assert!(selection.active);
