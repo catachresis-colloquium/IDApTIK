@@ -222,3 +222,12 @@ T	crates/idaptik-evil-weevil/src/wire.rs	raw payload fixtures for production wir
 T	crates/idaptik-net/tests/evil_weevil_relay.rs	loopback regression test comparing the offline relay model to Burble
 T	crates/idaptik-evil-weevil/tests/corpus.rs	fixed adversarial corpus acceptance tests
 T	crates/idaptik-evil-weevil/tests/regression.rs	adversarial adapter invariant and regression tests
+T	crates/idaptik-bevy/tests/button_activation.rs	UI activation observer tests: pointer and keyboard Activate routed to the card verb and the role buttons
+T	crates/idaptik-net/tests/deployment_contract.rs	boundary and negative cases for the declarative ADR-0015 deployment and state-ownership model; claims no running transport
+D	crates/idaptik-persist/src/digest.rs	FNV-1a content digest for definition blobs; deduplication and corruption detection only, never a security boundary
+D	crates/idaptik-persist/src/error.rs	hand-written error enum for the store; four Display arms, no policy
+D	crates/idaptik-persist/src/lib.rs	crate root: module wiring and the schema-version constant; no behaviour of its own
+D	crates/idaptik-persist/src/record.rs	serde records the store keeps (session, command batch, checkpoint) plus the resume and verify reports
+D	crates/idaptik-persist/src/schema.rs	redb table definitions and table names; the on-disk vocabulary, not the logic
+D	crates/idaptik-persist/src/store.rs	durability plumbing beside the tick (open, append, checkpoint, resume, verify); deliberately outside the simulation, and every failure path is loud through verify and tests/persist.rs
+T	crates/idaptik-persist/tests/persist.rs	store tests, including verify_can_fail which proves the others can fail
