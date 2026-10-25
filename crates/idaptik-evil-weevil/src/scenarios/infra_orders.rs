@@ -52,9 +52,15 @@ const ID: &str = "EW-06-infrastructure-orders-and-observations";
 /// companion's 200 px/s underground is 0.75 s, and `TICK_DT` is 1/60.
 const SYNTH_AT: u64 = 52;
 
-/// The peer watermark committed before the run is driven. One tick past the
-/// synth, so the tick the diversion plays on is provably uncommitted-until-now
-/// and then executed.
+/// The tick the scene is set on. Not tick 1: a commit *through* `n` advances
+/// the peer watermark to `n + 1`, so the opening `feed_commit(.., 1)` in this
+/// scenario would reject a frame for tick 1 as arriving after its own commit.
+/// Tick 2 is the first the watermark permits.
+const SCENE_AT: u64 = 2;
+
+/// The peer watermark committed before the run is driven. Past the synth, so
+/// the tick the diversion plays on is provably uncommitted until now and then
+/// executed.
 const HORIZON: u64 = SYNTH_AT + 4;
 
 /// The fixed, bounded input sequence. Every frame is pre-declared; nothing
@@ -307,10 +313,10 @@ impl Scenario for InfraOrdersScenario {
         //   underground travel at the companion's 200 px/s, which is why the
         //   synth below is not played at the frontier.
         for (seq, at, cmd) in [
-            (4, 1, Command::ForceCrisis),
+            (4, SCENE_AT, Command::ForceCrisis),
             (
                 5,
-                1,
+                SCENE_AT,
                 Command::Mole {
                     op: MoleOp::MoveTo {
                         x: 240.0,
