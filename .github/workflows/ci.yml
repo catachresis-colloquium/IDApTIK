@@ -486,6 +486,16 @@ jobs:
     name: test-ghost (core/tui/ffi + clippy + fmt)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      # checks: write publishes this job's own failure detail into its check-run
+      # output: annotations are capped at ~4 KB and the runner pool does not
+      # expose ::error:: text through the API, so a truncated annotation used to
+      # show 4 KB of *passing* test output before the actual failure.
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         run: |
@@ -505,8 +515,28 @@ jobs:
           set -e
           cat /tmp/test-ghost.log
           if [ "$rc" -ne 0 ]; then
-            detail="$(tail -n 220 /tmp/test-ghost.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 45000)"
+            # Lead with the diagnostic lines, not with the tail: the annotations
+            # API keeps only the first ~4 KB, and the old tail-first capture spent
+            # that budget on passing tests so the real failure was unreadable.
+            {
+              echo '### test-ghost failed (rc='"$rc"') -- error lines'
+              echo '```'
+              grep -nE '^(error(\[|:)|warning: unused|thread .main.|failures:|test .* FAILED)' /tmp/test-ghost.log | head -40 || true
+              echo '```'
+              echo '### last 25 lines'
+              echo '```'
+              tail -n 25 /tmp/test-ghost.log
+              echo '```'
+            } > /tmp/test-ghost-detail.md
+            cat /tmp/test-ghost-detail.md >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            detail="$(tr '\n' ' ' < /tmp/test-ghost-detail.md | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 3600)"
             echo "::error::test-ghost rc=$rc -- $detail"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "test-ghost (core/tui/ffi + clippy + fmt)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "test-ghost failed" --arg rc "$rc" --rawfile body /tmp/test-ghost-detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: $body}}' > /tmp/test_ghost_patch.json \
+                && gh api --input /tmp/test_ghost_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
             exit "$rc"
           fi
       # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
