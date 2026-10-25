@@ -217,7 +217,8 @@ test-ghost:
 # The Evil Weevil adversarial-testing gate (ADR-0013): offline, sans-IO
 # corpus over the real production validators — stale/duplicate messages,
 # invalid targets, epoch conflicts, reconnect/obsolete frames, and
-# delayed/withheld observations with fault-vs-hostility classification.
+# delayed/withheld observations with fault-vs-hostility classification, and
+# the infrastructure/companion orders with their observation trail (EW-06).
 # Hard-fails when cargo is missing; needs no Elixir and opens no sockets.
 evil-weevil-check:
     bash scripts/evil_weevil_check.sh

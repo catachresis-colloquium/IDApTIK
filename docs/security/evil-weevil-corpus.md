@@ -1,7 +1,7 @@
 # Evil Weevil corpus — methodology, results, and deployment-mode gaps
 
-- Date: 2026-10-24
-- Corpus version: `1` (`CORPUS_VERSION` in `crates/idaptik-evil-weevil/src/scenarios/mod.rs`)
+- Date: 2026-10-24 (updated 2026-10-25: EW-06 added)
+- Corpus version: `2` (`CORPUS_VERSION` in `crates/idaptik-evil-weevil/src/scenarios/mod.rs`)
 - Report schema: `idaptik-evil-weevil-corpus-v1`
 - Decision record: [ADR-0013](../adr/0013-evil-weevil-adversarial-testing-adapter.md)
 - Code: `crates/idaptik-evil-weevil/` (sans-IO, `#![forbid(unsafe_code)]`)
@@ -53,7 +53,7 @@ credential-URL patterns); all identities are fixed dummy strings of the form
 `ew-dummy-<seat>-<nnnn>`. A planted-secret unit test proves the redactor
 actually fires.
 
-## 2. The five scenarios
+## 2. The six scenarios
 
 ### EW-01 — stale or duplicate session messages (`EW-01-stale-duplicate-messages`)
 
@@ -187,11 +187,48 @@ actually fires.
   - `operator-may-end-only-the-local-session` — termination is explicit,
     local, and operator-only.
 
+### EW-06 — infrastructure and companion orders: seat rules, the relay gap, and the observation trail (`EW-06-infrastructure-orders-and-observations`)
+
+- **Principal / ops:** `ew-dummy-hacker-0001`; `ProposeBoundedIntent` only.
+- **Invariant:** the infrastructure verbs (`Command::Mole` from ADR-0014,
+  electrical `Command::Power`) obey the same acceptance rules as every other
+  frame — the relay role table fails closed on tags it does not carry, the
+  watermark rejects stale orders, only an accepted order moves the sim — and
+  the consequences come back through the canonical log *as observations*,
+  never as a leak of the hidden order.
+- **Bounded sequence (6 phases):** commit the infiltrator watermark through
+  tick 1; a `Mole` synth order from the hacker seat through the model relay;
+  a `Power` inspect order from the same seat through the relay; the identical
+  `Mole` order at the frontier on the infiltrator peer path, direct to the
+  production validator; commit the horizon through tick 3 and advance (the
+  order applies, the guard observes); a `Mole` order below the watermark.
+- **Expected / observed:**
+  - `mole-order-refused-at-relay` — the pinned burble profile carries no
+    `Mole` tag; the refusal fails closed and is recorded as a role violation.
+  - `power-order-refused-at-relay` — the same for `Power`, whose per-op seat
+    a tag-keyed table could not route even once extended.
+  - `frontier-mole-order-accepted` — the lockstep validator accepts the
+    frontier order for the peer seat on the pump-house floor; the horizon
+    commit then lets the run execute it.
+  - `mole-order-applied-by-sim` / `no-denial-for-legitimate-order` — the
+    order reaches the hosted companion as a typed `SynthSoundPlayed` event;
+    no `MoleDenied`.
+  - `guard-observed-the-diversion` — Billy's own senses turn the diversion
+    into a `GuardObserved(UnusualNoise)` event: the player-visible evidence
+    for the observation principle.
+  - `perception-contract-lists-the-noise` — `observations()` at Billy's
+    position, with the archetype's hearing, lists the same noise from
+    canonical state alone.
+  - `stale-mole-order-rejected` — below the watermark the new verbs are
+    refused like any other.
+  - `relay-accounting` — two refusals, zero relays, zero drops.
+
+
 ## 3. Results, defects, and the honesty boundary
 
 ### What is demonstrated
 
-All five scenarios pass against the real production validators in this
+All six scenarios pass against the real production validators in this
 repository, and the 14 tests in `tests/corpus.rs` + `tests/regression.rs`
 plus the crate's unit tests pin the guarantees. The corpus report records,
 per run: pass/fail per named check, full telemetry, observer classifications
@@ -228,7 +265,7 @@ first exists; the rest are recorded gaps, never simulated.
 
 | Mode | Implemented? | Authority rule | Recovery rule | Evil Weevil coverage |
 |---|---|---|---|---|
-| Single rendezvous relay (burble `game:` lane, no game-server-admin) | Yes | Relay enforces role table + `seq` only; it never parses command bodies and holds no sim state. Seats independently validate epochs (`Hello`) and schedules (`LockstepCore`); every seat runs the same deterministic sim and compares digests. | Peer-to-peer `net:resync` snapshot hand-off; the survivor prunes uncommitted peer commands on loss, the replacement reconstructs from snapshot + full event log. | **Demonstrated**: all five scenarios offline; relay rules additionally confirmed against a throwaway local burble by `evil_weevil_relay_check.sh`; resync over the real relay by `loopback_check.sh` run 4. |
+| Single rendezvous relay (burble `game:` lane, no game-server-admin) | Yes | Relay enforces role table + `seq` only; it never parses command bodies and holds no sim state. Seats independently validate epochs (`Hello`) and schedules (`LockstepCore`); every seat runs the same deterministic sim and compares digests. | Peer-to-peer `net:resync` snapshot hand-off; the survivor prunes uncommitted peer commands on loss, the replacement reconstructs from snapshot + full event log. | **Demonstrated**: all six scenarios offline; relay rules additionally confirmed against a throwaway local burble by `evil_weevil_relay_check.sh`; resync over the real relay by `loopback_check.sh` run 4. |
 | Direct P2P game transport | No | Hypothesis: epoch and watermark rules would move entirely to the seats with no relay de-duplication, so `seq` handling needs a transport-supplied ordering substitute. | Hypothesis: the existing resync payload is transport-agnostic and could survive, but nothing implements the signalling. | **Gap.** No code, no test; recorded here only. |
 | Federated / multi-server | No | Hypothesis: cross-server authority would need an epoch-ownership rule that does not exist in any crate. | Hypothesis: undefined; snapshot hand-off has no cross-federation path today. | **Gap.** |
 | Single authoritative game server | No | Hypothesis: the server would become the validator the local sim currently is; every invariant in §2 would need re-derivation against its acceptance surface. | Hypothesis: server-driven rejoin state; unbuilt. | **Gap.** ADR-0005 option 1 remains a recorded option, not a system. |
@@ -262,7 +299,7 @@ cargo run -p idaptik-evil-weevil -- --scenario EW-04-reconnect-obsolete-messages
 ```
 
 Outputs: `corpus-report.json` (schema `idaptik-evil-weevil-corpus-v1`,
-deterministic run id `ew-corpus-v1-seed-777001`) and one
+deterministic run id `ew-corpus-v2-seed-777001`) and one
 `<scenario-id>/result.json` per scenario containing the exact proposed
 intents with their raw wire payloads (the replay input side), the named
 checks, observed effects, validated telemetry, observer report, metrics and

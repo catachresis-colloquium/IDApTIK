@@ -107,6 +107,7 @@ D	crates/idaptik-core/src/scenario/building/exchange_house.rs	Exchange House con
 D	crates/idaptik-core/src/scenario/signal/ghost_lobby_wiring.rs	the Ghost Lobby's devices as a signal-network fixture, not authored level design
 D	crates/idaptik-core/src/scenario/power/test_floor.rs	the Ghost Lobby's electrical-infrastructure fixture
 D	crates/idaptik-core/src/companion/definition.rs	serde CompanionDefinition
+T	crates/idaptik-evil-weevil/src/scenarios/infra_orders.rs	adversarial corpus scenario: infrastructure orders against the real validators
 B	crates/idaptik-ffi/src/lib.rs	the C ABI; modelled in Idris2 (#117), conformance-tested in Zig
 B	crates/idaptik-net/src/envelope.rs	wire envelope encoding
 B	crates/idaptik-net/src/error.rs	wire error taxonomy
