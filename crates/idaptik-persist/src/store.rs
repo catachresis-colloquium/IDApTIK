@@ -513,12 +513,8 @@ impl Store {
                         found: seq,
                     });
                 }
-            } else {
-                if seq != 0 {
-                    issues.push(VerifyIssue::NonZeroStart { first: seq });
-                }
-                None if seq != 0 => issues.push(VerifyIssue::NonZeroStart { first: seq }),
-                _ => {}
+            } else if seq != 0 {
+                issues.push(VerifyIssue::NonZeroStart { first: seq });
             }
             expected = Some(seq.saturating_add(1));
             if let Some(prev) = last_epoch {

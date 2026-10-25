@@ -136,7 +136,7 @@ pub struct Intent {
     pub target_id: u32,
     /// Proposed movement direction, Q16.16. Advisory: see the bearing note in
     /// [`crate::observation`]. The host validates and applies its own nav.
-    pub move: Fx2,
+    pub r#move: Fx2,
     pub look: Fx2,
     /// Proposed speed in fx units.
     pub speed: i32,
@@ -155,7 +155,7 @@ impl Intent {
         Ok(Self {
             action: Action::from_code(raw.action)?,
             target_id: raw.target_id,
-            move: Fx2 {
+            r#move: Fx2 {
                 x: raw.move_x,
                 y: raw.move_y,
             },
