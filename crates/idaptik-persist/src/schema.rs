@@ -12,8 +12,7 @@ pub const SESSIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("idaptik
 ///
 /// `seq` is store-assigned and strictly increasing; `tick` and `epoch` ride in
 /// the value. See the crate docs for why the key is not the tick.
-pub const COMMANDS: TableDefinition<(&str, u64), &[u8]> =
-    TableDefinition::new("idaptik-commands");
+pub const COMMANDS: TableDefinition<(&str, u64), &[u8]> = TableDefinition::new("idaptik-commands");
 
 /// Checkpoints, keyed the same way. A checkpoint is derived state: deleting
 /// every row here loses nothing that the log cannot rebuild.
