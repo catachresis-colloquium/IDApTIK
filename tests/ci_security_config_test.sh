@@ -1282,6 +1282,207 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$syntax_root/scripts/broken.sh"
 expect_pass "the same tree parses once the script is fixed" \
   check_shell_syntax "$syntax_root"
 
+# PR #165 extends the checker to require a dependency for every step-level
+# external ref, including refs in workflows absent from the workflows: map.
+# Exercise its public CLI against independent fixtures; copying the awk here
+# would test a second implementation. Keep these in this already wired suite.
+printf 'lock-sync dependency fixtures (PR #165):\n'
+
+lock_sync_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+lock_sync_other_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+lock_sync_ref="fixture/action@$lock_sync_sha"
+lock_sync_other_ref="fixture/action@$lock_sync_other_sha"
+
+write_lock_sync_workflow() { # $1 path, remaining args are uses: values
+  local file="$1" ref
+  shift
+  cat > "$file" <<'YML'
+name: Fixture
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+YML
+  for ref in "$@"; do
+    printf '      - uses: %s\n' "$ref" >> "$file"
+  done
+}
+
+write_lock_sync_dependency() { # $1 lockfile, $2 key, $3 commit SHA
+  cat >> "$1" <<LOCK
+    '$2':
+        ref: 'v1'
+        commit: 'sha1-$3'
+LOCK
+}
+
+new_lock_sync_case() { # $1 case name; prints an isolated workflows directory
+  local dir="$FIXTURE/lock sync/$1"
+  mkdir -p "$dir"
+  # An unrecorded job-level reusable still needs no dependency of its own.
+  # Its onboarded empty step set also gives local-action fixtures a real
+  # denominator without requiring unrelated external step refs.
+  cat > "$dir/reusable.yml" <<'YML'
+name: Reusable
+on: [push]
+jobs:
+  scan:
+    uses: fixture/shared/.github/workflows/scan.yml@v1
+YML
+  cat > "$dir/actions.lock" <<'LOCK'
+version: 'v0.0.2'
+workflows:
+    '.github/workflows/reusable.yml': []
+dependencies:
+LOCK
+  write_lock_sync_workflow "$dir/pinned.yml" "$lock_sync_ref"
+  write_lock_sync_dependency "$dir/actions.lock" "$lock_sync_ref" "$lock_sync_sha"
+  printf '%s\n' "$dir"
+}
+
+check_lock_sync_result() { # $1 exit status, $2 workflows dir, rest = output fragments
+  local expected="$1" dir="$2" out status=0 want
+  shift 2
+  out="$(bash "$REPO_DIR/scripts/check-lock-sync.sh" "$dir" 2>&1)" || status=$?
+  if [ "$status" -ne "$expected" ]; then
+    printf 'expected lock-sync exit %s, got %s:\n%s\n' "$expected" "$status" "$out" >&2
+    return 1
+  fi
+  for want in "$@"; do
+    if [[ "$out" != *"$want"* ]]; then
+      printf 'missing lock-sync output %s:\n%s\n' "$want" "$out" >&2
+      return 1
+    fi
+  done
+  if [ "$expected" -ne 0 ] && [[ "$out" == *'actions.lock is in sync:'* ]]; then
+    printf 'failed lock-sync check also reported success:\n%s\n' "$out" >&2
+    return 1
+  fi
+}
+
+lock_sync_dir="$(new_lock_sync_case declared)"
+expect_pass "a declared immutable step ref passes without onboarding its workflow" \
+  check_lock_sync_result 0 "$lock_sync_dir" \
+  'unonboarded, but all 1 step-level ref(s) are immutable' \
+  '1/1 used refs declared in dependencies:' 'actions.lock is in sync:'
+
+lock_sync_dir="$(new_lock_sync_case missing)"
+sed -i '/^dependencies:/,$d' "$lock_sync_dir/actions.lock"
+printf 'dependencies:\n' >> "$lock_sync_dir/actions.lock"
+expect_pass "an empty dependency map rejects an unonboarded immutable step ref" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  'FAIL .github/workflows/pinned.yml' \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  '0/1 used refs declared in dependencies:' 'actions.lock is OUT OF SYNC'
+
+# Resolving the same commit under a different key is insufficient: matching
+# uses the full owner/repo@ref, not commit: or the readable ref: metadata.
+lock_sync_dir="$(new_lock_sync_case alias)"
+sed -i "s|'$lock_sync_ref':|'fixture/action@v1':|" "$lock_sync_dir/actions.lock"
+expect_pass "a tag dependency pointing at the same commit does not declare a SHA ref" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  '0/1 used refs declared in dependencies:'
+
+lock_sync_dir="$(new_lock_sync_case other-revision)"
+write_lock_sync_workflow "$lock_sync_dir/other.yaml" "$lock_sync_other_ref"
+expect_pass "another revision of a declared repository still needs its own dependency" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  'FAIL .github/workflows/other.yaml' \
+  "uses $lock_sync_other_ref, but no dependencies: entry declares it" \
+  '1/2 used refs declared in dependencies:'
+write_lock_sync_dependency "$lock_sync_dir/actions.lock" "$lock_sync_other_ref" "$lock_sync_other_sha"
+expect_pass "adding the exact missing revision repairs the same workflows" \
+  check_lock_sync_result 0 "$lock_sync_dir" \
+  '2/2 used refs declared in dependencies:' 'actions.lock is in sync:'
+
+lock_sync_dir="$(new_lock_sync_case multiple-missing)"
+write_lock_sync_workflow "$lock_sync_dir/other.yaml" "$lock_sync_other_ref"
+sed -i '/^dependencies:/,$d' "$lock_sync_dir/actions.lock"
+printf 'dependencies:\n' >> "$lock_sync_dir/actions.lock"
+expect_pass "missing refs in both yml and yaml files are all diagnosed" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  'FAIL .github/workflows/pinned.yml' 'FAIL .github/workflows/other.yaml' \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  "uses $lock_sync_other_ref, but no dependencies: entry declares it" \
+  '0/2 used refs declared in dependencies:'
+
+lock_sync_dir="$(new_lock_sync_case shared)"
+write_lock_sync_workflow "$lock_sync_dir/pinned.yml" "$lock_sync_ref" "$lock_sync_ref"
+write_lock_sync_workflow "$lock_sync_dir/other.yaml" "$lock_sync_ref"
+expect_pass "one dependency covers repeated steps and the same ref in multiple workflows" \
+  check_lock_sync_result 0 "$lock_sync_dir" \
+  'examined 3 workflow file(s), 2 step-level ref(s), 1 job-level ref(s)' \
+  '1/1 used refs declared in dependencies:'
+sed -i '/^dependencies:/,$d' "$lock_sync_dir/actions.lock"
+printf 'dependencies:\n' >> "$lock_sync_dir/actions.lock"
+expect_pass "a shared undeclared ref is counted once across steps and workflows" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  '0/1 used refs declared in dependencies:'
+
+lock_sync_dir="$(new_lock_sync_case subpaths)"
+write_lock_sync_workflow "$lock_sync_dir/pinned.yml" \
+  "fixture/action/build@$lock_sync_sha" "fixture/action/test/nested@$lock_sync_sha"
+expect_pass "subdirectory actions share their normalized repository dependency" \
+  check_lock_sync_result 0 "$lock_sync_dir" '1/1 used refs declared in dependencies:'
+sed -i '/^dependencies:/,$d' "$lock_sync_dir/actions.lock"
+printf 'dependencies:\n' >> "$lock_sync_dir/actions.lock"
+expect_pass "undeclared subdirectory actions report the normalized ref" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  '0/1 used refs declared in dependencies:'
+write_lock_sync_dependency "$lock_sync_dir/actions.lock" \
+  "fixture/action/build@$lock_sync_sha" "$lock_sync_sha"
+expect_pass "a dependency keyed by a subdirectory does not declare the normalized repository" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  '0/1 used refs declared in dependencies:'
+
+lock_sync_dir="$(new_lock_sync_case quotes-and-comments)"
+write_lock_sync_workflow "$lock_sync_dir/pinned.yml" \
+  "'$lock_sync_ref' # readable version" "\"$lock_sync_ref\" # readable version" \
+  './local/action@v1'
+printf '      # - uses: %s\n' "$lock_sync_other_ref" >> "$lock_sync_dir/pinned.yml"
+expect_pass "quoted refs and comments preserve matching while local actions are excluded" \
+  check_lock_sync_result 0 "$lock_sync_dir" '1/1 used refs declared in dependencies:'
+sed -i '/^dependencies:/,$d' "$lock_sync_dir/actions.lock"
+printf 'dependencies:\n' >> "$lock_sync_dir/actions.lock"
+expect_pass "quoting and commenting a step ref cannot hide a missing dependency" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  "uses $lock_sync_ref, but no dependencies: entry declares it" \
+  '0/1 used refs declared in dependencies:'
+
+lock_sync_dir="$(new_lock_sync_case local-only)"
+write_lock_sync_workflow "$lock_sync_dir/pinned.yml" './local/action@v1' './another/action'
+sed -i '/^dependencies:/,$d' "$lock_sync_dir/actions.lock"
+printf 'dependencies:\n' >> "$lock_sync_dir/actions.lock"
+expect_pass "local actions and unrecorded job-level reusables require no step dependencies" \
+  check_lock_sync_result 0 "$lock_sync_dir" \
+  '0/0 used refs declared in dependencies:' 'actions.lock is in sync:'
+
+lock_sync_dir="$(new_lock_sync_case onboarded)"
+write_lock_sync_workflow "$lock_sync_dir/pinned.yml" 'fixture/action@v1' "$lock_sync_ref"
+sed -i "/^dependencies:/i\\    '.github/workflows/pinned.yml':\n        - 'fixture/action@v1'\n        - '$lock_sync_ref'" \
+  "$lock_sync_dir/actions.lock"
+write_lock_sync_dependency "$lock_sync_dir/actions.lock" 'fixture/action@v1' "$lock_sync_sha"
+expect_pass "onboarded tags and SHA refs each have a matching dependency" \
+  check_lock_sync_result 0 "$lock_sync_dir" '2/2 used refs declared in dependencies:'
+sed -i "/^    'fixture\/action@v1':$/,/^        commit:/d" "$lock_sync_dir/actions.lock"
+expect_pass "recording an onboarded tag in workflows does not supply its dependency" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  'lockfile records fixture/action@v1 but dependencies: has no entry for it' \
+  'uses fixture/action@v1, but no dependencies: entry declares it' \
+  '1/2 used refs declared in dependencies:'
+
+lock_sync_dir="$(new_lock_sync_case invalid-pin)"
+sed -i "s/commit: 'sha1-$lock_sync_sha'/commit: 'sha1-nope'/" "$lock_sync_dir/actions.lock"
+expect_pass "a declared dependency with an invalid commit still fails pin validation" \
+  check_lock_sync_result 1 "$lock_sync_dir" \
+  "FAIL dependencies: $lock_sync_ref has no resolvable sha1-" \
+  '1/1 used refs declared in dependencies:' 'actions.lock is OUT OF SYNC'
+
 if [ "$failures" -ne 0 ]; then
   printf '%d CI security configuration test(s) failed (%d passed)\n' "$failures" "$checks" >&2
   annotate error "ci-security-config: $failures assertion(s) FAILED, $checks passed -- see the per-assertion annotations above"
