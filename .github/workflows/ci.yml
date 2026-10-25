@@ -290,6 +290,16 @@ jobs:
 
   supply-chain:
     name: supply-chain (cargo-deny)
+    permissions:
+      actions: read
+      contents: read
+      # checks: write is used only to publish this job's own failure detail
+      # into its check-run output: this estate's runner pool does not expose
+      # ::error:: annotations through the check-runs API (verified across 83
+      # failed jobs), so without it the verdict of a failing gate is
+      # unreadable by anyone without run-log access. The token writes only
+      # this check-run's output.title/output.summary.
+      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -319,7 +329,14 @@ jobs:
               tail -40 /tmp/deny_out.txt
               echo '```'
             } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            tail -40 /tmp/deny_out.txt > /tmp/cargo_deny_detail.md
             echo "::error::cargo-deny rc=$rc -- $(tail -3 /tmp/deny_out.txt | tr '\n' ' | ')"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "supply-chain (cargo-deny)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "cargo-deny failed" --arg rc "$rc" --rawfile body /tmp/cargo_deny_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/cargo_deny_patch.json \
+                && gh api --input /tmp/cargo_deny_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
             exit "$rc"
           fi
 
@@ -329,6 +346,16 @@ jobs:
   # job covers that the selected Wayland+X11 build actually compiles.
   vendor-parity:
     name: vendor-parity (bevy_winit patch gate)
+    permissions:
+      actions: read
+      contents: read
+      # checks: write is used only to publish this job's own failure detail
+      # into its check-run output: this estate's runner pool does not expose
+      # ::error:: annotations through the check-runs API (verified across 83
+      # failed jobs), so without it the verdict of a failing gate is
+      # unreadable by anyone without run-log access. The token writes only
+      # this check-run's output.title/output.summary.
+      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -359,7 +386,17 @@ jobs:
               tail -40 /tmp/parity_out.txt
               echo '```'
             } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            tail -40 /tmp/parity_out.txt > /tmp/vendor_parity_detail.md
             echo "::error::vendor-parity rc=$rc -- $(tail -3 /tmp/parity_out.txt | tr '\n' ' | ')"
+            # Check-run output is the API-readable failure channel (see the
+            # permissions note above). Best-effort: the step summary is the
+            # fallback for UI readers either way.
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "vendor-parity (bevy_winit patch gate)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "vendor-parity failed" --arg rc "$rc" --rawfile body /tmp/vendor_parity_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/vendor_parity_patch.json \
+                && gh api --input /tmp/vendor_parity_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
             exit "$rc"
           fi
       - name: Font-parser-free graph with title-free CSD active
@@ -385,6 +422,16 @@ jobs:
 
   bevy-frontend:
     name: bevy-frontend (tests + clippy)
+    permissions:
+      actions: read
+      contents: read
+      # checks: write is used only to publish this job's own failure detail
+      # into its check-run output: this estate's runner pool does not expose
+      # ::error:: annotations through the check-runs API (verified across 83
+      # failed jobs), so without it the verdict of a failing gate is
+      # unreadable by anyone without run-log access. The token writes only
+      # this check-run's output.title/output.summary.
+      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -415,7 +462,14 @@ jobs:
               tail -15 /tmp/bevy_test.txt
               echo '```'
             } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            { grep -m 4 -A 12 -E '^error' /tmp/bevy_test.txt | head -70; echo '--- tail ---'; tail -15 /tmp/bevy_test.txt; } > /tmp/bevy_test_detail.md
             echo "::error::bevy-test rc=$rc -- $(grep -m1 -E '^error' /tmp/bevy_test.txt | head -c 300)"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "bevy-frontend (tests + clippy)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "bevy-frontend test failed" --arg rc "$rc" --rawfile body /tmp/bevy_test_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/bevy_test_patch.json \
+                && gh api --input /tmp/bevy_test_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
             exit "$rc"
           fi
       - name: Lint selected frontend
@@ -433,7 +487,14 @@ jobs:
               tail -15 /tmp/bevy_clippy.txt
               echo '```'
             } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            { grep -m 4 -A 12 -E '^(error|warning: unused|error\[)' /tmp/bevy_clippy.txt | head -70; echo '--- tail ---'; tail -15 /tmp/bevy_clippy.txt; } > /tmp/bevy_clippy_detail.md
             echo "::error::bevy-clippy rc=$rc -- $(grep -m1 -E '^error' /tmp/bevy_clippy.txt | head -c 300)"
+            cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "bevy-frontend (tests + clippy)") | .id' 2>/dev/null | head -1)"
+            if [ -n "$cr_id" ]; then
+              jq -n --arg t "bevy-frontend clippy failed" --arg rc "$rc" --rawfile body /tmp/bevy_clippy_detail.md \
+                '{output: {title: ($t + " (rc=" + $rc + ")"), summary: ("```bash\n" + $body + "```")}}' > /tmp/bevy_clippy_patch.json \
+                && gh api --input /tmp/bevy_clippy_patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+            fi
             exit "$rc"
           fi
 
