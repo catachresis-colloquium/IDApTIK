@@ -537,6 +537,27 @@ impl Store {
             }
         }
 
+        // The first checkpoint's held set can be checked independently of its
+        // snapshot, but only if its entire log prefix is present and decodes.
+        if let Some((&first_at, first_cp)) = cps.iter().next() {
+            let mut held = Buttons::default();
+            let mut next_seq = 0;
+            for (&seq, batch) in batches.range(..first_at) {
+                if seq != next_seq {
+                    break;
+                }
+                let _ = fold(&batch.cmds, &mut held);
+                next_seq += 1;
+            }
+            if next_seq == first_at && first_cp.held != held {
+                issues.push(VerifyIssue::HeldMismatch {
+                    at: first_at,
+                    recorded: first_cp.held,
+                    replayed: held,
+                });
+            }
+        }
+
         // --- pass 2: the simulation ------------------------------------------
 
         let mut replayed = 0usize;
@@ -563,8 +584,8 @@ impl Store {
                     };
                     let mut held = base_held;
                     let mut paused = base_paused;
-                    // The earliest checkpoint may be at > 0; the prefix cannot
-                    // be checked, which `NonZeroStart` has already said.
+                    // The checkpoint already includes the earlier batches;
+                    // simulation replay starts at its first unapplied batch.
                     let mut next_seq = first_at;
 
                     for (&at, cp) in cps.iter().filter(|(a, _)| **a > first_at) {

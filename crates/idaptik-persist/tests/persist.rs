@@ -2,7 +2,7 @@
 //! fail — see `verify_can_fail`.
 
 use idaptik_core::scenario::{
-    Button, Buttons, Command, GhostLobbySim, RunConfig, SNAPSHOT_FORMAT, ghost_lobby,
+    Button, Buttons, Command, GhostLobbySim, RunConfig, SNAPSHOT_FORMAT, fold, ghost_lobby,
 };
 use idaptik_persist::{
     FlushPolicy, PersistError, SessionId, SessionRecord, SessionStatus, SimKind, Store, VerifyIssue,
@@ -212,29 +212,86 @@ fn verify_is_clean_for_a_consistent_session() {
         .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
         .expect("begin");
 
-    let s = sim();
+    let mut s = sim();
     let mut held = Buttons::default();
+    let cmds = [Command::SetButton {
+        button: Button::Left,
+        down: true,
+    }];
+    store.append_commands(&id, 0, 0, 0, &cmds).expect("append");
+    s.tick(&fold(&cmds, &mut held));
     store
-        .append_commands(
-            &id,
-            0,
-            0,
-            0,
-            &[Command::SetButton {
-                button: Button::Left,
-                down: true,
-            }],
-        )
-        .expect("append");
-    held.set(Button::Left, true);
-    store
-        .checkpoint(&id, 0, 0, &s.snapshot(), held, false)
+        .checkpoint(&id, 1, 0, &s.snapshot(), held, false)
         .expect("checkpoint");
 
     let report = store.verify(&id).expect("verify");
     assert!(report.ok(), "expected no issues, got {:?}", report.issues);
     assert_eq!(report.commands, 1);
     assert_eq!(report.checkpoints, 1);
+}
+
+#[test]
+fn verify_checks_held_at_the_only_checkpoint_from_a_complete_prefix() {
+    for (at, seqs, recorded_left, mismatch) in [
+        // The initial boundary must have no buttons held.
+        (0, vec![], true, true),
+        // At 1, the press is included and the later release is excluded.
+        (1, vec![0, 1], false, true),
+        (1, vec![0, 1], true, false),
+        // At 2, the release is included too.
+        (2, vec![0, 1], true, true),
+        // Missing starts, internal gaps, and missing tails cannot be compared.
+        (2, vec![1], true, false),
+        (3, vec![0, 2], true, false),
+        (2, vec![0], false, false),
+    ] {
+        let dir = tmp();
+        let store = Store::open(dir.path()).expect("open");
+        let id = SessionId::new("s-prefix");
+        store
+            .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+            .expect("begin");
+        for seq in seqs {
+            store
+                .append_commands(
+                    &id,
+                    seq,
+                    0,
+                    0,
+                    &[Command::SetButton {
+                        button: Button::Left,
+                        down: seq == 0,
+                    }],
+                )
+                .expect("append");
+        }
+        let mut held = Buttons::default();
+        held.set(Button::Left, recorded_left);
+        store
+            .checkpoint(&id, at, 0, &sim().snapshot(), held, false)
+            .expect("checkpoint");
+
+        let report = store.verify(&id).expect("verify");
+        assert_eq!(report.checkpoints, 1);
+        let held_issues: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|issue| matches!(issue, VerifyIssue::HeldMismatch { .. }))
+            .collect();
+        let mut replayed = Buttons::default();
+        replayed.set(Button::Left, at == 1);
+        let expected = VerifyIssue::HeldMismatch {
+            at,
+            recorded: held,
+            replayed,
+        };
+        assert_eq!(
+            held_issues,
+            if mismatch { vec![&expected] } else { vec![] },
+            "at={at}, recorded_left={recorded_left}: {:?}",
+            report.issues
+        );
+    }
 }
 
 /// A check that cannot fail is not a check. This plants the exact divergence a
@@ -556,6 +613,15 @@ fn verify_catches_diverged_simulation_state() {
 
 #[test]
 fn a_store_with_a_foreign_schema_is_refused() {
+    assert_schema_is_refused(99);
+}
+
+#[test]
+fn a_store_with_the_old_checkpoint_schema_is_refused() {
+    assert_schema_is_refused(1);
+}
+
+fn assert_schema_is_refused(schema_version: u32) {
     use idaptik_persist::schema::{META, SCHEMA_KEY};
     use redb::Database;
 
@@ -564,20 +630,20 @@ fn a_store_with_a_foreign_schema_is_refused() {
         let store = Store::open(dir.path()).expect("open");
         drop(store);
     }
-    // Rewrite the schema tag behind the store's back, as a newer build would.
+    // Plant an incompatible schema tag behind the store's back.
     {
         let db = Database::create(dir.path().join("idaptik.redb")).expect("reopen raw");
         let txn = db.begin_write().expect("write");
         {
             let mut meta = txn.open_table(META).expect("meta");
-            let bytes = serde_json::to_vec(&99u32).expect("encode");
+            let bytes = serde_json::to_vec(&schema_version).expect("encode");
             meta.insert(SCHEMA_KEY, bytes.as_slice()).expect("insert");
         }
         txn.commit().expect("commit");
     }
     match Store::open(dir.path()) {
         Err(PersistError::SchemaMismatch { found, expected }) => {
-            assert_eq!(found, 99);
+            assert_eq!(found, schema_version);
             assert_eq!(expected, idaptik_persist::SCHEMA_VERSION);
         }
         other => panic!("expected SchemaMismatch, got {other:?}"),

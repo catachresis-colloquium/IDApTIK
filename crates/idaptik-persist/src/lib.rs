@@ -116,4 +116,4 @@ pub use store::{SessionListing, Store};
 /// than migrating. Snapshots carry the same discipline one level down: a
 /// `idaptik-ghost-lobby-runtime-v2` body does not restore into a v3 build, and
 /// this crate propagates that refusal instead of papering over it.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;

@@ -117,7 +117,7 @@ pub struct SessionRecord {
     /// The epoch of the most recent batch. Bumped by the caller on `Restart`,
     /// because the sim's own `tick` rewinds there.
     pub last_epoch: u64,
-    /// The `seq` of every checkpoint, ascending.
+    /// The `at` boundary of every checkpoint, ascending.
     pub checkpoints: Vec<u64>,
     pub status: SessionStatus,
     /// The cadence the caller intends to use. Advisory; see [`FlushPolicy`].
