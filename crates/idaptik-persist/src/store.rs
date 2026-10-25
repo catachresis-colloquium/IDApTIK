@@ -207,19 +207,27 @@ impl Store {
 
     // --- checkpoints --------------------------------------------------------
 
-    /// Store a snapshot as a checkpoint covering the first `at` commands.
+    /// Store a snapshot as a checkpoint covering the first `at` command batches.
     ///
     /// `at` is a **boundary**: `0` is the initial state (no commands applied),
-    /// `n` means commands `0..n-1` are included. It is deliberately not the
-    /// command `seq` space, and it does not advance the session's `last_seq` —
+    /// `n` means batches with `seq` in `0..n` are included. It is deliberately
+    /// not the command `seq` space, and it does not advance the session's `last_seq` —
     /// see [`CheckpointRecord::at`] for why the two were separated.
     ///
     /// The definition is pulled out into the blob table and replaced by its
-    /// digest. `held` and `paused` come from the frontend and are **not** part
-    /// of the snapshot; see the crate docs.
+    /// digest. `held` and `paused` come from the frontend and are stored
+    /// alongside the snapshot; the frontend pause latch can differ from the
+    /// snapshot's `paused` field.
     ///
     /// The checkpoint row, any new definition blob, and the session index all
-    /// commit together.
+    /// commit together. An existing checkpoint at `at` is replaced. The caller
+    /// is responsible for matching the snapshot and frontend state to `at`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PersistError::UnknownSession`] for an unknown id or
+    /// [`PersistError::FormatMismatch`] if the snapshot's format differs from
+    /// the session's format tag. Storage and JSON errors are propagated.
     #[allow(clippy::too_many_arguments)]
     pub fn checkpoint(
         &self,
@@ -317,9 +325,22 @@ impl Store {
     /// or a whole second of movement.
     ///
     /// Only [`SimKind::GhostLobby`] has a typed payload in this version.
-    /// Building sessions can be written and verified already; their typed
-    /// resume arrives with the runtime that consumes it, because inventing a
+    /// Building sessions can be written and checked at the log level; their
+    /// typed resume arrives with the runtime that consumes it, because inventing a
     /// payload type here would be a second definition of `BuildingSnapshot`.
+    ///
+    /// Replay starts at `seq == checkpoint_at`, with one simulation tick per
+    /// stored batch. The returned held buttons and frontend pause latch include
+    /// trailing commands; replayed events are discarded. The store is unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PersistError::UnknownSession`] for an unknown id,
+    /// [`PersistError::UnsupportedSimKind`] for other simulation kinds, or
+    /// [`PersistError::NoCheckpoint`] if the indexed checkpoint is absent.
+    /// Missing or corrupt definition blobs, malformed stored data, and storage
+    /// errors are propagated. Snapshot format or definition validation failures
+    /// from simulation restore are returned as [`PersistError::Restore`].
     pub fn resume(&self, id: &SessionId) -> Result<Resume, PersistError> {
         let rec = self.load_session(id)?;
         if rec.sim_kind != SimKind::GhostLobby {
@@ -382,25 +403,35 @@ impl Store {
 
     // --- verification -------------------------------------------------------
 
-    /// Replay the log independently of the checkpoints and report every
-    /// disagreement — including disagreement about **simulation state**.
+    /// Check the log and compare later checkpoints with replayed simulation state.
     ///
     /// Two passes:
     ///
     /// 1. **Log-level** — sequence contiguity, epoch monotonicity, decodability,
-    ///    blob integrity, and the held-button set each checkpoint recorded.
-    /// 2. **State-level** — restore the earliest checkpoint into a
-    ///    `GhostLobbySim`, tick the log between checkpoints, and compare the
-    ///    resulting `RuntimeSnapshot` with each later checkpoint.
+    ///    blob integrity, and checkpoint ticks relative to preceding batches.
+    /// 2. **State-level** — for [`SimKind::GhostLobby`], restore the earliest
+    ///    decodable checkpoint, tick the subsequent batches, and compare held
+    ///    buttons and the whole `RuntimeSnapshot` at later checkpoints with the
+    ///    same definition digest. Different digests produce
+    ///    [`VerifyIssue::DefinitionMismatch`] and skip that comparison.
     ///
-    /// Pass 2 is what makes the crate's claim honest. Checking only `held`
-    /// would certify a checkpoint whose RNG, actor state or pause flag had
-    /// diverged, and the next resume would then continue from corrupt state.
+    /// The earliest checkpoint is trusted as the replay baseline; its state and
+    /// held buttons, and any batches before its boundary, are not replay-checked.
+    /// Batches after the last checkpoint are replayed without a state comparison.
+    /// Undecodable rows become issues and are excluded from the report's counts.
     ///
-    /// Verification assumes the log starts at `seq 0`, which is what
-    /// [`Store::begin_session`] plus [`Store::append_commands`] produce. A log
-    /// that starts elsewhere is reported as [`VerifyIssue::NonZeroStart`] and
-    /// the state pass begins from the earliest checkpoint instead.
+    /// A decoded log that starts after `seq 0` produces
+    /// [`VerifyIssue::NonZeroStart`]. Unsupported simulation kinds, checkpoint
+    /// loading or restore failures, and decoded batches without a decodable
+    /// checkpoint produce [`VerifyIssue::StateUnverified`]. An empty Ghost Lobby
+    /// session has no issues. Verification does not modify the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PersistError::UnknownSession`] for an unknown id and propagates
+    /// session decoding and database scan errors. Command and checkpoint decoding
+    /// errors are reported as issues; checkpoint loading and simulation restore
+    /// errors are converted to `StateUnverified` issues.
     pub fn verify(&self, id: &SessionId) -> Result<VerifyReport, PersistError> {
         // Existence check: an unknown session is an error, an empty one is a
         // clean report with zero rows.
@@ -606,7 +637,11 @@ impl Store {
     }
 }
 
-/// Tick one recorded batch through the simulation, exactly as `step_sim` does.
+/// Tick one recorded batch, updating held buttons and the frontend pause latch.
+///
+/// The latch takes the last `Pause` value in the batch, if any. Emitted and
+/// buffered events are discarded. The batch's tick and epoch are metadata;
+/// they do not cause additional simulation ticks.
 fn replay_batch(
     sim: &mut GhostLobbySim,
     held: &mut Buttons,
@@ -628,6 +663,8 @@ fn replay_batch(
     let _ = sim.drain_events();
 }
 
+/// Assemble a session's verification report from decoded row counts, the number
+/// of replayed batches, and the collected issues.
 fn finish(
     id: &SessionId,
     commands: usize,
@@ -644,13 +681,12 @@ fn finish(
     }
 }
 
-/// Name the first field that differs between two snapshots, with both values.
+/// Describe the first recognized snapshot difference for a verification issue.
 ///
-/// The comparison itself is [`RuntimeSnapshot`]'s derived `PartialEq`; this
-/// only exists so a report says *what* diverged rather than "not equal".
-/// Reporting only the first difference is deliberate: a run that diverged at
-/// the RNG will differ in everything downstream, and a hundred downstream
-/// entries would bury the cause.
+/// Returns the field name and descriptions of the replayed and recorded values;
+/// complex fields use summary text instead of both values. The caller checks
+/// [`RuntimeSnapshot`] equality first. Returns `unknown` when none of the
+/// inspected fields differ, including when the snapshots are equal.
 fn first_difference(
     actual: &RuntimeSnapshot,
     recorded: &RuntimeSnapshot,
