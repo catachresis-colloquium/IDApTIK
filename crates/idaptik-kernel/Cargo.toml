@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-creusot-std = "0.14.0"
+creusot-std = "0.13.0"
 
 # `creusot` is set by `creusot-rustc`, not by cargo, so cargo does not know it is
 # a real cfg and warns on every use. Declaring it here keeps the warning active

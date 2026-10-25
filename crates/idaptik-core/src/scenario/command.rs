@@ -7,6 +7,7 @@
 //! set — this is the seam the Elixir session layer and the TUI frontend share.
 
 use crate::scenario::common::{ExtractMethod, FailReason};
+use crate::scenario::power::sim::PowerOp;
 use crate::scenario::signal::sim::SignalOp;
 use crate::scenario::tuning::{ActionKind, DifficultyId};
 use serde::{Deserialize, Serialize};
@@ -109,6 +110,29 @@ pub enum PivotTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NetNodeIndex(pub u32);
 
+/// One order to a hosted Moletaire companion (ADR-0014). The companion's own
+/// [`crate::companion::MoleCommand`] vocabulary is richer (items, equipment,
+/// feeding); the wire carries only the orders a seat issues mid-run, and only
+/// in `Copy` shapes — an `f64` position and a small sound index, never a
+/// `String`. A floor with no hosted mole denies these; the command never
+/// panics and never reaches the companion sim except through the host's
+/// typed boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op")]
+pub enum MoleOp {
+    /// Order the mole to a position, tunnelling or on the surface.
+    MoveTo { x: f64, underground: bool },
+    /// Dig a trap at the mole's current position.
+    Dig,
+    /// Chew through the cable at the mole's current position — the nearest
+    /// device node inside [`crate::scenario::constants::MOLE_SABOTAGE_RADIUS`]
+    /// loses power through the ordinary cascade path when the chew finishes.
+    Sabotage,
+    /// Play one of the synth diversion sounds (needs an AudioSynthesiser the
+    /// floor fitted; a stock bay plays nothing).
+    Synth { index: u8 },
+}
+
 /// A single wire command.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "cmd")]
@@ -142,6 +166,15 @@ pub enum Command {
     /// floor's signal network (ADR-0012). Either seat; `op` says which, and
     /// the sim checks that seat can touch the receiving device.
     Signal { op: SignalOp },
+    /// Immediate: order the hosted Moletaire companion (ADR-0014). Denied on
+    /// a floor with no mole; the mole is the infiltrator's companion, so the
+    /// seat table routes it to the infiltrator.
+    Mole { op: MoleOp },
+    /// Immediate: work the floor's electrical infrastructure (ADR-0013) —
+    /// cut a cable by hand, rewire a load, work a breaker, throw a source,
+    /// switch a device, or ask why one is off. `op` says which, and the sim
+    /// checks that seat can touch what it names.
+    Power { op: PowerOp },
     /// Immediate test hook: force the crisis phase.
     ForceCrisis,
     /// Immediate test hook: force an extraction.
@@ -183,6 +216,8 @@ pub fn fold(cmds: &[Command], held: &mut Buttons) -> TickInput {
             | Command::NetSsh { .. }
             | Command::NetHack { .. }
             | Command::Signal { .. }
+            | Command::Mole { .. }
+            | Command::Power { .. }
             | Command::ForceCrisis
             | Command::ForceExtract { .. }
             | Command::ForceFail { .. }
@@ -304,6 +339,35 @@ mod tests {
             })
             .expect("serialises"),
             r#"{"cmd":"Pivot","target":"GridJump"}"#
+        );
+    }
+
+    #[test]
+    fn the_mole_verb_round_trips_on_the_wire() {
+        // The companion orders ride the same `Command` protocol as everything
+        // else: a variant that does not survive the wire is not a command.
+        for cmd in [
+            Command::Mole { op: MoleOp::Dig },
+            Command::Mole {
+                op: MoleOp::Sabotage,
+            },
+            Command::Mole {
+                op: MoleOp::Synth { index: 1 },
+            },
+            Command::Mole {
+                op: MoleOp::MoveTo {
+                    x: 350.0,
+                    underground: true,
+                },
+            },
+        ] {
+            let json = serde_json::to_string(&cmd).expect("serialises");
+            let back: Command = serde_json::from_str(&json).expect("deserialises");
+            assert_eq!(back, cmd, "{json}");
+        }
+        assert_eq!(
+            serde_json::to_string(&Command::Mole { op: MoleOp::Dig }).expect("serialises"),
+            r#"{"cmd":"Mole","op":{"op":"Dig"}}"#
         );
     }
 

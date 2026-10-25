@@ -41,7 +41,16 @@ VENDORED_NOTITLE='wayland-csd-adwaita-notitle = ["wayland", "winit/wayland-csd-a
 PUBLISHED_WAYLAND='wayland = ["winit/wayland", "winit/wayland-csd-adwaita"]'
 
 say()  { printf '[vendor-winit] %s\n' "$*"; }
-die()  { printf '[vendor-winit] FAIL: %s\n' "$*" >&2; exit 1; }
+die()  {
+  printf '[vendor-winit] FAIL: %s\n' "$*" >&2
+  # Also emit a check-run annotation: without it the failure detail exists
+  # only in the run log, which a remote operator (or a sandbox without log
+  # egress) cannot read -- a gate that cannot be diagnosed from outside
+  # cannot be cleared from outside. Newlines flattened; the log keeps the
+  # original formatting on stderr.
+  printf '::error::[vendor-winit] %s\n' "$(printf '%s' "$*" | sed -n ':a;N;$!ba;s/\n/ | /gp')"
+  exit 1
+}
 
 # Temp dirs/files are cleaned on exit — including the failure paths, where the
 # diagnostic has already been printed.

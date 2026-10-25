@@ -62,6 +62,35 @@ install-idris2:
 doctor:
     @bash scripts/doctor.sh
 
+# --- Environment ---------------------------------------------------------------
+
+# Enter the Guix development environment. Guix is the environment policy (nix is
+# retired); tool VERSIONS still come from mise.toml + rust-toolchain.toml. See
+# docs/dev-notes/toolchain-authority.md.
+guix-shell:
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed: https://guix.gnu.org/guix-install.sh" >&2; exit 1; }
+    guix shell -D -f guix.scm -- bash scripts/doctor.sh
+
+# The same environment in a rootless container (Podman or Docker).
+guix-container:
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed" >&2; exit 1; }
+    guix shell -D -f guix.scm -C --network -- bash scripts/doctor.sh
+
+# Provision rustup. Guix has no rustup package, so this is the step that makes
+# rust-toolchain.toml real inside a Guix shell.
+install-rustup:
+    bash scripts/install-rustup.sh
+
+# Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
+# --self-test plants ten defects and requires the check to catch each.
+toolchain-parity *ARGS:
+    bash scripts/toolchain-parity.sh {{ARGS}}
+
+# Build the dev container. Runtime-agnostic: Podman is the estate default.
+devcontainer-build:
+    @rt=$$(command -v podman || command -v docker) || { echo "neither podman nor docker is installed" >&2; exit 1; }
+    $$rt build -t idaptik-dev -f .devcontainer/Containerfile .
+
 # Diagnose only what players need to launch; unlike `just doctor`, this does
 # not require optional FFI/config development toolchains.
 runtime-doctor:
@@ -118,8 +147,13 @@ lock-sync-check:
 pages-wellknown-test:
     bash tests/pages_wellknown_test.sh
 
+# Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
+# The self-test plants ten defects and requires the check to catch each.
+toolchain-parity-test:
+    bash scripts/toolchain-parity.sh --self-test
+
 # Run every shell fixture suite (no Rust toolchain needed).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test
 
 # Execute the Mustfile physical-state probes (the estate `must check` verb).
 # Critical probes gate; a probe whose tool is missing fails, never skips.
@@ -159,11 +193,27 @@ replay FILE:
 test:
     cargo test --workspace
 
-# The Ghost Lobby scenario gate: core + tui + ffi + net (does not build Bevy).
+# The Ghost Lobby scenario gate: core + tui + ffi + net + evil-weevil
+# (does not build Bevy).
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets -- -D warnings
+    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil
+    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil --all-targets -- -D warnings
     cargo fmt --all -- --check
+
+# The Evil Weevil adversarial-testing gate (ADR-0013): offline, sans-IO
+# corpus over the real production validators — stale/duplicate messages,
+# invalid targets, epoch conflicts, reconnect/obsolete frames, and
+# delayed/withheld observations with fault-vs-hostility classification.
+# Hard-fails when cargo is missing; needs no Elixir and opens no sockets.
+evil-weevil-check:
+    bash scripts/evil_weevil_check.sh
+
+# The optional real-relay leg: the same relay rules confirmed against a
+# throwaway local burble (needs mix + a sibling burble checkout, like the
+# loopback gate). Not part of test-ghost: it exercises cross-repository
+# behaviour and has its own hard toolchain failure.
+evil-weevil-relay-check:
+    bash scripts/evil_weevil_relay_check.sh
 
 # The ADR-0006 §4 loopback gate: throwaway burble server + seat processes; asserts
 # byte-identical artifacts (vs each other AND the headless reference) for the

@@ -213,6 +213,31 @@ pub fn most_plausible_target(evidence: &EvidenceLedger) -> &'static str {
     best
 }
 
+/// The tactic id the supervisor counts when infrastructure is sabotaged.
+pub const TACTIC_INFRA_SABOTAGE: &str = "infrastructure_sabotage";
+
+/// Whether an event is intruder-shaped infrastructure sabotage (ADR-0013):
+/// a valve deliberately opened, equipment shorting out, an alarm tripped, or
+/// a hosted mole chewing a cable. A pump failing open is *not* sabotage —
+/// nobody's hand is on it — but its consequences (`InfraShorted`, a tripped
+/// alarm) are still counted when they arrive as their own events. These are
+/// observations of the building, not of the player: the supervisor never
+/// learns where anyone is from them.
+pub fn is_infra_sabotage(event: &Event) -> bool {
+    match event {
+        Event::WaterReleased {
+            cause: crate::scenario::infra::ReleaseCause::Valve,
+            ..
+        }
+        | Event::InfraShorted { .. }
+        | Event::AlarmChanged { sounding: true, .. } => true,
+        Event::Mole { mole } => {
+            matches!(mole, crate::companion::MoleEvent::CableSabotaged { .. })
+        }
+        _ => false,
+    }
+}
+
 /// Translate existing Ghost Lobby events into observer-relative evidence.
 pub fn ghost_lobby_evidence(event: &Event, _event_id: &str) -> Option<EvidenceLedger> {
     let frame = vec!["usb".into(), "fridge_note".into(), "unknown".into()];
@@ -277,6 +302,8 @@ impl GhostLobbySupervisor {
     /// Frontend-only events (`ContextHint`, `TutorialCue`) are skipped: they
     /// are excluded from the canonical determinism diff, so counting them
     /// would let two frontends disagree about `observed_events`.
+    /// Sabotage events also update tactic counts and apply director proposals,
+    /// even when the batch contains no objective evidence.
     pub fn ingest(&mut self, events: &[Event]) {
         let mut evidence_changed = false;
         for event in events {
@@ -292,6 +319,32 @@ impl GhostLobbySupervisor {
                 current.combine_in_place(next);
             } else {
                 self.evidence = Some(next);
+            }
+        }
+        // Sabotage is a tactic the supervisor can *count* even where it
+        // carries no objective evidence: released water, arcing shorts,
+        // tripped alarms and chewed cables are intruder-shaped. Occurrence
+        // numbers are derived from the director's own count, so every seat
+        // folds the same event stream into the same trace, and a repeated
+        // tactic still escalates through the ordinary bounded proposal path.
+        for event in events {
+            if !is_infra_sabotage(event) {
+                continue;
+            }
+            let occurrence = self
+                .director
+                .observations
+                .get(TACTIC_INFRA_SABOTAGE)
+                .copied()
+                .unwrap_or(0)
+                + 1;
+            let proposal = self.director.observe(PlayerTacticObservation {
+                tactic_id: TACTIC_INFRA_SABOTAGE.to_owned(),
+                occurrence,
+                confidence: 75,
+            });
+            if let Some(proposal) = proposal {
+                self.director.apply(proposal);
             }
         }
         if !evidence_changed {
@@ -802,5 +855,84 @@ mod tests {
         assert!(supervisor.evidence.is_some());
         assert!(supervisor.team.attention > 0);
         assert_eq!(supervisor.coverage_target.as_deref(), Some("usb"));
+    }
+
+    #[test]
+    fn sabotage_counts_as_a_tactic_but_a_pump_failure_is_not_one() {
+        use crate::companion::MoleEvent;
+        use crate::scenario::infra::ReleaseCause;
+        // Deliberate hands: an opened valve, the shorts and alarms that
+        // follow, and a hosted mole's chewed cable.
+        assert!(is_infra_sabotage(&Event::WaterReleased {
+            zone: "wet-corridor".into(),
+            room: "corridor".into(),
+            cause: ReleaseCause::Valve,
+        }));
+        assert!(is_infra_sabotage(&Event::InfraShorted {
+            zone: "wet-corridor".into(),
+            room: "corridor".into(),
+            devices: 2,
+        }));
+        assert!(is_infra_sabotage(&Event::AlarmChanged {
+            alarm: "corridor-alarm".into(),
+            room: "corridor".into(),
+            sounding: true,
+        }));
+        assert!(is_infra_sabotage(&Event::Mole {
+            mole: MoleEvent::CableSabotaged {
+                cable_id: "cable-1".into(),
+            },
+        }));
+        // No player hand, an alarm falling silent, a decoy (a diversion, not
+        // sabotage), and ordinary objective play are all *not* this tactic.
+        assert!(!is_infra_sabotage(&Event::WaterReleased {
+            zone: "wet-corridor".into(),
+            room: "corridor".into(),
+            cause: ReleaseCause::PumpFailure,
+        }));
+        assert!(!is_infra_sabotage(&Event::AlarmChanged {
+            alarm: "corridor-alarm".into(),
+            room: "corridor".into(),
+            sounding: false,
+        }));
+        assert!(!is_infra_sabotage(&Event::Mole {
+            mole: MoleEvent::SynthSoundPlayed {
+                sound: "bark".into(),
+            },
+        }));
+        assert!(!is_infra_sabotage(&Event::UsbThrown));
+    }
+
+    #[test]
+    fn repeated_sabotage_escalates_through_the_bounded_proposal_path() {
+        use crate::scenario::infra::ReleaseCause;
+        let mut supervisor = GhostLobbySupervisor::new("security-team");
+        let event = Event::WaterReleased {
+            zone: "wet-corridor".into(),
+            room: "corridor".into(),
+            cause: ReleaseCause::Valve,
+        };
+        supervisor.ingest(std::slice::from_ref(&event));
+        assert_eq!(
+            supervisor.director.observations.get(TACTIC_INFRA_SABOTAGE),
+            Some(&1)
+        );
+        assert_eq!(supervisor.director.current_difficulty, 0);
+        supervisor.ingest(&[event]);
+        // The second occurrence clears the repetition and confidence gates, so
+        // the bounded proposal is generated and accepted inside the envelope.
+        assert_eq!(
+            supervisor.director.observations.get(TACTIC_INFRA_SABOTAGE),
+            Some(&2)
+        );
+        assert_eq!(supervisor.director.current_difficulty, 1);
+        assert!(matches!(
+            supervisor.director.trace.last(),
+            Some(VsmEvent::AdaptiveInterventionApplied {
+                from: 0,
+                to: 1,
+                tactic_id,
+            }) if tactic_id == TACTIC_INFRA_SABOTAGE
+        ));
     }
 }

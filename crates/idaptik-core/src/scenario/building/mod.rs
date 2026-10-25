@@ -46,6 +46,7 @@
 //! floors, rooms, portals, circuits, zones) target exactly this building
 //! model, so the ids and shapes here are that contract's ground truth.
 
+pub mod audit;
 pub mod exchange_house;
 pub mod graph;
 pub mod network;

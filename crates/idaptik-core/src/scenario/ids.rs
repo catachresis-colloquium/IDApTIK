@@ -52,11 +52,45 @@ id_newtype!(
     "Stable id of a building portal (door/stair/lift/ladder/vent)."
 );
 id_newtype!(CircuitId, "Stable id of a building power circuit.");
+id_newtype!(
+    PowerSourceId,
+    "Stable id of a power source: mains or backup."
+);
+id_newtype!(FeedId, "Stable id of a power feed out of a source.");
+id_newtype!(BreakerId, "Stable id of a breaker protecting a feed.");
+id_newtype!(LoadId, "Stable id of a load the power network carries.");
+id_newtype!(HazardId, "Stable id of an electrical hazard site.");
 id_newtype!(ZoneId, "Stable id of a building network zone.");
 id_newtype!(
     SignalId,
     "Stable id of a device in a signal network (door, relay, console, ...)."
 );
+id_newtype!(
+    CompartmentId,
+    "Stable id of an infrastructure compartment: `floor/room`, or `exterior/<name>`."
+);
+id_newtype!(
+    OpeningId,
+    "Stable id of a door, hatch, grille or window opening."
+);
+id_newtype!(ReservoirId, "Stable id of an authored water reservoir.");
+id_newtype!(JunctionId, "Stable id of a water-pipe junction.");
+id_newtype!(PipeId, "Stable id of a pressurised water pipe.");
+id_newtype!(ValveId, "Stable id of a water valve.");
+id_newtype!(WaterOutletId, "Stable id of a water outlet or tap.");
+id_newtype!(LeakId, "Stable id of a water leak point.");
+id_newtype!(DrainId, "Stable id of a floor drain.");
+id_newtype!(
+    GasSpeciesId,
+    "Stable id of an explicitly fictional gas species."
+);
+id_newtype!(GasSourceId, "Stable id of a gas source or canister.");
+id_newtype!(DuctId, "Stable id of a ventilation duct segment.");
+id_newtype!(FanId, "Stable id of a duct fan.");
+id_newtype!(DamperId, "Stable id of a duct damper.");
+id_newtype!(FilterId, "Stable id of a duct filter.");
+id_newtype!(EquipmentId, "Stable id of a powered equipment fixture.");
+id_newtype!(TraceSourceId, "Stable id of a scent or noise source.");
 
 /// Resolves content ids to `Vec` indices once, so the simulation can index
 /// directly. Built at [`crate::scenario::GhostLobbySim`] construction and after

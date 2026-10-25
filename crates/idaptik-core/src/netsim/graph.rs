@@ -18,6 +18,9 @@ pub enum Actuation {
     CutPower,
     MuteSensor,
     RunVacuum,
+    /// Open a water zone's valve (a floor with an
+    /// [`crate::scenario::infra::InfraDef`] derives one per zone).
+    OpenValve,
 }
 
 /// A node's upstream dependency (chiefly power): the id of the node it draws from.

@@ -4,10 +4,11 @@
 # rust-analyzer/clippy components resolve the same way in editors, CI, and
 # Claude Code web sessions. See docs/adr/0001-toolchain-and-runtime-management.md.
 #
-# 1.95.0 is the minimum supported Rust version for Bevy 0.19; pinning it exactly
-# keeps builds reproducible across machines. Bump deliberately, not automatically.
+# 1.97.1 is the minimum supported Rust version for Bevy 0.20 (`rust-version` in
+# the bevy 0.20.0 manifest); pinning it exactly keeps builds reproducible
+# across machines. Bump deliberately, not automatically.
 [toolchain]
-channel = "1.95.0"
+channel = "1.97.1"
 components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]
 # wasm32 target kept ready: Bevy ships a WebAssembly backend, and a browser
 # build is the design-of-record route into the Gossamer host.
