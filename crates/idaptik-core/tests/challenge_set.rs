@@ -363,12 +363,17 @@ impl Run {
     /// The pull every alarm-driven solution shares: the guard's committed
     /// position is the flood bell's room centre, east of the crossing, and
     /// nowhere near the infiltrator's route.
-    fn assert_pulled_to_the_flood_bell(&self) {
-        let billy = &self.sim.state().billy;
+    /// The guard answered the alarms, not the player. A flooded floor rings
+    /// two bells — the control-office flood bell and the hall's sump tamper
+    /// (the short kills the pump) — and once he stands at one, the 15px
+    /// re-pull gate mutes the bell under his feet while the other, 262px
+    /// away, still pulls: he pendulums between the two. Either bell as his
+    /// commitment is the observable promise.
+    fn assert_pulled_to_the_bells(&self) {
+        let lk = self.sim.state().billy.last_known_x;
         assert!(
-            (billy.last_known_x - 652.5).abs() < 1.0,
-            "the guard was not pulled to the control-office bell: {}",
-            billy.last_known_x
+            (lk - 652.5).abs() < 75.0 || (lk - 390.0).abs() < 75.0,
+            "the guard was never committed to a bell: {lk}"
         );
         assert!(
             self.any(|e| matches!(
@@ -432,9 +437,21 @@ fn solution_one_physical_access_takes_the_roof_line_and_outruns_the_shift() {
     assert!(run.saw(&Event::RopeTaken { down: false }));
     assert!(run.any(|e| matches!(e, Event::HatchDropped { .. })));
     run.assert_no_water_and_no_network();
+    // The hosted companion is alive on every line — its hunger fidgets are
+    // its own business. What the physical line must never do is order it:
+    // no decoys, no sabotage, no refusals.
     assert!(
-        !run.any(|e| matches!(e, Event::Mole { .. } | Event::MoleDenied { .. })),
-        "the physical line used the companion"
+        !run.any(|e| matches!(
+            e,
+            Event::MoleDenied { .. }
+                | Event::Mole {
+                    mole: MoleEvent::SynthSoundPlayed { .. }
+                }
+                | Event::Mole {
+                    mole: MoleEvent::CableSabotaged { .. }
+                }
+        )),
+        "the physical line ordered the companion"
     );
     // The clock: whenever the shift started, the guard never got east of
     // the pump hall — his patrol band and the bell-less building keep him
@@ -502,7 +519,12 @@ fn solution_two_hacker_control_opens_the_valve_and_walks_the_doors() {
     run.cmd(&[Command::Uplink {
         kind: ActionKind::Door,
     }]);
-    run.wait_for(90, &TickInput::default(), |r| r.door_open("D1"), "D1 to open");
+    run.wait_for(
+        90,
+        &TickInput::default(),
+        |r| r.door_open("D1"),
+        "D1 to open",
+    );
     // The pump hall is already wading (the release was seconds ago); cross
     // it to the tool recess while the guard is still offsite — nobody is
     // listening to the splashes yet.
@@ -530,7 +552,12 @@ fn solution_two_hacker_control_opens_the_valve_and_walks_the_doors() {
         )),
         "the lights hack never landed"
     );
-    run.wait_for(90, &TickInput::default(), |r| r.door_open("D2"), "D2 to open");
+    run.wait_for(
+        90,
+        &TickInput::default(),
+        |r| r.door_open("D2"),
+        "D2 to open",
+    );
 
     // Cross the dark office. The third door is a *named* hold — `NetHack`
     // on the door node itself, because the nearest-door uplink from here
@@ -539,7 +566,12 @@ fn solution_two_hacker_control_opens_the_valve_and_walks_the_doors() {
     run.walk_to(560.0, 400);
     let d3 = run.node("door-d3");
     run.cmd(&[Command::NetHack { node: d3 }]);
-    run.wait_for(90, &TickInput::default(), |r| r.door_open("D3"), "D3 to open");
+    run.wait_for(
+        90,
+        &TickInput::default(),
+        |r| r.door_open("D3"),
+        "D3 to open",
+    );
     run.walk_to(885.0, 600);
     run.wait_for(
         150,
@@ -577,7 +609,7 @@ fn solution_two_hacker_control_opens_the_valve_and_walks_the_doors() {
         e,
         Event::InfraShorted { zone, .. } if zone == HALL_SUMP
     )));
-    run.assert_pulled_to_the_flood_bell();
+    run.assert_pulled_to_the_bells();
     assert!(
         run.sim.state().lights_uses >= 1,
         "the deliberate lights kill was not counted"
@@ -591,21 +623,33 @@ fn solution_two_hacker_control_opens_the_valve_and_walks_the_doors() {
         )) >= 3,
         "the line did not walk three doors open on routed holds"
     );
-    // The guard ended where the bell put him, nowhere near the chute.
+    // The guard ended between the two bells, nowhere near the chute.
     assert!(
-        (run.billy_x() - 652.5).abs() < 60.0,
-        "the guard was not held at the bell: {}",
+        run.billy_x() < 760.0,
+        "the guard came within hearing of the chute: {}",
         run.billy_x()
     );
 }
 
 //## Solution 3 — cooperative, Moletaire-assisted
 
+/// A companion order to tunnel to `x`: every sweep leg is an underground
+/// run, silent on the floor above it.
+fn mole_move_to(x: f64) -> Command {
+    Command::Mole {
+        op: MoleOp::MoveTo {
+            x,
+            underground: true,
+        },
+    }
+}
+
 /// The companion runs the guard ragged. From behind the canteen counter the
 /// infiltrator flies the mole: synth decoys refresh every half second while
-/// an underground run sweeps the guard east — each metre of the sweep stays
-/// inside his 260px hearing — pins him at the sluice exit, then sweeps back
-/// west and parks him at the pump hall's west door. Meanwhile the body
+/// staged underground legs sweep the guard east — each leg waits inside his
+/// 260px hearing for him to close before the next runs — pins him at the
+/// sluice exit, then legs back west and parks him at the pump hall's west
+/// door. Meanwhile the body
 /// leaves the counter, climbs back to the roof, and waits over the hatch
 /// until the guard is beyond hearing of the gallery. The drop, the silent
 /// search and the ride all happen with the guard walking the *wrong* way,
@@ -631,8 +675,18 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
     // buttons — never instead of them — so a decoy refresh never drops the
     // crouch or the walk.
     let mut phase = 0u8; // 0 hidden, 1 exiting, 2 climbing, 3 roof run, 4 at hatch, 5 dropped
-    let mut east_fired = false;
-    let mut west_fired = false;
+    // Staged sweep legs. One continuous run outruns the guard's 260px
+    // hearing while he badges doors, so each leg waits at its endpoint
+    // until he closes to within 45px — his re-pull band around a standing
+    // decoy — before the next issues: at most 245px at issue, inside
+    // hearing, and a badge pause costs only a beat of silence before he
+    // re-hears the waiting endpoint on arrival.
+    const EAST_LEGS: [f64; 4] = [560.0, 760.0, 960.0, 1150.0];
+    const WEST_LEGS: [f64; 4] = [900.0, 700.0, 500.0, 390.0];
+    let mut east_started = false;
+    let mut east_leg = 0usize;
+    let mut sweeping_west = false;
+    let mut west_leg = 0usize;
     let mut i = 0usize;
     loop {
         let mut immediates = Vec::new();
@@ -648,28 +702,33 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 },
             });
         }
-        // The east sweep, once the guard is moving: one long underground
-        // run to the sluice exit, refreshed all the way — he follows the
-        // sound across the whole floor, badging every door behind him.
-        if !east_fired && run.billy_x() > 330.0 {
-            east_fired = true;
-            immediates.push(Command::Mole {
-                op: MoleOp::MoveTo {
-                    x: 1150.0,
-                    underground: true,
-                },
-            });
-        }
-        // The west sweep, once he is pinned east: back to the pump hall's
-        // west door, far from the hatch and the chute.
-        if east_fired && !west_fired && run.billy_x() > 1000.0 {
-            west_fired = true;
-            immediates.push(Command::Mole {
-                op: MoleOp::MoveTo {
-                    x: 390.0,
-                    underground: true,
-                },
-            });
+        // The staged east sweep: the first leg goes once the guard is
+        // moving (his own patrol brings him inside the spawn decoys'
+        // hearing); each further leg issues when he has closed on the
+        // standing decoy. He follows the sound across the whole floor,
+        // badging every door behind him.
+        if !sweeping_west {
+            if !east_started && run.billy_x() > EAST_LEGS[0] - 230.0 {
+                east_started = true;
+                immediates.push(mole_move_to(EAST_LEGS[0]));
+            } else if east_started
+                && run.billy_x() > EAST_LEGS[east_leg] - 45.0
+                && east_leg + 1 < EAST_LEGS.len()
+            {
+                east_leg += 1;
+                immediates.push(mole_move_to(EAST_LEGS[east_leg]));
+            } else if east_started
+                && run.billy_x() > EAST_LEGS[east_leg] - 45.0
+                && east_leg + 1 == EAST_LEGS.len()
+            {
+                // Pinned east: the west sweep starts, back to the pump
+                // hall's west door — far from the hatch and the chute.
+                sweeping_west = true;
+                immediates.push(mole_move_to(WEST_LEGS[0]));
+            }
+        } else if run.billy_x() < WEST_LEGS[west_leg] + 45.0 && west_leg + 1 < WEST_LEGS.len() {
+            west_leg += 1;
+            immediates.push(mole_move_to(WEST_LEGS[west_leg]));
         }
 
         let input = match phase {
@@ -693,7 +752,16 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                     );
                     phase = 2;
                     i += 1;
-                    assert!(i < 7200, "the cooperative line never finished");
+                    assert!(
+                        i < 7200,
+                        "the cooperative line never finished: phase {phase}, tick {i}, \
+                         guard {} (last known {}), body at {} ({:?}), legs E{east_leg} \
+                         W{west_leg} west={sweeping_west}",
+                        run.billy_x(),
+                        run.sim.state().billy.last_known_x,
+                        run.cx(),
+                        run.sim.state().player.place,
+                    );
                     continue;
                 }
                 let mut t = hold(WALK_WEST);
@@ -723,7 +791,7 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                 // Over the hatch: the fall is loud, so it lands only once
                 // the west sweep has the guard beyond hearing of the
                 // gallery (990 - 700 > 260px of cover).
-                if west_fired && run.billy_x() <= 700.0 {
+                if sweeping_west && run.billy_x() <= 700.0 {
                     let mut t = press_interact();
                     t.immediates = immediates;
                     run.tick(&t);
@@ -733,7 +801,16 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
                     );
                     phase = 5;
                     i += 1;
-                    assert!(i < 7200, "the cooperative line never finished");
+                    assert!(
+                        i < 7200,
+                        "the cooperative line never finished: phase {phase}, tick {i}, \
+                         guard {} (last known {}), body at {} ({:?}), legs E{east_leg} \
+                         W{west_leg} west={sweeping_west}",
+                        run.billy_x(),
+                        run.sim.state().billy.last_known_x,
+                        run.cx(),
+                        run.sim.state().player.place,
+                    );
                     continue;
                 }
                 let mut t = TickInput::default();
@@ -753,7 +830,16 @@ fn solution_three_cooperative_decoys_walk_the_guard_to_the_exit() {
         if phase == 5 && run.sim.state().player.place == Place::Floor {
             break;
         }
-        assert!(i < 7200, "the cooperative line never finished");
+        assert!(
+            i < 7200,
+            "the cooperative line never finished: phase {phase}, tick {i}, \
+             guard {} (last known {}), body at {} ({:?}), legs E{east_leg} \
+             W{west_leg} west={sweeping_west}",
+            run.billy_x(),
+            run.sim.state().billy.last_known_x,
+            run.cx(),
+            run.sim.state().player.place,
+        );
     }
 
     // Search and ride; the guard is chasing a decoy two rooms west and the
@@ -959,7 +1045,7 @@ fn solution_four_emergent_cascade_floods_by_consequence_not_by_script() {
     run.assert_clean_finish();
 
     //## Player-visible evidence
-    run.assert_pulled_to_the_flood_bell();
+    run.assert_pulled_to_the_bells();
     // The guard announced the dark and the alarm — perceptions, not the
     // hidden player's position.
     assert!(
@@ -973,8 +1059,8 @@ fn solution_four_emergent_cascade_floods_by_consequence_not_by_script() {
         "the guard never announced the dark building"
     );
     assert!(
-        (run.billy_x() - 652.5).abs() < 60.0,
-        "the guard was not held at the bell: {}",
+        run.billy_x() < 760.0,
+        "the guard came within hearing of the chute: {}",
         run.billy_x()
     );
     assert!(run.saw(&Event::RopeTaken { down: false }));
@@ -996,13 +1082,19 @@ fn the_challenge_floor_is_the_canonical_rooftop_plus_infrastructure() {
     assert_eq!(rooms, ["kitchen", "hall", "office", "laundry", "exit"]);
     assert!(def.exterior.is_some(), "the roof line is part of the floor");
 
-    let infra = def.infra.as_ref().expect("the floor carries infrastructure");
+    let infra = def
+        .infra
+        .as_ref()
+        .expect("the floor carries infrastructure");
     assert_eq!(infra.water_zones.len(), 1);
     let zone = &infra.water_zones[0];
     assert_eq!(zone.id, HALL_SUMP);
     assert_eq!(zone.room.as_str(), "hall");
     assert!((zone.valve_x - 470.0).abs() < f64::EPSILON);
-    assert!(zone.fail_open, "the pump's zone must fail open for the cascade");
+    assert!(
+        zone.fail_open,
+        "the pump's zone must fail open for the cascade"
+    );
     assert_eq!(infra.alarms.len(), 2);
 
     // The derived power-graph fixtures the hacker line and the cascade use.

@@ -110,11 +110,7 @@ fn an_infra_free_floor_carries_no_infra_state_and_denies_the_mole_verb() {
     let mut log = sim.drain_events();
     // The mole verb on a floor with no host is a typed denial, not a panic
     // and not a silent swallow.
-    log.extend(
-        sim.tick(&cmds(&[Command::Mole {
-            op: MoleOp::Dig,
-        }])),
-    );
+    log.extend(sim.tick(&cmds(&[Command::Mole { op: MoleOp::Dig }])));
     assert!(
         saw(
             &log,
@@ -140,7 +136,10 @@ fn an_infra_free_floor_carries_no_infra_state_and_denies_the_mole_verb() {
     );
     // The snapshot stays byte-clean: the optional tail fields are skipped.
     let value = serde_json::to_value(sim.snapshot()).expect("serialises");
-    let state = value.get("state").and_then(|s| s.as_object()).expect("state");
+    let state = value
+        .get("state")
+        .and_then(|s| s.as_object())
+        .expect("state");
     for key in ["infra", "mole", "diversion", "guard_noticed"] {
         assert!(
             !state.contains_key(key),
@@ -155,7 +154,10 @@ fn an_infra_free_floor_carries_no_infra_state_and_denies_the_mole_verb() {
 fn a_dry_pump_house_offers_nothing_to_observe() {
     let (sim, _log) = assessing_pump_house(7);
     let obs = sim.actor_observations(sim.state().billy.x);
-    assert!(obs.is_empty(), "a dry, quiet floor invented observations: {obs:?}");
+    assert!(
+        obs.is_empty(),
+        "a dry, quiet floor invented observations: {obs:?}"
+    );
 }
 
 #[test]
@@ -164,36 +166,26 @@ fn the_flood_reaches_billy_as_observations_and_pulls_him_to_the_noise() {
     let player_x = sim.state().player.x;
     hack_the_valve(&mut sim, &mut log);
     assert!(
-        wait_for(
-            &mut sim,
-            &mut log,
-            60,
-            |log| saw(
-                log,
-                &Event::WaterReleased {
-                    zone: HALL_SUMP.into(),
-                    room: "hall".into(),
-                    cause: idaptik_core::scenario::infra::ReleaseCause::Valve,
-                }
-            )
-        ),
+        wait_for(&mut sim, &mut log, 60, |log| saw(
+            log,
+            &Event::WaterReleased {
+                zone: HALL_SUMP.into(),
+                room: "hall".into(),
+                cause: idaptik_core::scenario::infra::ReleaseCause::Valve,
+            }
+        )),
         "the hacked valve did not release: {log:?}"
     );
     // The alarm trips on the rising water (level 0.25 of a 24 s fill ≈ 6 s).
     assert!(
-        wait_for(
-            &mut sim,
-            &mut log,
-            600,
-            |log| saw(
-                log,
-                &Event::AlarmChanged {
-                    alarm: "flood-alarm".into(),
-                    room: "office".into(),
-                    sounding: true,
-                }
-            )
-        ),
+        wait_for(&mut sim, &mut log, 600, |log| saw(
+            log,
+            &Event::AlarmChanged {
+                alarm: "flood-alarm".into(),
+                room: "office".into(),
+                sounding: true,
+            }
+        )),
         "the flood alarm never tripped: {log:?}"
     );
     // Give the Assess loop a beat to hear it and commit.
@@ -203,8 +195,7 @@ fn the_flood_reaches_billy_as_observations_and_pulls_him_to_the_noise() {
 
     // Player-visible evidence: the guard announced what he perceived...
     assert!(
-        log.iter()
-            .any(|e| matches!(e, Event::GuardObserved { .. })),
+        log.iter().any(|e| matches!(e, Event::GuardObserved { .. })),
         "no GuardObserved record: {log:?}"
     );
     // ...and his FSM committed to the noise, not to the player. The player
@@ -245,9 +236,9 @@ fn the_flood_reaches_billy_as_observations_and_pulls_him_to_the_noise() {
     // The short follows the flood: the room's electrics die through the
     // ordinary power-loss path, as canonical events.
     assert!(
-        wait_for(&mut sim, &mut log, 900, |log| log
-            .iter()
-            .any(|e| matches!(e, Event::InfraShorted { zone, .. } if zone == HALL_SUMP))),
+        wait_for(&mut sim, &mut log, 900, |log| log.iter().any(
+            |e| matches!(e, Event::InfraShorted { zone, .. } if zone == HALL_SUMP)
+        )),
         "the flooded hall never shorted: {log:?}"
     );
 }
@@ -257,11 +248,7 @@ fn the_hosted_companion_denies_orders_it_cannot_take() {
     let mut sim = GhostLobbySim::new(pump_house(), RunConfig::standard(), 11).expect("valid");
     let mut log = sim.drain_events();
     // Fresh spawn: the mole is at the surface, so a dig order is refused...
-    log.extend(
-        sim.tick(&cmds(&[Command::Mole {
-            op: MoleOp::Dig,
-        }])),
-    );
+    log.extend(sim.tick(&cmds(&[Command::Mole { op: MoleOp::Dig }])));
     assert!(
         saw(
             &log,
@@ -272,18 +259,14 @@ fn the_hosted_companion_denies_orders_it_cannot_take() {
         "a surface dig must be refused: {log:?}"
     );
     // ...a sound index the fitted bay does not carry is refused...
-    log.extend(
-        sim.tick(&cmds(&[Command::Mole {
-            op: MoleOp::Synth { index: 9 },
-        }])),
-    );
+    log.extend(sim.tick(&cmds(&[Command::Mole {
+        op: MoleOp::Synth { index: 9 },
+    }])));
     // ...and a sound it does carry plays, landing as a typed companion event
     // plus a diversion in canonical state.
-    log.extend(
-        sim.tick(&cmds(&[Command::Mole {
-            op: MoleOp::Synth { index: 0 },
-        }])),
-    );
+    log.extend(sim.tick(&cmds(&[Command::Mole {
+        op: MoleOp::Synth { index: 0 },
+    }])));
     assert!(
         log.iter().any(|e| matches!(
             e,
@@ -309,19 +292,17 @@ fn a_mid_flood_snapshot_restores_and_replays_identically() {
     // level 0.55), with the companion tunnelling, then fork the run through
     // a snapshot.
     assert!(
-        wait_for(&mut sim, &mut log, 900, |log| log
-            .iter()
-            .any(|e| matches!(e, Event::InfraShorted { zone, .. } if zone == HALL_SUMP))),
+        wait_for(&mut sim, &mut log, 900, |log| log.iter().any(
+            |e| matches!(e, Event::InfraShorted { zone, .. } if zone == HALL_SUMP)
+        )),
         "the hall never flooded far enough to short: {log:?}"
     );
-    log.extend(
-        sim.tick(&cmds(&[Command::Mole {
-            op: MoleOp::MoveTo {
-                x: 520.0,
-                underground: true,
-            },
-        }])),
-    );
+    log.extend(sim.tick(&cmds(&[Command::Mole {
+        op: MoleOp::MoveTo {
+            x: 520.0,
+            underground: true,
+        },
+    }])));
     for _ in 0..60 {
         log.extend(sim.tick(&TickInput::default()));
     }
@@ -394,7 +375,8 @@ fn wading_through_the_flood_slows_and_betrayes_the_wader() {
         }
         log.extend(sim.tick(&press_interact()));
         assert!(
-            log.iter().any(|e| matches!(e, Event::RopeTaken { down: true })),
+            log.iter()
+                .any(|e| matches!(e, Event::RopeTaken { down: true })),
             "the rope never took: {log:?}"
         );
         let mut landed = false;
@@ -450,7 +432,10 @@ fn wading_through_the_flood_slows_and_betrayes_the_wader() {
             }
             log.extend(sim.tick(&hold(&[Button::Right])));
         }
-        assert!(uplinked && arrived, "the hall never opened to the routed hold");
+        assert!(
+            uplinked && arrived,
+            "the hall never opened to the routed hold"
+        );
         // The measured window: 60 ticks due west from the sump wheel —
         // short enough that the wet run never reaches the door behind it
         // and the dry run's extra ground is the flood's own doing.

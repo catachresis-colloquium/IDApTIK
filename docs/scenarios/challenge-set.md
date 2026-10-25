@@ -60,10 +60,14 @@ From any release (wheel, hacked valve, or fail-open pump), with the zone's
 | 6.0 s | 0.25 | the flood bell trips (`AlarmChanged`); a ringing bell climbs alert at `ALARM_ALERT_RATE = 0.9`/s (lockdown is ~111 s away — a clock, not a wall) |
 | 13.2 s | 0.55 | `WATER_SHORT_AT`: the hall's electrics short **through the ordinary power-loss path** — lights, cameras, doors, valve and pump join `dead_nodes` (`InfraShorted`), the floor flickers 1.45 s, Billy is stunned 1.05 s, and the pump hall stays dark for the rest of the run |
 
-The bell's room centre (652.5) is where Billy's Assess mode is pulled — the
-strongest heard observation wins, ties break first-declared (flood bell
-before tamper), and observations inside 15 px never re-pull. Darkness, water
-at his feet and sparking electrics are *seen* observations: news, but not a
+The bell's room centre (652.5) is where Billy's Assess mode is pulled first —
+the strongest heard observation wins, ties break first-declared (flood bell
+before tamper), and observations inside 15 px never re-pull. The flood drowns
+the pump hall's electrics including the pump, so the tamper bell (sounder in
+the hall, centre 390) trips too — and once Billy stands at one bell the 15 px
+gate mutes it under his feet while the other, still heard and still strongest,
+pulls him across the floor: he pendulums between the two. Darkness, water at
+his feet and sparking electrics are *seen* observations: news, but not a
 destination.
 
 ## The four solutions
@@ -110,23 +114,27 @@ answer D2 again); the office lights die to a `NetHack { light-office }` on
 the way through, buying a flicker-covered crossing. The body stages in the
 locker bay **before the shift starts**. When the guard arrives, the flood
 bell — ringing since six seconds after the release — pulls him to the
-control office and holds him there while the gallery is searched and the
-chute is ridden two rooms east. Evidence: `NetHackAction { valve-hall-sump
+control office; the drowned hall's tamper bell pulls him back again, and he
+pendulums between the two, never within hearing of the gallery while it is
+searched and the chute is ridden. Evidence: `NetHackAction { valve-hall-sump
 }`, `WaterReleased { cause: Valve }` with `valve_turn == 0`,
 `UplinkAction { Lights }` (`lights_uses >= 1`), three
 `UplinkAction { Door }` holds, `AlarmChanged`, `InfraShorted`,
-`GuardObserved { Alarm }`, the guard's `last_known_x` at the bell's centre
-(652.5) and his body oscillating there at the finish.
+`GuardObserved { Alarm }`, the guard's `last_known_x` committed to one bell
+or the other (652.5 or the hall's 390) and his body west of 760 at the
+finish — never inside the chute's 260 px of hearing.
 
 ### 3. Cooperative — the decoy sweeps
 
 No water, no network: the companion stages the guard across the floor and
 back again. From the counter hide, as the guard moves on his patrol, one
-long underground run (200 px/s) carries the mole — and its refreshed synth
-decoy, every 30 ticks — from the pump hall to the sluice exit at 1150. The
-guard follows the sound the whole way, badging every door behind him. Once
-he is pinned east, a second sweep brings the decoy back west to 390 and
-parks him at the pump hall's west door. Meanwhile the body leaves the
+staged sequence of underground runs (200 px/s) carries the mole — and its
+refreshed synth decoy, every 30 ticks — from the pump hall to the sluice
+exit: legs at 560, 760, 960 and 1150, each waiting at its endpoint until
+the guard closes to within 45 px, because one continuous run outruns his
+260 px hearing while he badges a door. The guard follows the sound the whole
+way, badging every door behind him. Once he is pinned east, staged legs back
+west (900, 700, 500, 390) park him at the pump hall's west door. Meanwhile the body leaves the
 counter, climbs back to the roof, and **walks** it east — walked, never
 sprinted: `noise_invest` has no room check, and a sprint on the roof would
 pull the guard off the decoy. The hatch drop lands only once he is beyond
@@ -147,13 +155,15 @@ die, and the **sump pump dies — releasing the fail-open zone with
 `cause: PumpFailure`**. The tamper bell trips the same tick (power loss *is*
 its trip), the flood bell follows at +6 s, and the guard — arriving into a
 dark, ringing building — announces what he perceives (`GuardObserved {
-Darkness }`, `{ Alarm }`), badges east past the hidden body, and is held at
-the control-office bell. The body leaves over the roof: out the front door,
+Darkness }`, `{ Alarm }`), badges east past the hidden body, and is held
+between the two bells — the office flood bell and the hall tamper — neither
+of which is the player. The body leaves over the roof: out the front door,
 up the rope, over the hatch — 300+ px of cover from a guard the bells own —
 and rides the chute. Evidence: the `PumpFailure` provenance with **no**
 `Valve` release anywhere and the wheel never turned, `PowerLost { nodes >=
 2 }`, both bells, the dead `pump-*` and `light-office` nodes in canonical
-state, and the guard pinned at 652.5.
+state, and the guard committed to a bell (`last_known_x` at 652.5 or 390),
+never east of 760.
 
 The emergence is the point: the player aimed at the power grid; the flood,
 the bells, the darkness and the pulled guard are consequences the systems
