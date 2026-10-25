@@ -32,7 +32,7 @@ current-phase = "Envelope"
 phase-goal = "Turn the proven Ghost Lobby/TUI/netplay slice into a coherent player-facing Bevy prototype with first art and documented mechanics."
 
 [component-status]
-core = { status = "live", notes = "Deterministic event-sourced Ghost Lobby, building runtime, grounded network, actors, snapshots, package loading, and replay." }
+core = { status = "live", notes = "Deterministic event-sourced Ghost Lobby, building runtime, grounded network, actors, snapshots, package loading, replay, and (ADR-0014) infrastructure consequences reaching actors only through actor_observations." }
 net = { status = "live", notes = "Two-seat delay lockstep, pacing, pause, peer loss, digest checks, snapshot resync, and interactive client." }
 ffi = { status = "partial", notes = "The Rust-exported C ABI drives the real Ghost Lobby simulation with JSON command/event and snapshot parity; the Idris2 ABI model exists (crates/idaptik-ffi/abi, gated in CI); the Zig adapter now exists too (crates/idaptik-ffi/zig-adapter) with conformance and fuzz suites; the Idris2 proof obligations and the serde-wire conformance suite remain, tracked in issue #103." }
 tui = { status = "live", notes = "Playable reference frontend plus headless, replay, and export verification." }
@@ -43,7 +43,7 @@ ums-package = { status = "live-v1", notes = "IDApTIK-owned v1 package syntax, lo
 ums-roundtrip = { status = "tested", notes = "Every UMS ADR-0014 clause met as of 2026-07-28. RoundTripResult.accepted exports the loader's parsed view of the authored envelope; UMS diffs it against the profile source and fails on any difference. Deliberately excludes `scenario`, which the compiler copies from this repository's own fixture verbatim -- comparing it would be a tautology." }
 cac-trace = { status = "live-fixture", notes = "Six-stage CacTrace runs in the package round trip and is gated. Six GuardTraceStage variants map 1:1 onto Enaction's Domain enum for ONE scenario; whether that is a result or a coincidence is unvalidated." }
 evidence-ledger = { status = "in-repo-by-decision", notes = "Dempster-Shafer evidence ledger and VSM supervisor live in crates/idaptik-core and stay there until the Enaction extraction trigger fires. See ADR-0010." }
-moletaire = { status = "tested-seam", notes = "Deterministic companion module exists but is not wired into GhostLobbySim." }
+moletaire = { status = "hosted-live", notes = "Deterministic companion module hosted by floors that declare a MoleHostDef (pump_house first): stepped in-tick, events folded as Event::Mole, host state and companion RNG carried by snapshots. Orders ride Command::Mole through the existing envelope and lockstep." }
 
 [settled-decisions]
 items = [
@@ -68,6 +68,7 @@ remaining = [
   { item = "Theory-of-mind depth and resource accounting. Any cap must be counted in deterministic units -- inferences or unifications, never milliseconds -- or byte-parity breaks", resolve-by = "before nested belief ships" },
   { item = "Whether affect is state or an annotation on events. The shared contract currently permits only the latter", resolve-by = "before affect enters Rust" },
   { item = "What verification means in the conative path, and the rule that a veto must be an event rather than a silent substitution", resolve-by = "before an action gate ships" },
+  { item = "Infrastructure interactions as capability-typed rules over an optional building sub-network. ADR-0013 is Proposed; the design of record is docs/architecture/infrastructure-interactions.md and the rule catalogue is docs/architecture/infrastructure-rule-catalogue.md. Nothing is implemented and no test in either document has run", resolve-by = "M0 slice: definition, validator and the idaptik-infrastructure/1 loader", ref = "ADR-0013" },
 ]
 
 [route-to-mvp]
@@ -97,4 +98,5 @@ items = [
   { note = "cargo fmt is gated in its own fast CI job as well as inside test-ghost; a formatting fault previously cost a full test-and-clippy cycle to surface" },
   { note = "cac-kernel-is-fixed-point pins scenario/vsm.rs only. The rest of scenario/ uses f64 for continuous world quantities under ADR-0004; actor/belief.rs, trace.rs and agents.rs still hold floats and must convert before feeding the ledger" },
   { note = "The round-trip gate fails loudly, not silently, when run against a game too old to export RoundTripResult.accepted" },
+  { note = "session-loopback passes without ever routing Command::Mole: the capture/live scripts carry no mole orders. The envelope, fold and lockstep fixtures route Mole to the infiltrator seat, but the pinned external burble relay must add command_roles \"Mole\" -> infiltrator before a live session carries mole orders (tracked on the introducing PR)" },
 ]

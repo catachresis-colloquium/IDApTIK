@@ -667,18 +667,18 @@ impl InfrastructureSim {
     pub fn conservation_report(&self) -> Vec<String> {
         let accounting = self.accounting();
         let mut problems = Vec::new();
-        if let Some(water) = &accounting.water {
-            if !water.balanced {
-                problems.push(format!(
-                    "water: initial {} + recharged {} != reservoirs {} + compartments {} + drained {} + spilled {}",
-                    water.initial_reservoir,
-                    water.recharged,
-                    water.current_reservoirs,
-                    water.current_compartments,
-                    water.drained_to_exterior,
-                    water.spilled_to_exterior
-                ));
-            }
+        if let Some(water) = &accounting.water
+            && !water.balanced
+        {
+            problems.push(format!(
+                "water: initial {} + recharged {} != reservoirs {} + compartments {} + drained {} + spilled {}",
+                water.initial_reservoir,
+                water.recharged,
+                water.current_reservoirs,
+                water.current_compartments,
+                water.drained_to_exterior,
+                water.spilled_to_exterior
+            ));
         }
         if let Some(air) = &accounting.air {
             if !air.air_balanced {
@@ -1322,25 +1322,25 @@ fn push_supply(
             continue;
         }
         total = total.saturating_add(flow);
-        if let WaterEndpoint::Outlet(id) = &endpoint {
-            if let Some(entry) = water.outlet_flow.get_mut(id) {
-                *entry = entry.saturating_add(flow);
-            }
+        if let WaterEndpoint::Outlet(id) = &endpoint
+            && let Some(entry) = water.outlet_flow.get_mut(id)
+        {
+            *entry = entry.saturating_add(flow);
         }
-        if let WaterEndpoint::Leak(id) = &endpoint {
-            if let Some(entry) = water.leak_flow.get_mut(id) {
-                *entry = entry.saturating_add(flow);
-            }
+        if let WaterEndpoint::Leak(id) = &endpoint
+            && let Some(entry) = water.leak_flow.get_mut(id)
+        {
+            *entry = entry.saturating_add(flow);
         }
         let compartment = match &endpoint {
             WaterEndpoint::Outlet(id) => water_def.outlet(id).map(|o| o.compartment.clone()),
             WaterEndpoint::Leak(id) => water_def.leak(id).map(|l| l.compartment.clone()),
             _ => None,
         };
-        if let Some(compartment) = compartment {
-            if let Some(body) = water.bodies.get_mut(&compartment) {
-                body.add(flow, reservoir.conductivity, BTreeMap::new());
-            }
+        if let Some(compartment) = compartment
+            && let Some(body) = water.bodies.get_mut(&compartment)
+        {
+            body.add(flow, reservoir.conductivity, BTreeMap::new());
         }
     }
     for (from, to, pipe, original) in pipe_edges {
@@ -1741,20 +1741,16 @@ fn duct_step(
             .compartment(to)
             .map(|c| !c.is_exterior())
             .unwrap_or(false);
-        if from_room {
-            if let Some((min, _)) = room_air_bounds(def, from) {
-                let available = air
-                    .body(from)
-                    .map(|b| b.air.saturating_sub(min))
-                    .unwrap_or(0);
-                q = q.min(available);
-            }
+        if from_room && let Some((min, _)) = room_air_bounds(def, from) {
+            let available = air
+                .body(from)
+                .map(|b| b.air.saturating_sub(min))
+                .unwrap_or(0);
+            q = q.min(available);
         }
-        if to_room {
-            if let Some((_, max)) = room_air_bounds(def, to) {
-                let space = air.body(to).map(|b| max.saturating_sub(b.air)).unwrap_or(0);
-                q = q.min(space);
-            }
+        if to_room && let Some((_, max)) = room_air_bounds(def, to) {
+            let space = air.body(to).map(|b| max.saturating_sub(b.air)).unwrap_or(0);
+            q = q.min(space);
         }
         if q == 0 {
             let reason = if from_room {
@@ -1819,27 +1815,23 @@ fn openings_step(def: &InfrastructureDefinition, state: &mut InfrastructureState
             .compartment(to)
             .map(|c| !c.is_exterior())
             .unwrap_or(false);
-        if from_room {
-            if let Some((min, _)) = room_air_bounds(def, from) {
-                let available = state
-                    .air
-                    .as_ref()
-                    .and_then(|air| air.body(from))
-                    .map(|b| b.air.saturating_sub(min))
-                    .unwrap_or(0);
-                q = q.min(available);
-            }
+        if from_room && let Some((min, _)) = room_air_bounds(def, from) {
+            let available = state
+                .air
+                .as_ref()
+                .and_then(|air| air.body(from))
+                .map(|b| b.air.saturating_sub(min))
+                .unwrap_or(0);
+            q = q.min(available);
         }
-        if to_room {
-            if let Some((_, max)) = room_air_bounds(def, to) {
-                let space = state
-                    .air
-                    .as_ref()
-                    .and_then(|air| air.body(to))
-                    .map(|b| max.saturating_sub(b.air))
-                    .unwrap_or(0);
-                q = q.min(space);
-            }
+        if to_room && let Some((_, max)) = room_air_bounds(def, to) {
+            let space = state
+                .air
+                .as_ref()
+                .and_then(|air| air.body(to))
+                .map(|b| max.saturating_sub(b.air))
+                .unwrap_or(0);
+            q = q.min(space);
         }
         if q == 0 {
             continue;

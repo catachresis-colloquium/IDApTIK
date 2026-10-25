@@ -604,4 +604,94 @@ mod tests {
             assert_matches_reference(b);
         }
     }
+
+    /// The challenge-set floor through the live pipeline (ADR-0014): mole
+    /// orders are authored on the infiltrator seat, round-trip the wire
+    /// envelope, and both seats still reproduce the single-process reference
+    /// run event-for-event — ordering, access and replay for `Command::Mole`
+    /// verified under the existing networking model, not assumed.
+    #[test]
+    fn pump_house_mole_orders_lockstep_with_the_reference() {
+        use idaptik_tui::script::ScriptLine;
+        let script = ScriptFile {
+            seed: 99,
+            difficulty: "standard".to_owned(),
+            scenario: Some("pump-house".to_owned()),
+            reduced_motion: false,
+            supervised: false,
+            max_ticks: 900,
+            commands: vec![
+                ScriptLine {
+                    at: 30,
+                    hold: None,
+                    press: Some(vec!["mole:move:520:under".to_owned()]),
+                    test: None,
+                },
+                ScriptLine {
+                    at: 240,
+                    hold: None,
+                    press: Some(vec!["mole:synth:0".to_owned()]),
+                    test: None,
+                },
+                ScriptLine {
+                    at: 420,
+                    hold: None,
+                    press: Some(vec!["mole:sabotage".to_owned()]),
+                    test: None,
+                },
+            ],
+            expected_event_log: None,
+        };
+
+        // The mole orders must belong to the infiltrator seat, or the feed
+        // split below would strand them and the test would pass vacuously.
+        assert_eq!(
+            crate::envelope::seat_for(&Command::Mole {
+                op: idaptik_core::scenario::command::MoleOp::Dig,
+            }),
+            crate::envelope::Seat::Infiltrator,
+        );
+
+        let (ref_sim, ref_log) = headless::simulate(&script).expect("reference run");
+        let ref_debrief = ref_sim.debrief().cloned();
+        let ref_log_json = serde_json::to_string(&ref_log).unwrap();
+        // The check must be able to fail: the run really hosted the
+        // companion and really folded its events into the canonical log.
+        assert!(
+            ref_log_json.contains("\"Mole\""),
+            "the reference run carries no mole events: {ref_log_json}"
+        );
+
+        let mut a = LockstepCore::new(Role::Infiltrator, 2, &script).unwrap();
+        let mut b = LockstepCore::new(Role::Hacker, 5, &script).unwrap();
+        let mut fa = ScriptFeed::new(&script, Role::Infiltrator);
+        let mut fb = ScriptFeed::new(&script, Role::Hacker);
+        let (mut sa, mut sb) = (0u64, 0u64);
+
+        let mut guard = 0;
+        while !(a.finished() && b.finished()) {
+            guard += 1;
+            assert!(guard < 10_000, "lockstep deadlocked");
+            let oa = a.pump_outgoing(&mut fa);
+            let ob = b.pump_outgoing(&mut fb);
+            deliver(&oa, &mut sa, &mut b);
+            deliver(&ob, &mut sb, &mut a);
+            a.advance_with(|_, _| {});
+            b.advance_with(|_, _| {});
+        }
+
+        for core in [a, b] {
+            let (log, debrief, _snapshot) = core.into_artifacts();
+            assert_eq!(
+                serde_json::to_value(&log).unwrap(),
+                serde_json::to_value(&ref_log).unwrap(),
+                "event log diverged from the reference run"
+            );
+            assert_eq!(
+                serde_json::to_value(&debrief).unwrap(),
+                serde_json::to_value(&ref_debrief).unwrap(),
+                "debrief diverged from the reference run"
+            );
+        }
+    }
 }

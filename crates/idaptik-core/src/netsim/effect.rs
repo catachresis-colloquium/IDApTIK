@@ -18,8 +18,14 @@ pub enum Effect {
     SensorMuted(String),
     VacuumRun(String),
     DevicePowerLost(String),
+    /// A water zone's valve opened; the string is the valve's node id (the
+    /// zone is recovered by matching it against
+    /// [`crate::scenario::floor_graph::valve_node_id`], exactly as `DoorHeld`
+    /// recovers its door).
+    WaterReleased(String),
 }
 
+/// Map an actuation to its immediate effect on `id`, without a power cascade.
 fn direct(act: Actuation, id: &str) -> Effect {
     let id = id.to_string();
     match act {
@@ -32,6 +38,7 @@ fn direct(act: Actuation, id: &str) -> Effect {
         Actuation::CutPower => Effect::PowerCut(id),
         Actuation::MuteSensor => Effect::SensorMuted(id),
         Actuation::RunVacuum => Effect::VacuumRun(id),
+        Actuation::OpenValve => Effect::WaterReleased(id),
     }
 }
 
