@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 IDApTIK contributors
+#
+# AGENTIC.a2ml — AI agent constraints and capabilities
+# Defines what AI agents can and cannot do in this repository.
+
+[metadata]
+version = "0.1.0"
+last-updated = "2026-07-20"
+
+[agent-permissions]
+can-edit-source = true
+can-edit-tests = true
+can-edit-docs = true
+can-edit-config = true
+can-create-files = true
+
+[agent-constraints]
+# What AI agents MUST NOT do in IDApTIK:
+# - Never commit secrets or credentials.
+# - Never place state/metadata files in the repository root — they belong in
+#   .machine_readable/ (root carries only 0-AI-MANIFEST.a2ml + k9iser.toml).
+# - Never change the project's license without an ADR. The engine is
+#   AGPL-3.0-or-later (strong copyleft), game content is CC-BY-SA-4.0, and the
+#   names/marks are trademarked. Do NOT relicense the engine to a weaker or
+#   permissive licence (e.g. MPL/MIT/Apache): staying open, and staying
+#   copyleft, is a deliberate project invariant (README "Licensing").
+# - Never mix licence layers: engine code stays AGPL-3.0-or-later; art, levels,
+#   narrative, and audio stay CC-BY-SA-4.0.
+# - Never break gameplay-truth determinism in crates/idaptik-core — the TUI
+#   verifier and replay/export depend on it (ADR-0004).
+# - Never move gameplay truth into a rendering frontend — Bevy/Fyrox stay thin
+#   over idaptik-core (ADR-0003).
+
+[commit-policy]
+# Contributions come in under the Developer Certificate of Origin (DCO 1.1).
+require-signoff = true          # git commit -s
+signoff-standard = "DCO-1.1"
+
+[maintenance-integrity]
+fail-closed = true
+require-evidence-per-step = true
+allow-silent-skip = false
+require-rerun-after-fix = true
+release-claim-requires-hard-pass = true
+
+[automation-hooks]
+# on-enter: Read 0-AI-MANIFEST.a2ml, then .machine_readable/descriptiles/STATE.a2ml.
+# on-change: Keep STATE.a2ml in sync with README.md and docs/adr/.
+# on-commit: Sign off (git commit -s); run `just config-check` when config/ changes.

@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 IDApTIK contributors
+#
+# META.a2ml — Project meta-level information
+# Architecture decisions, development practices, design rationale.
+
+[metadata]
+version = "0.1.0"
+last-updated = "2026-09-20"
+
+[project-info]
+name = "IDApTIK"
+type = "game"  # asymmetric two-player infiltration game (Cargo workspace + external Elixir relay)
+# Languages with sources in THIS repository. Zig joined the list when the FFI
+# adapter landed (crates/idaptik-ffi/zig-adapter, issue #103, ADR-0001) — it is
+# no longer a policy target; the Elixir/OTP session layer lives in the sibling
+# metadatastician/burble relay (ADR-0002, ADR-0006). The Mustfile's
+# ffi-language-claims-honest probe diffs this list against the sources actually
+# present, both ways, so this line is not free-text.
+languages = ["rust", "nickel", "shell", "idris2", "zig"]
+# Layered licensing — each layer is licensed for what it is (README "Licensing").
+license-engine = "AGPL-3.0-or-later"      # engine & code (strong copyleft, incl. hosted service)
+license-content = "CC-BY-SA-4.0"          # art, levels, narrative, character designs, audio
+license-marks = "trademark"               # names & marks (IDApTIK, Moletaire) — all rights reserved
+spdx-workspace = "AGPL-3.0-or-later"      # Cargo workspace.package.license
+author = "IDApTIK contributors"
+repository = "https://github.com/metadatastician/IDApTIK"
+
+[architecture-decisions]
+# status = proposed | accepted | deprecated | superseded | rejected
+adr-dir = "docs/adr/"
+records = [
+  { id = "ADR-0001", title = "Toolchain and runtime management", status = "accepted", notes = "mise pins toolchains; rustup owns Rust; just runs tasks; Zig for C ABI/cross-compile, Idris2 models ABI contracts." },
+  { id = "ADR-0002", title = "Multiplayer transport — Bandit + Phoenix Channels, not LiveView", status = "accepted" },
+  { id = "ADR-0003", title = "Engine strategy — engine-agnostic core and thin frontends", status = "accepted", notes = "Its dual-renderer evaluation was superseded by ADR-0008." },
+  { id = "ADR-0004", title = "Deterministic, event-sourced, definition-as-data scenario simulation", status = "accepted" },
+  { id = "ADR-0005", title = "Session relay topology — relay-only lockstep over typed Command/Event", status = "accepted" },
+  { id = "ADR-0006", title = "gossamer host window + burble transport — the two-player windowed slice", status = "accepted" },
+  { id = "ADR-0007", title = "Versioned UMS package boundary owned by IDApTIK", status = "accepted" },
+  { id = "ADR-0008", title = "Select Bevy and retire Fyrox", status = "accepted" },
+]
+
+[development-practices]
+build-tool = "just"
+toolchain-manager = "mise"          # mise.toml pins erlang/elixir/zig/just/nickel; rust-toolchain.toml pins Rust
+rust-manager = "rustup"             # 1.95.0 (MSRV for Bevy 0.19)
+ci-platform = "github-actions"      # .github/workflows/{ci,codeql,pages}.yml
+package-managers = ["cargo", "mix"]
+contribution = "DCO 1.1 — sign commits with git commit -s"
+
+[design-rationale]
+gameplay-truth-in-rust = "One engine-agnostic core crate holds all gameplay truth; the selected Bevy frontend translates input into commands and presents events/snapshots without feeding render state back into the simulation (ADR-0003, ADR-0008)."
+asymmetric-by-construction = "Control is not shared: the infiltrator moves through the world, the hacker manipulates a grounded, legible network (real topology, subnets/zones, routing, DNS, traceroute, SSH pivoting, trace timers). The hacker has physical presence and real discovery risk."
+elixir-owns-sessions = "Rust owns deterministic gameplay truth; Elixir/OTP owns multiplayer and session lifecycle as a relay-only lockstep over a typed Command/Event wire (ADR-0002, ADR-0005)."
+determinism = "The scenario sim is deterministic and event-sourced (definition-as-data), which is what lets the TUI frontend act as a --headless/--replay/--export verifier over core (ADR-0004)."

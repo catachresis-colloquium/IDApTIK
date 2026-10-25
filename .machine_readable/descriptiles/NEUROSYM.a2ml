@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 IDApTIK contributors
+#
+# NEUROSYM.a2ml — Neurosymbolic integration metadata
+# Symbolic rules and scanning configuration for IDApTIK.
+
+[metadata]
+version = "0.1.0"
+last-updated = "2026-07-20"
+
+[scan-config]
+scan-enabled = true
+scan-depth = "standard"  # quick | standard | deep
+report-format = "text"
+
+[symbolic-rules]
+# Domain invariants for IDApTIK, expressed as scannable rules.
+rules = [
+  { name = "no-secrets", pattern = "(api[_-]?key|secret|token|password)\\s*[:=]\\s*[\"'][A-Za-z0-9]{16,}", severity = "critical", notes = "No hardcoded credentials in source." },
+  { name = "gameplay-truth-isolation", scope = "crates/idaptik-core", severity = "warning", notes = "Core must not depend on a rendering engine (bevy/fyrox) — gameplay truth stays engine-agnostic (ADR-0003)." },
+  { name = "determinism-guard", scope = "crates/idaptik-core", severity = "warning", notes = "Avoid nondeterministic sources (unseeded RNG, wall-clock, hashmap iteration order) in the scenario sim — replay/export depend on determinism (ADR-0004)." },
+  { name = "license-layer-consistency", severity = "warning", notes = "Engine sources declare AGPL-3.0-or-later; content assets declare CC-BY-SA-4.0. Flag files whose SPDX header crosses layers." },
+  { name = "root-metadata-placement", severity = "info", notes = "State/metadata belongs under .machine_readable/, not the repo root (root holds only 0-AI-MANIFEST.a2ml + k9iser.toml)." },
+]
+
+[config-semantics]
+# The Nickel config layer already enforces network invariants via schema.ncl /
+# scenario-schema.ncl (device kinds, security levels, zones, door boundaries,
+# camera counts, support ranges). Negative fixtures live in
+# config/scenario-fixtures/ and MUST fail `just config-check`.
+schema = "config/schema.ncl"
+scenario-schema = "config/scenario-schema.ncl"
+negative-fixtures = "config/scenario-fixtures/"

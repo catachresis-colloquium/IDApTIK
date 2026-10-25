@@ -1,0 +1,193 @@
+# SPDX-License-Identifier: MPL-2.0
+# Mustfile — Physical-state contract for IDApTIK
+# Author: IDApTIK contributors
+#
+# What MUST be true about this repository. Hard requirements.
+# Run with: must check
+
+@abstract:
+Physical-state invariants for IDApTIK, the asymmetric two-player infiltration
+game (Rust gameplay truth + Elixir session relay). These are hard
+requirements: CI and pre-commit hooks should fail if any check fails. Probes
+target IDApTIK's real tree, not a generic template.
+@end
+
+## File Presence
+
+### license-present
+- description: LICENSE file must exist
+- run: test -f LICENSE
+- severity: critical
+
+### license-texts-present
+- description: All three licence-layer texts are vendored under LICENSES/
+- run: test -f LICENSES/AGPL-3.0-or-later.txt && test -f LICENSES/CC-BY-SA-4.0.txt
+- severity: critical
+
+### readme-present
+- description: README.md must exist
+- run: test -f README.md
+- severity: critical
+
+### ai-manifest-present
+- description: Root 0-AI-MANIFEST.a2ml must exist under .machine_readable/
+- run: test -f .machine_readable/0-AI-MANIFEST.a2ml
+- severity: critical
+
+### governance-docs
+- description: GOVERNANCE.md, MAINTAINERS, CODE_OF_CONDUCT.md, and CODEOWNERS must exist
+- run: test -f GOVERNANCE.md && test -f .github/MAINTAINERS && test -f CODE_OF_CONDUCT.md && test -f .github/CODEOWNERS
+- severity: critical
+- notes: MAINTAINERS lives under .github/ with the CODEOWNERS file it names.
+
+## Toolchain Pins
+
+### mise-pins-present
+- description: mise.toml pins the toolchains (ADR-0001)
+- run: test -f mise.toml && grep -q 'zig' mise.toml && grep -q 'elixir' mise.toml
+- severity: critical
+
+### rust-toolchain-pinned
+- description: rust-toolchain.toml pins the Rust channel (MSRV for Bevy 0.19)
+- run: test -f rust-toolchain.toml && grep -q 'channel = "1.95.0"' rust-toolchain.toml
+- severity: critical
+
+### engine-license-agpl
+- description: The Cargo workspace declares the engine licence AGPL-3.0-or-later
+- run: grep -q 'license = "AGPL-3.0-or-later"' Cargo.toml
+- severity: critical
+- notes: The engine is strong copyleft by design; do not relicense without an ADR.
+
+## Directory Structure
+
+### crates-workspace
+- description: The Rust workspace crates exist (core + ffi + tui + net + bevy)
+- run: test -d crates/idaptik-core && test -d crates/idaptik-ffi && test -d crates/idaptik-tui && test -d crates/idaptik-net && test -d crates/idaptik-bevy
+- severity: critical
+- notes: idaptik-fyrox was retired by ADR-0008; idaptik-net landed with the
+  delay-lockstep netplay work. This check named the retired crate and omitted
+  the live one, so it failed against the real tree.
+
+### server-and-config
+- description: The Nickel config dir exists (the session relay lives in the external burble repository, ADR-0006)
+- run: test -d config
+- severity: critical
+- notes: IDApTIK no longer contains its own relay server; the Bandit/Phoenix
+  relay is pinned from the sibling metadatastician/burble checkout and gated
+  through `just loopback-check`.
+
+### adr-records
+- description: The architecture decision records exist (ADR-0001..0008)
+- run: test -f docs/adr/0001-toolchain-and-runtime-management.md && test -f docs/adr/0007-versioned-ums-package-boundary.md && test -f docs/adr/0008-select-bevy-and-retire-fyrox.md
+- severity: warning
+
+## Source Hygiene
+
+### rust-formatted
+- description: The workspace is rustfmt-clean (same check CI runs)
+- run: cargo fmt --all -- --check
+- severity: critical
+- notes: |
+  CI runs this as the third command of `just test-ghost`, after the full test
+  suite and clippy. That ordering meant unformatted code on
+  docs/vsm-esm-framework failed CI for a day while costing a complete
+  test-and-clippy cycle to report a whitespace problem.
+
+  Listing it here makes it checkable on its own, locally, in seconds, with no
+  network and no sibling repository. `just fmt` fixes; `just fmt-check`
+  reports.
+
+## Architecture Boundary
+
+# These invariants are the executable form of the estate boundary ADRs. Each
+# is checkable with no sibling repository present: a check that silently skips
+# when a sibling is absent is not a check. The cross-repository half lives in
+# idaptik-ums/scripts/check-architecture-boundaries.sh.
+
+### no-authoring-dependency
+- description: The game runtime never links the authoring studio or another game
+- run: ! grep -rqE '^[[:space:]]*(ums-[a-z-]+|slavia-[a-z-]+)[[:space:]]*=' Cargo.toml crates/*/Cargo.toml
+- severity: critical
+- notes: A shipped game must build and run with no UMS source or binaries
+  present. UMS consumes contracts/idaptik/v1/*.json as data, never as a crate.
+
+### cac-kernel-is-fixed-point
+- description: The evidence ledger and VSM supervisor carry no IEEE floats
+- run: ! grep -qE '\b(f32|f64)\b' crates/idaptik-core/src/scenario/vsm.rs
+- severity: critical
+- notes: |
+  This is the CAC surface being grown here for eventual extraction to the
+  Enaction kernel, so it is held to the kernel's fixed-point rule now rather
+  than converted later. A comparison against a threshold turns a float into a
+  discrete decision, and that is where a 1-ULP difference becomes a divergent
+  replay and a desynced lockstep peer.
+
+  Scope is deliberately narrow and reflects the tree as it is. The rest of
+  crates/idaptik-core/src/scenario/ uses f64 for continuous world quantities
+  under the byte-parity regime of ADR-0004 §5, and that stays permitted.
+  crates/idaptik-core/src/interp.rs is f64 by design: interpolation output
+  never re-enters simulation.
+
+  Known gap, not yet enforced: actor/belief.rs (6), trace.rs (3) and
+  agents.rs (1) still hold floats. Each must become fixed-point before it
+  feeds the ledger. Widen this check as they convert; do not widen it first.
+
+### package-contract-published
+- description: The versioned package contract IDApTIK owns is complete (ADR-0007)
+- run: test -f contracts/idaptik/v1/contract.json && test -f contracts/idaptik/v1/package.schema.json && test -f contracts/idaptik/v1/fixtures/ghost-lobby-scenario.json
+- severity: critical
+
+## Machine-Readable Structure
+
+### machine-readable-dir
+- description: .machine_readable/ directory must exist
+- run: test -d .machine_readable
+- severity: critical
+
+### six-directory-present
+- description: The descriptiles directory holds all six core A2ML files
+- run: test -d .machine_readable/descriptiles && test -f .machine_readable/descriptiles/META.a2ml && test -f .machine_readable/descriptiles/ECOSYSTEM.a2ml && test -f .machine_readable/descriptiles/STATE.a2ml && test -f .machine_readable/descriptiles/PLAYBOOK.a2ml && test -f .machine_readable/descriptiles/AGENTIC.a2ml && test -f .machine_readable/descriptiles/NEUROSYM.a2ml
+- severity: critical
+- notes: The six-file A2ML set was moved from the historical `6a2` name to
+  `descriptiles` (see 0-AI-MANIFEST.a2ml "Where things live").
+
+### contractiles-present
+- description: All four primary contractile files plus bust/dust exist
+- run: test -f .machine_readable/contractiles/Intentfile.a2ml && test -f .machine_readable/contractiles/Mustfile.a2ml && test -f .machine_readable/contractiles/Trustfile.a2ml && test -f .machine_readable/contractiles/Adjustfile.a2ml && test -f .machine_readable/contractiles/bust/Bustfile.a2ml && test -f .machine_readable/contractiles/dust/Dustfile.a2ml
+- severity: critical
+
+### k9iser-manifest
+- description: k9iser.toml manifest exists at the repository root
+- run: test -f k9iser.toml
+- severity: critical
+
+## Boundary Honesty (issue #103)
+
+# Machine-readable state must not claim an implementation language the
+# repository does not contain, and — once sources land — must not fail to
+# claim it. The claim and the tree are checked against each other in both
+# directions, so the metadata cannot drift from reality in either direction.
+
+### ffi-language-claims-honest
+- description: Zig/Idris2 implementation claims match the sources actually present
+- run: bash -c 'zig=$(find . -name "*.zig" -not -path "./target/*" -not -path "./.git/*" -not -path "./vendor/*" | wc -l); idr=$(find . -name "*.idr" -not -path "./target/*" -not -path "./.git/*" -not -path "./vendor/*" | wc -l); m=.machine_readable/descriptiles/META.a2ml; s=.machine_readable/descriptiles/STATE.a2ml; if [ "$zig" -eq 0 ]; then ! grep -qE "^languages\s*=.*\bzig\b" "$m" && ! grep -qE "^\s*ffi-language\s*=\s*\"zig\"" "$s"; else grep -qE "^languages\s*=.*\bzig\b" "$m" && grep -qE "^\s*ffi-language\s*=\s*\"zig\"" "$s"; fi && if [ "$idr" -eq 0 ]; then ! grep -qE "^languages\s*=.*\bidris2\b" "$m" && ! grep -qE "^\s*abi-model-language\s*=\s*\"idris2\"" "$s"; else grep -qE "^languages\s*=.*\bidris2\b" "$m" && grep -qE "^\s*abi-model-language\s*=\s*\"idris2\"" "$s" && grep -q "abi_model_check.sh" .github/workflows/ci.yml; fi'
+- severity: critical
+- notes: |
+  Issue #103's metadata gate: machine-readable files may speak *policy*
+  (`ffi-language-policy = "zig"` plus a missing-status note) while no sources
+  exist, but never implementation (`ffi-language = "zig"`). The probe flips
+  automatically when Zig/Idris2 sources land, so the positive claim becomes
+  mandatory at the same moment it becomes true — and once Idris2 sources
+  exist, the CI wiring of `scripts/abi_model_check.sh` must exist too, so the
+  claim is backed by a gate rather than policy intent alone.
+
+### vendor-patch-gated
+- description: The temporary bevy_winit vendor patch (issue #105) is wired and gated
+- run: test -x scripts/vendor_bevy_winit_check.sh && test -x tests/vendor_winit_check_test.sh && grep -q 'wayland-csd-adwaita-notitle' Cargo.toml && grep -q '^\[patch.crates-io\]' Cargo.toml
+- severity: critical
+- notes: |
+  Presence-only probe (network-free): the vendored bevy_winit patch must stay
+  wired to the workspace and carry its gate + fixture test. The behavioural
+  checks — published-crate parity, font-parser-free graph, and the upstream
+  retirement watch — run in `just vendor-winit-check` and the CI vendor-parity
+  and vendor-winit-watch jobs.

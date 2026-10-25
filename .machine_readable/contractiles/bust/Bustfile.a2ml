@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MPL-2.0
+# Bustfile — Failure-mode contractile for IDApTIK
+# Author: IDApTIK contributors
+#
+# Paired runner: bust.ncl
+# Verb:          bust
+# Semantics:     Every declared failure mode must have a working recovery path
+#                that has been exercised. Status moves:
+#                  declared -> drilled (probe run) -> verified (recovery confirmed)
+#                  or -> failing (recovery broken)
+
+@abstract:
+Bustfile for IDApTIK. Lists failure modes for the game's build, config, and
+session layers, each paired with a recovery path. These are drills, not
+day-to-day gates.
+@end
+
+## Failure Modes
+
+### config-schema-violation
+- class: config
+- description: A Nickel scenario/network config violates schema.ncl
+- injection_probe: "nickel export config/scenario-fixtures/bad_duplicate_door_id.ncl >/dev/null 2>&1; test $? -ne 0"
+- recovery_probe: "just config-check"
+- expected_recovery_time_seconds: 5
+- status: declared
+- notes: The negative fixtures under config/scenario-fixtures/ are expected to fail; config-check on the good config must pass.
+
+### toolchain-missing
+- class: environment
+- description: A pinned toolchain (zig/elixir/rust/just) is absent on a fresh machine
+- injection_probe: "true"
+- recovery_probe: "just doctor"
+- expected_recovery_time_seconds: 600
+- status: declared
+- notes: `just setup` installs the mise pins; Erlang/Elixir build from source on first run. `just doctor` reports what is missing (ADR-0001).
+
+### frontend-core-desync
+- class: architecture
+- description: A rendering frontend drifts from gameplay truth in idaptik-core
+- injection_probe: "true"
+- recovery_probe: "cargo test -p idaptik-bevy --test parity"
+- expected_recovery_time_seconds: 120
+- status: declared
+- notes: The selected Bevy frontend carries parity tests against core (ADR-0003, ADR-0008).
+
+### determinism-break
+- class: gameplay-truth
+- description: A change makes the scenario sim nondeterministic, breaking replay/export
+- injection_probe: "true"
+- recovery_probe: "cargo run -p idaptik-tui -- --replay >/dev/null 2>&1 || cargo test -p idaptik-core"
+- expected_recovery_time_seconds: 120
+- status: declared
+- notes: Determinism is the property the TUI verifier and --replay/--export rely on (ADR-0004).
+
+### contractile-parse-error
+- class: contractile_format
+- description: An .a2ml file fails to parse / validate
+- injection_probe: "echo 'stray [unclosed' >> /tmp/idaptik-bust-probe.a2ml"
+- recovery_probe: "git checkout .machine_readable/ && rm -f /tmp/idaptik-bust-probe.a2ml"
+- expected_recovery_time_seconds: 5
+- status: declared
+- notes: Validate the A2ML set with the a2ml-validate-action (validate-a2ml.sh).

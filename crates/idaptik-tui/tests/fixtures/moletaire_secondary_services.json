@@ -1,0 +1,14 @@
+{
+  "seed": 424242,
+  "difficulty": "standard",
+  "reduced_motion": false,
+  "secondary": true,
+  "max_ticks": 900,
+  "commands": [
+    { "at": 30, "press": ["mole-enter"] },
+    { "at": 300, "press": ["mole-sabotage"] },
+    { "at": 500, "press": ["mole-return"] },
+    { "at": 520, "test": { "hook": "force_crisis" } },
+    { "at": 800, "press": ["mole-surface"] }
+  ]
+}

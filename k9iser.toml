@@ -1,0 +1,67 @@
+# k9iser manifest — wrap IDApTIK's configs into self-validating K9 contracts
+# SPDX-License-Identifier: MPL-2.0
+#
+# IDApTIK: asymmetric two-player infiltration game (Rust gameplay truth +
+# Elixir session relay). Safety-tier "yard" — a game repo: medium risk,
+# generated contracts may be written, but nothing here mutates live systems.
+#
+# Only TOML configs are wrapped: k9iser's config parser supports
+# toml/yaml/json/ini. IDApTIK's typed config layer is Nickel (config/*.ncl),
+# which k9iser cannot parse — those are validated separately with
+# `just config-check` (nickel export against schema.ncl) and are intentionally
+# NOT listed here.
+
+[project]
+name = "IDApTIK"
+safety-tier = "yard"             # kennel (low) | yard (medium) | hunt (high)
+
+# ── mise.toml — pinned toolchains (ADR-0001) ─────────────────────────────────
+
+[[configs]]
+name = "toolchain-pins"
+source = "mise.toml"
+format = "toml"
+# Must rules — the pins IDApTIK actually depends on. Keys suffix-match the
+# flattened dotted path (e.g. `zig` matches `tools.zig`).
+must = [
+  "zig == \"0.14.0\"",             # C ABI + cross-compilation for FFI
+  "just == \"1.46.0\"",            # task runner
+  "erlang == \"28.3.1\"",          # BEAM for the Elixir session layer
+  "elixir == \"1.19.5-otp-28\"",   # multiplayer/session (ADR-0002)
+]
+trust = ["signed-by: ci-pipeline"]
+dust = ["remove: unpinned-tool-versions"]
+intend = ["reproducible-toolchain", "estate-aligned"]
+
+# ── rust-toolchain.toml — Rust channel pin (MSRV for Bevy 0.19) ──────────────
+
+[[configs]]
+name = "rust-toolchain"
+source = "rust-toolchain.toml"
+format = "toml"
+must = [
+  "channel == \"1.95.0\"",         # exact MSRV pin for reproducible builds
+]
+trust = ["signed-by: ci-pipeline"]
+dust = ["remove: floating-channel (stable/beta/nightly without a pin)"]
+intend = ["reproducible-builds"]
+
+# ── Cargo.toml — workspace + engine licence ──────────────────────────────────
+
+[[configs]]
+name = "cargo-workspace"
+source = "Cargo.toml"
+format = "toml"
+must = [
+  "license == \"AGPL-3.0-or-later\"",   # engine is strong copyleft by design
+  "edition == \"2024\"",                # Rust edition pin
+  "resolver == \"2\"",                  # workspace dependency resolver
+]
+trust = ["signed-by: ci-pipeline", "reviewed-by: maintainers"]
+dust = ["remove: unused workspace dependencies"]
+intend = ["copyleft-preserved", "open-source"]
+
+[validation]
+strict = true
+auto-fix = false
+report-format = "text"

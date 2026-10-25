@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: MPL-2.0
+# Intentfile (A2ML Canonical) — north-star contractile for IDApTIK
+# Author: IDApTIK contributors
+#
+# Paired runner: intend.ncl
+# Verb:          intend
+#
+# Semantics: North-star contractile. Declares BOTH concrete committed
+#            next-actions AND horizon aspirations. Non-gating — a report,
+#            not a gate. See the `must` contractile for hard gates.
+
+@abstract:
+North-star contractile for IDApTIK, an asymmetric two-player infiltration
+game. This file declares what the project WILL do next (tracked intents) and
+what it WISHES to become (horizon aspirations), aligned to the vehicle-named
+roadmap: Envelope -> Wheel -> Skateboard -> Bicycle -> Chassis -> Motorcycle
+-> Computer Game.
+@end
+
+## Purpose
+
+Ship an asymmetric infiltration game where the hacker solves a real, legible
+network rather than pressing a "hack" button, and the infiltrator moves
+through a physical space whose layer bites back. Rust owns gameplay truth;
+Elixir owns multiplayer and session life.
+
+## Anti-Purpose
+
+IDApTIK is NOT:
+- A shared-control co-op game (control is asymmetric by construction).
+- A disembodied hacker-support role (the hacker has physical presence and risk).
+- An engine-locked game (gameplay truth is engine-agnostic; frontends swap).
+- A LiveView application (the session layer is Bandit + Phoenix Channels).
+
+## If In Doubt
+
+Ask before touching: the engine licence (AGPL-3.0-or-later), any docs/adr/
+decision, the Rust<->Elixir wire format, or gameplay-truth determinism in
+crates/idaptik-core.
+
+## Committed Next-Actions
+
+### envelope-playable-slice
+- description: Core movement + basic hacker interactions (doors, elevators, overrides)
+- probe: test -d crates/idaptik-core/src/scenario
+- status: in_progress
+- notes: Envelope (v0.1) minimum viable game (README "Roadmap").
+
+### two-player-windowed-slice
+- description: gossamer host window + burble transport two-player slice
+- probe: grep -rq 'gossamer\|burble' docs/adr/0006-gossamer-host-and-burble-transport.md
+- status: declared
+- notes: ADR-0006.
+
+### session-relay
+- description: Elixir relay (Bandit + Phoenix Channels) over typed Command/Event
+- probe: test -d server
+- status: in_progress
+- notes: ADR-0002, ADR-0005.
+
+### config-schema-coverage
+- description: Nickel schemas validate scenarios; negative fixtures fail config-check
+- probe: test -f config/schema.ncl && test -d config/scenario-fixtures
+- status: in_progress
+
+## Wishes
+
+### Near Horizon
+
+#### renderer-decision
+- description: Settle Bevy vs Fyrox and drop the non-chosen frontend to non-blocking
+- horizon: near
+- status: declared
+- notes: ADR-0003 — resolve by end of Envelope.
+
+### Mid Horizon
+
+#### wire-format-settled
+- description: Choose the Rust<->Elixir wire format and persistence strategy
+- horizon: mid
+- status: declared
+
+#### adaptive-security-ai
+- description: AI countermeasures that react to hacker interference (Bicycle+)
+- horizon: mid
+- status: declared
+
+### Far Horizon
+
+#### full-experience
+- description: Adaptive security AI, emergent tension, complete multiplayer (Motorcycle)
+- horizon: far
+- status: declared
