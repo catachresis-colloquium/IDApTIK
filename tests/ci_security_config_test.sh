@@ -6,7 +6,8 @@
 # The production inputs are declarative YAML, so this suite checks their
 # security-relevant structure directly and then mutates temporary copies to
 # prove each assertion can fail. It needs no network, no action runner, and no
-# project toolchain — bash, POSIX awk, sed, and the files themselves.
+# project toolchain — Bash, mikefarah/yq v4, jq and standard text utilities.
+# YAML values are obtained only through yq (standards Y-1), including KYAML.
 #
 # Originally added by PR #143. Rewritten here for three measured reasons:
 #
@@ -46,6 +47,9 @@
 # to prevent.
 
 set -euo pipefail
+command -v yq >/dev/null || { printf 'yq is required (mise install)\n' >&2; exit 1; }
+yq --version | grep -q 'mikefarah/yq/.*version v4\.' || { printf 'mikefarah/yq v4 is required\n' >&2; exit 1; }
+command -v jq >/dev/null || { printf 'jq is required\n' >&2; exit 1; }
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPENDABOT="$REPO_DIR/.github/dependabot.yml"
@@ -161,45 +165,18 @@ require_nonempty() { # $1 label, $2 value-or-count
 # the lockfile (see scripts/check-lock-sync.sh). The cap is what keeps the
 # blast radius to one merge.
 check_dependabot_limit() { # $1 configuration
-  awk '
-    function raw_value_after_colon(line,   value) {
-      value = line
-      sub(/^[^:]+:[[:space:]]*/, "", value)
-      sub(/[[:space:]]+#.*$/, "", value)
-      return value
-    }
-    function value_after_colon(line,   value) {
-      value = raw_value_after_colon(line)
-      if (value ~ /^".*"$/) { sub(/^"/, "", value); sub(/"$/, "", value) }
-      return value
-    }
-    /^  - package-ecosystem:[[:space:]]*/ {
-      ecosystem = value_after_colon($0)
-      in_github_actions = (ecosystem == "github-actions")
-      if (in_github_actions) github_actions_blocks++
-      next
-    }
-    in_github_actions && /^    open-pull-requests-limit:[[:space:]]*/ {
-      limits++
-      limit = raw_value_after_colon($0)
-    }
-    END {
-      printf "dependabot: %d github-actions update block(s), %d open-pull-requests-limit line(s)\n",
-             github_actions_blocks, limits > "/dev/stderr"
-      if (github_actions_blocks != 1) {
-        printf "expected exactly one github-actions update block, found %d\n", github_actions_blocks > "/dev/stderr"
-        exit 1
-      }
-      if (limits != 1) {
-        printf "expected exactly one github-actions open-pull-requests-limit, found %d\n", limits > "/dev/stderr"
-        exit 1
-      }
-      if (limit != "2") {
-        printf "github-actions open-pull-requests-limit must be integer 2, found %s\n", limit > "/dev/stderr"
-        exit 1
-      }
-    }
-  ' "$1"
+  local blocks
+  blocks="$(yq -p yaml -o=json -I=0 '.' "$1" |
+    jq -c '[.updates[]? | select(."package-ecosystem" == "github-actions")]')" || return 1
+  if ! jq -e 'length == 1' <<< "$blocks" >/dev/null; then
+    printf 'expected exactly one github-actions update block\n' >&2; return 1
+  fi
+  if ! jq -e '.[0] | has("open-pull-requests-limit")' <<< "$blocks" >/dev/null; then
+    printf 'expected exactly one github-actions open-pull-requests-limit\n' >&2; return 1
+  fi
+  if ! jq -e '.[0]."open-pull-requests-limit" == 2' <<< "$blocks" >/dev/null; then
+    printf 'github-actions open-pull-requests-limit must be integer 2\n' >&2; return 1
+  fi
 }
 
 # ── dependabot: no ecosystem may point at a directory that does not exist ─────
@@ -213,31 +190,31 @@ check_dependabot_limit() { # $1 configuration
 # runs, and it hides the ecosystem that WOULD matter if the relay ever came
 # home. `.gitignore` and `.gitattributes` carried the same corpse.
 check_dependabot_directories() { # $1 configuration, $2 repository root
-  local cfg="$1" root="$2" line dir count=0
+  local root="$2" dir dirs count=0
+  dirs="$(yq -p yaml -o=json -I=0 '.' "$1" |
+    jq -er '.updates[] | (.directory // .directories[]) | select(type == "string")')" || return 1
   while IFS= read -r dir; do
     count=$((count + 1))
     if [ ! -d "$root$dir" ]; then
-      printf 'dependabot: %d director(y/ies) declared, and %s does not exist under %s\n' \
-        "$count" "$dir" "$root" >&2
-      printf 'a package-ecosystem pointing at a missing directory makes every scheduled update for it fail\n' >&2
+      printf 'dependabot: %s does not exist under %s\n' "$dir" "$root" >&2
       return 1
     fi
-  done < <(awk '
-      /^[[:space:]]*directory:[[:space:]]*/ {
-        v = $0
-        sub(/^[^:]+:[[:space:]]*/, "", v)
-        sub(/[[:space:]]+#.*$/, "", v)
-        sub(/^"/, "", v); sub(/"$/, "", v)
-        print v
-      }
-    ' "$cfg")
-  require_nonempty "dependabot directory declarations" "$count" || return 1
-  printf 'dependabot: %d declared ecosystem director(y/ies), all present\n' "$count" >&2
+  done <<< "$dirs"
+  require_nonempty "dependabot directory declarations" "$count"
 }
 
 # ── codeql: entry points, step names, agreement, and the lockfile pin ────────
 check_codeql_pins() { # $1 workflow, $2 lockfile
-  awk -v lockfile="$2" '
+  local records
+  records="$(
+    yq -p yaml -o=json -I=0 '.' "$2" | jq -r '
+      (.workflows[".github/workflows/codeql.yml"][]? | ["L", .] | @tsv),
+      (.dependencies | to_entries[] | ["D", .key, (.value.commit // "")] | @tsv)' || exit 1
+    yq -p yaml -o=json -I=0 '.' "$1" | jq -r '
+      .jobs[].steps[]? | select((.uses // "") | startswith("github/codeql-action/")) |
+      ["C", (.name // ""), .uses] | @tsv' || exit 1
+  )" || return 1
+  awk -F '\t' '
     # owner/repo[/subpath...]@ref -> owner/repo@ref
     function action_key(r,   at, n, path, ref, parts) {
       at = 0
@@ -254,47 +231,10 @@ check_codeql_pins() { # $1 workflow, $2 lockfile
       return ""
     }
 
-    # ---- pass 1: the lockfile ----
-    FILENAME == lockfile {
-      if ($0 ~ /^workflows:[[:space:]]*$/)    { section = "wf";   next }
-      if ($0 ~ /^dependencies:[[:space:]]*$/) { section = "deps"; next }
-      if ($0 ~ /^[A-Za-z_]+:/)                { section = "";     next }
-      if (section == "wf") {
-        if ($0 ~ /^    '"'"'/) {
-          cur = $0; sub(/^[[:space:]]*'"'"'/, "", cur); sub(/'"'"'.*$/, "", cur); next
-        }
-        if ($0 ~ /^        - '"'"'/ && cur == ".github/workflows/codeql.yml") {
-          r = $0; sub(/^        - '"'"'/, "", r); sub(/'"'"'.*$/, "", r)
-          locked[r] = 1; nlocked++
-        }
-        next
-      }
-      if (section == "deps") {
-        if ($0 ~ /^    '"'"'/) {
-          dep = $0; sub(/^[[:space:]]*'"'"'/, "", dep); sub(/'"'"'.*$/, "", dep); next
-        }
-        if ($0 ~ /^        commit: / && dep != "") {
-          c = $0; sub(/^[[:space:]]*commit:[[:space:]]*'"'"'/, "", c); sub(/'"'"'.*$/, "", c)
-          depcommit[dep] = c
-        }
-        next
-      }
-      next
-    }
-
-    # ---- pass 2: the workflow ----
-    /^[[:space:]]*#/ { next }
-    /^[[:space:]]*- name:[[:space:]]*/ {
-      step = $0
-      sub(/^[[:space:]]*- name:[[:space:]]*/, "", step)
-      sub(/[[:space:]]+$/, "", step)
-      next
-    }
-    /^[[:space:]]*uses:[[:space:]]*github\/codeql-action\// {
-      ref = $0
-      sub(/^[[:space:]]*uses:[[:space:]]*/, "", ref)
-      sub(/[[:space:]]+#.*$/, "", ref)
-      sub(/[[:space:]]+$/, "", ref)
+    $1 == "L" { locked[$2] = 1; nlocked++; next }
+    $1 == "D" { depcommit[$2] = $3; next }
+    $1 == "C" {
+      step = $2; ref = $3
       nrefs++
 
       if (split(ref, parts, "@") != 2) {
@@ -358,7 +298,7 @@ check_codeql_pins() { # $1 workflow, $2 lockfile
       }
       exit failed
     }
-  ' "$2" "$1"
+  ' <<< "$records"
 }
 
 # ── ci.yml: a push on main must never be superseded (issue #142) ─────────────
@@ -370,31 +310,16 @@ check_codeql_pins() { # $1 workflow, $2 lockfile
 # 13 completed abi-model outcomes on main were cancellations, clustering exactly
 # where merges landed inside its runtime.
 check_ci_concurrency() { # $1 ci workflow
-  awk '
-    /^concurrency:/ { inconc = 1; next }
-    inconc && /^[A-Za-z]/ { inconc = 0 }
-    inconc && /^[[:space:]]*group:/ { group = $0; ngroup++ }
-    inconc && /^[[:space:]]*cancel-in-progress:/ { cancel = $0; ncancel++ }
-    END {
-      printf "ci.yml: %d workflow-level concurrency group(s), %d cancel-in-progress setting(s)\n",
-             ngroup, ncancel > "/dev/stderr"
-      if (ngroup != 1) { printf "expected exactly one workflow-level concurrency group, found %d\n", ngroup > "/dev/stderr"; exit 1 }
-      if (ncancel != 1) { printf "expected exactly one workflow-level cancel-in-progress, found %d\n", ncancel > "/dev/stderr"; exit 1 }
-      # The group must key pushes/dispatches on something unique per run, so no
-      # later run can supersede an in-flight verdict on a commit already merged.
-      if (group !~ /github\.run_id/) {
-        printf "concurrency group does not isolate push/dispatch runs by github.run_id:\n  %s\n", group > "/dev/stderr"
-        printf "  A ref-keyed group lets a second merge cancel the first run mid-flight, so\n" > "/dev/stderr"
-        printf "  abi-model concludes `cancelled` and renders NO VERDICT on that commit.\n" > "/dev/stderr"
-        exit 1
-      }
-      # ...and cancellation must be scoped to pull requests only.
-      if (cancel !~ /pull_request/) {
-        printf "cancel-in-progress is not scoped to pull_request events:\n  %s\n", cancel > "/dev/stderr"
-        exit 1
-      }
-    }
-  ' "$1"
+  local data group cancel
+  data="$(yq -p yaml -o=json -I=0 '.concurrency' "$1")" || return 1
+  group="$(jq -r '.group // ""' <<< "$data")" || return 1
+  cancel="$(jq -r '."cancel-in-progress" // ""' <<< "$data")" || return 1
+  if [[ "$group" != *github.run_id* ]]; then
+    printf 'concurrency group does not isolate push/dispatch runs by github.run_id\n' >&2; return 1
+  fi
+  if [ "$cancel" != "\${{ github.event_name == 'pull_request' }}" ]; then
+    printf 'cancel-in-progress is not scoped to pull_request events\n' >&2; return 1
+  fi
 }
 
 # ── ci.yml: every long job must be able to time out ──────────────────────────
@@ -404,27 +329,14 @@ check_ci_concurrency() { # $1 ci workflow
 # rather than a timeout — a misleading coincidence. Now that a push run cannot
 # be cancelled at all, a hung job would hold a runner for the six-hour default.
 check_ci_timeouts() { # $1 ci workflow
-  # Only two-space-indented keys UNDER `jobs:` are jobs. The first version of
-  # this check counted `on:` -> `push:` as one, which is the shape of bug this
-  # whole file exists to catch: a denominator that includes something it should
-  # not, so the count looks plausible while measuring the wrong thing.
-  awk '
-    /^jobs:[[:space:]]*$/ { injobs = 1; next }
-    /^[A-Za-z]/ { injobs = 0; job = ""; next }
-    injobs && /^  [a-z0-9-]+:[[:space:]]*$/ {
-      job = $0; sub(/^[[:space:]]*/, "", job); sub(/:.*$/, "", job)
-      njobs++; have[job] = 0; next
-    }
-    injobs && /^    timeout-minutes:[[:space:]]*[0-9]+/ { if (job != "") { have[job] = 1; ntimeouts++ } next }
-    END {
-      printf "ci.yml: %d job(s), %d timeout-minutes setting(s)\n", njobs, ntimeouts > "/dev/stderr"
-      if (njobs == 0) { printf "DENOMINATOR ZERO: found no jobs in ci.yml\n"; exit 1 }
-      missing = ""
-      for (j in have) if (have[j] == 0) missing = missing " " j
-      if (missing != "") { printf "job(s) with no timeout-minutes:%s\n", missing > "/dev/stderr"; exit 1 }
-      if (njobs != ntimeouts) { printf "job count %d != timeout count %d\n", njobs, ntimeouts > "/dev/stderr"; exit 1 }
-    }
-  ' "$1"
+  local jobs
+  jobs="$(yq -p yaml -o=json -I=0 '.jobs' "$1")" || return 1
+  if ! jq -e 'type == "object" and length > 0' <<< "$jobs" >/dev/null; then
+    printf 'DENOMINATOR ZERO: found no jobs in ci.yml\n' >&2; return 1
+  fi
+  if ! jq -e 'all(.[]; (."timeout-minutes" | type == "number" and . > 0))' <<< "$jobs" >/dev/null; then
+    printf 'job(s) with no timeout-minutes\n' >&2; return 1
+  fi
 }
 
 # ── every test script in tests/ must be invoked by something ─────────────────
@@ -434,14 +346,20 @@ check_ci_timeouts() { # $1 ci workflow
 # counts its own denominator and fails on zero, so it cannot pass by examining
 # nothing.
 check_no_dead_test_scripts() { # $1 repository root
-  local root="$1" f base hits total=0 dead=""
+  local root="$1" f base hits workflow runs="" total=0 dead=""
+  for workflow in "$root"/.github/workflows/*.yml "$root"/.github/workflows/*.yaml; do
+    [ -f "$workflow" ] || continue
+    runs+="$(yq -p yaml -o=json -I=0 '.' "$workflow" | jq -r '.jobs[]?.steps[]?.run // empty')" || return 1
+    runs+=$'\n'
+  done
   for f in "$root"/tests/*.sh; do
     [ -e "$f" ] || continue
     base="$(basename "$f")"
     total=$((total + 1))
     # Invoked from the justfile, or from any workflow, or from another test.
     hits=$(grep -rl --exclude-dir=.git -F "$base" \
-      "$root/justfile" "$root/.github/workflows" "$root/scripts" 2>/dev/null | wc -l | tr -d ' ')
+      "$root/justfile" "$root/scripts" 2>/dev/null | wc -l | tr -d ' ')
+    if grep -qF "$base" <<< "$runs"; then hits=$((hits + 1)); fi
     if [ "$hits" -eq 0 ]; then dead="$dead $base"; fi
   done
   if [ "$total" -eq 0 ]; then
@@ -679,8 +597,13 @@ check_sonar_consistency() { # $1 properties file, $2 repository root
 # correctly reported `failure`. The merge proceeded regardless, and main went
 # back to rendering no CodeQL verdict at all. A gate that nothing is required
 # to wait for is a suggestion.
-check_mergify_conditions() { # $1 mergify config, $2 lock-sync gate workflow
+ci_job_name() { # $1 workflow, $2 job id; Y-1: parse YAML, including KYAML
+  JOB_ID="$2" yq -p yaml -o=yaml -r '.jobs[strenv(JOB_ID)].name // ""' "$1"
+}
+
+check_mergify_conditions() { # $1 config, $2 lock-sync workflow, $3 optional CI fixture
   local cfg="$1" gatewf="$2"
+  local ciwf="${3:-$CI}"
   if [ ! -f "$cfg" ]; then
     printf 'no .mergify.yml; nothing auto-merges, nothing to check\n' >&2
     return 0
@@ -690,44 +613,26 @@ check_mergify_conditions() { # $1 mergify config, $2 lock-sync gate workflow
   # matches anything is silently satisfied by nothing and blocks everything, or
   # worse, is one of several conditions and the others carry the merge. Either
   # way a rename must not be able to disable the condition unnoticed.
-  local gatename
-  gatename="$(awk '
-      /^jobs:/ { injobs = 1; next }
-      injobs && /^    name:[[:space:]]*/ {
-        v = $0; sub(/^    name:[[:space:]]*/, "", v); sub(/[[:space:]]+$/, "", v)
-        print v; exit
-      }
-    ' "$gatewf" 2>/dev/null || true)"
+  local gatename conditions
+  gatename="$(ci_job_name "$gatewf" lock-sync)" || return 1
+  conditions="$(yq -p yaml -o=json -I=0 '.merge_protections_settings.auto_merge_conditions' "$cfg" |
+    jq -er 'if type == "array" and all(.[]; type == "string") then .[] else error("auto_merge_conditions must be strings") end')" || return 1
   require_nonempty "lock-sync gate job name read from $gatewf" "$gatename" || return 1
+  local ghostname fixturesname
+  ghostname="$(ci_job_name "$ciwf" test-ghost)"
+  fixturesname="$(ci_job_name "$ciwf" fixtures-and-must)"
+  require_nonempty "test-ghost job name" "$ghostname" || return 1
+  require_nonempty "fixtures-and-must job name" "$fixturesname" || return 1
 
-  awk -v gatename="$gatename" -v GATEWF="$gatewf" '
-    /^[[:space:]]*auto_merge_conditions:/ { inconds = 1; next }
-    inconds && /^[a-z]/ { inconds = 0 }
-    inconds && /^[[:space:]]*-[[:space:]]*/ {
+  awk -v gatename="$gatename" -v ghostname="$ghostname" -v fixturesname="$fixturesname" -v GATEWF="$gatewf" '
+    {
       c = $0
-      sub(/^[[:space:]]*-[[:space:]]*/, "", c)
-      sub(/[[:space:]]+$/, "", c)
-      # Strip YAML quoting. `"#check-failure = 0"` MUST be quoted in YAML,
-      # because a leading `#` otherwise starts a comment and the condition
-      # silently becomes an empty list item. Matching the unquoted form only
-      # -- as the first draft did -- counts zero of them and fails a correct
-      # policy, which is how a check ends up being "fixed" by deleting it.
-      #
-      # MEASURED 2026-10-23: this line lost its leading `#` and the program
-      # below became a SYNTAX ERROR -- `awk: cmd. line:11: ... -- as the first
-      # draft did ... ^ syntax error`. It nonetheless ran clean in the
-      # development container, which ships mawk 1.3.4 (20200120): that parser
-      # reads `-- as ...` as an expression and carries on. ubuntu-latest does
-      # not, so check_mergify_conditions bailed out of EVERY arm and all eight
-      # mergify assertions failed on the runner while all eight passed locally
-      # at the same commit. A suite green under one awk and red under another
-      # is a coincidence, not a gate. Do not reintroduce a bare `--` line.
-      if (c ~ /^".*"$/) { sub(/^"/, "", c); sub(/"$/, "", c) }
       nconds++
       if (c ~ /^author[[:space:]]*=[[:space:]]*dependabot/) nauthor++
       if (c ~ /^head[[:space:]]*~=/) { nhead++; headre = c }
-      if (c ~ /^#check-failure[[:space:]]*=[[:space:]]*0/) nfailzero++
-      if (c ~ /^#check-neutral[[:space:]]*=[[:space:]]*0/) nneutralzero++
+      if (c == "#check-failure = 0") nfailzero++
+      if (c == "#check-neutral = 0") nneutralzero++
+      if (c == "#commits-behind = 0") ncurrentbase++
       if (c ~ /^check-success[[:space:]]*=/) { nchecksuccess++; success_conds[++ns] = c }
       next
     }
@@ -739,6 +644,10 @@ check_mergify_conditions() { # $1 mergify config, $2 lock-sync gate workflow
         exit 1
       }
       bad = 0
+      if (ncurrentbase != 1) {
+        printf "expected #commits-behind = 0: stale head checks do not validate current main\n" > "/dev/stderr"
+        bad = 1
+      }
       if (nauthor == 0) {
         printf "no author condition: this would auto-merge human-authored work too\n" > "/dev/stderr"
         bad = 1
@@ -770,11 +679,17 @@ check_mergify_conditions() { # $1 mergify config, $2 lock-sync gate workflow
       # workflow'"'"'s current job name.
       found = 0
       for (i = 1; i <= ns; i++) {
-        if (index(success_conds[i], gatename) > 0) found = 1
+        if (success_conds[i] == "check-success = " gatename) found = 1
+        if (success_conds[i] == "check-success = " ghostname) found_ghost = 1
+        if (success_conds[i] == "check-success = " fixturesname) found_fixtures = 1
       }
       if (!found) {
         printf "no check-success condition names the lock-sync gate job \"%s\"\n", gatename > "/dev/stderr"
         printf "  that name was read from %s just now, so this is not a stale hardcode\n", GATEWF > "/dev/stderr"
+        bad = 1
+      }
+      if (!found_ghost || !found_fixtures) {
+        printf "missing exact positive Rust/fixture check: %s; %s\n", ghostname, fixturesname > "/dev/stderr"
         bad = 1
       }
       # A github_actions bump can never satisfy the lockfile condition, so it
@@ -798,7 +713,36 @@ check_mergify_conditions() { # $1 mergify config, $2 lock-sync gate workflow
       }
       exit bad
     }
-  ' "$cfg"
+  ' <<< "$conditions"
+}
+
+# This validates the reviewed import payload, not GitHub's live settings.
+# Only an administrator can apply it; never describe this local test as proof
+# that manual merges are protected.
+check_rust_ruleset() { # $1 ruleset JSON, $2 CI workflow, $3 lock-sync workflow
+  local ghost fixtures lockname
+  ghost="$(ci_job_name "$2" test-ghost)"
+  fixtures="$(ci_job_name "$2" fixtures-and-must)"
+  lockname="$(ci_job_name "$3" lock-sync)"
+  require_nonempty "ruleset Rust job name" "$ghost" || return 1
+  require_nonempty "ruleset fixture job name" "$fixtures" || return 1
+  require_nonempty "ruleset lock-sync job name" "$lockname" || return 1
+  jq -e --arg ghost "$ghost" --arg fixtures "$fixtures" --arg lock "$lockname" '
+    .name == "Rust-Integration-Floor" and
+    .target == "branch" and .enforcement == "active" and
+    .bypass_actors == [] and
+    .conditions.ref_name == {include: ["~DEFAULT_BRANCH"], exclude: []} and
+    (.rules | length == 1) and
+    .rules[0].type == "required_status_checks" and
+    (.rules[0].parameters |
+      .strict_required_status_checks_policy == true and
+      .do_not_enforce_on_create == false and
+      (.required_status_checks | sort_by(.context)) ==
+      ([$ghost, $fixtures, $lock] | map({context: ., integration_id: 15368}) | sort_by(.context)))
+  ' "$1" >/dev/null || {
+    printf 'Rust integration ruleset must require current-base checks from GitHub Actions with no bypass\n' >&2
+    return 1
+  }
 }
 
 # ── every shell script here must at least parse ─────────────────────────────
@@ -850,6 +794,8 @@ expect_pass "sonar-project.properties agrees with itself and with its prose" \
   check_sonar_consistency "$REPO_DIR/sonar-project.properties" "$REPO_DIR"
 expect_pass "Mergify will not auto-merge over a failing or absent check" \
   check_mergify_conditions "$REPO_DIR/.mergify.yml" "$REPO_DIR/.github/workflows/lock-sync-gate.yml"
+expect_pass "the Rust ruleset import matches the live workflow names" \
+  check_rust_ruleset "$REPO_DIR/.github/rulesets/rust-integration.json" "$CI" "$REPO_DIR/.github/workflows/lock-sync-gate.yml"
 expect_pass "every shell script under scripts/ and tests/ parses" \
   check_shell_syntax "$REPO_DIR"
 
@@ -943,23 +889,11 @@ expect_fail "a ref the lockfile does not record is rejected (the PR #143 defect)
 # matching, both mutants became byte-identical to the original, and two firing
 # fixtures quietly turned into passes. A mutant that no longer mutates is worse
 # than no mutant, because the suite still reports a number.
-CODEQL_REF="$(awk '
-    match($0, /github\/codeql-action\/init@[^[:space:]#]+/) {
-      r = substr($0, RSTART, RLENGTH); sub(/^.*init@/, "", r); print r; exit
-    }
-  ' "$CODEQL")"
+CODEQL_REF="$(yq -p yaml -o=json -I=0 '.' "$CODEQL" |
+  jq -r '[.jobs[].steps[]? | .uses // "" | select(startswith("github/codeql-action/init@"))][0] | split("@")[1]')"
 require_nonempty "the CodeQL ref currently used in codeql.yml" "$CODEQL_REF" || exit 1
-CODEQL_COMMIT="$(awk '
-    /^    .github\/codeql-action@/ { indep = 1; next }
-    indep && /^        commit: / {
-      c = $0; sub(/^        commit: ./, "", c); sub(/.$/, "", c); print c; exit
-    }
-    # Exactly four spaces then a NON-space: the next dependency key. A plain
-    # `/^    ./` also matches the eight-space `ref:` and `commit:` lines inside
-    # the block, because their fifth character is a space, so the first draft of
-    # this closed the block on its own second line and extracted nothing.
-    indep && /^    [^[:space:]]/ { indep = 0 }
-  ' "$LOCK")"
+CODEQL_COMMIT="$(yq -p yaml -o=json -I=0 '.' "$LOCK" |
+  jq -r --arg key "github/codeql-action@$CODEQL_REF" '.dependencies[$key].commit // ""')"
 require_nonempty "the commit actions.lock resolves the CodeQL ref to" "$CODEQL_COMMIT" || exit 1
 printf 'derived from the live tree: codeql ref %s, lockfile commit %s\n' \
   "$CODEQL_REF" "$CODEQL_COMMIT" >&2
@@ -1183,7 +1117,7 @@ expect_fail "a header URL naming another project is rejected" \
 printf 'mergify firing fixtures:\n'
 mergify_root="$FIXTURE/mergify-tree"
 mkdir -p "$mergify_root/.github/workflows"
-printf 'name: Lock Sync Gate\njobs:\n  gate:\n    name: actions.lock is in sync with the workflow YAML\n' \
+printf 'name: Lock Sync Gate\njobs:\n  lock-sync:\n    name: actions.lock is in sync with the workflow YAML\n' \
   > "$mergify_root/.github/workflows/lock-sync-gate.yml"
 cat > "$mergify_root/good.yml" <<'MERGIFY'
 merge_protections_settings:
@@ -1192,10 +1126,38 @@ merge_protections_settings:
     - head ~= ^dependabot/cargo/
     - "#check-failure = 0"
     - "#check-neutral = 0"
+    - "#commits-behind = 0"
     - check-success = actions.lock is in sync with the workflow YAML
+    - check-success = test-ghost (core/tui/ffi + clippy + fmt)
+    - check-success = fixtures-and-must (shell suites + Mustfile probes)
 MERGIFY
 expect_pass "a fully conditioned auto-merge policy passes" \
   check_mergify_conditions "$mergify_root/good.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
+
+grep -v 'test-ghost' "$mergify_root/good.yml" > "$mergify_root/no-rust.yml"
+expect_fail "a lockfile success cannot stand in for the Rust gate (#171)" \
+  "missing exact positive Rust/fixture check" \
+  check_mergify_conditions "$mergify_root/no-rust.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
+grep -v 'fixtures-and-must' "$mergify_root/good.yml" > "$mergify_root/no-fixtures.yml"
+expect_fail "auto-merge must wait for the merge-policy fixtures" \
+  "missing exact positive Rust/fixture check" \
+  check_mergify_conditions "$mergify_root/no-fixtures.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
+grep -v 'commits-behind' "$mergify_root/good.yml" > "$mergify_root/stale-base.yml"
+expect_fail "success on an obsolete base does not permit auto-merge" \
+  "expected #commits-behind = 0" \
+  check_mergify_conditions "$mergify_root/stale-base.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
+sed 's/"#commits-behind = 0"/#commits-behind = 0/' "$mergify_root/good.yml" > "$mergify_root/comment-base.yml"
+expect_fail "an unquoted hash is a YAML comment, not a current-base condition" \
+  "auto_merge_conditions must be strings" \
+  check_mergify_conditions "$mergify_root/comment-base.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
+sed 's/name: test-ghost (/name: renamed-ghost (/' "$CI" > "$mergify_root/renamed-ci.yml"
+expect_fail "renaming the Rust job invalidates the old merge condition" \
+  "missing exact positive Rust/fixture check" \
+  check_mergify_conditions "$mergify_root/good.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml" "$mergify_root/renamed-ci.yml"
+sed 's/check-success = test-ghost (/check-success = old-test-ghost (/' "$mergify_root/good.yml" > "$mergify_root/substring.yml"
+expect_fail "a substring of the Rust job name cannot satisfy its condition" \
+  "missing exact positive Rust/fixture check" \
+  check_mergify_conditions "$mergify_root/substring.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
 
 # The exact configuration that shipped and merged PR #148 over three red checks.
 cat > "$mergify_root/author-only.yml" <<'MERGIFY'
@@ -1269,6 +1231,23 @@ grep -v 'check-neutral' "$mergify_root/good.yml" > "$mergify_root/no-neutral.yml
 expect_fail "dropping #check-neutral = 0 is rejected" \
   "a neutral conclusion is not a pass" \
   check_mergify_conditions "$mergify_root/no-neutral.yml" "$mergify_root/.github/workflows/lock-sync-gate.yml"
+
+printf 'Rust ruleset firing fixtures:\n'
+ruleset="$REPO_DIR/.github/rulesets/rust-integration.json"
+for mutation in \
+  '.enforcement = "evaluate"' \
+  '.rules[0].parameters.strict_required_status_checks_policy = false' \
+  '.rules[0].parameters.required_status_checks = []' \
+  '.rules[0].parameters.required_status_checks[0].integration_id = null' \
+  '.bypass_actors = [{actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always"}]' \
+  '.conditions.ref_name.exclude = ["refs/heads/main"]'; do
+  jq "$mutation" "$ruleset" > "$mergify_root/bad-ruleset.json"
+  expect_fail "ruleset rejects $mutation" "must require current-base checks" \
+    check_rust_ruleset "$mergify_root/bad-ruleset.json" "$CI" "$REPO_DIR/.github/workflows/lock-sync-gate.yml"
+done
+expect_fail "a renamed Rust job invalidates the ruleset payload too" \
+  "must require current-base checks" \
+  check_rust_ruleset "$ruleset" "$mergify_root/renamed-ci.yml" "$REPO_DIR/.github/workflows/lock-sync-gate.yml"
 
 printf 'shell-syntax firing fixture:\n'
 syntax_root="$FIXTURE/syntax-tree"

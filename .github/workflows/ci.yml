@@ -1,7 +1,7 @@
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
-#   just test-ghost           -> cargo test (core/tui/ffi/net/evil-weevil) + clippy -D warnings + fmt --check
+#   just test-ghost           -> locked workspace tests/clippy (all members except Bevy) + fmt
 #   just evil-weevil-check    -> ADR-0017 deterministic adversarial corpus (offline, no sockets)
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
@@ -84,6 +84,8 @@ jobs:
           git checkout --detach --force FETCH_HEAD
       - name: Provision pinned Rust toolchain (rust-toolchain.toml)
         run: rustup show
+      - name: Provision pinned YAML reader (Y-1)
+        run: bash scripts/install-ci-yq.sh
       - name: Shell fixture suites (doctor, launcher, vendor gate)
         run: |
           bash tests/runtime_doctor_test.sh

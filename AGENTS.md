@@ -12,6 +12,13 @@ Read `coordination.k9`, `IDApTIK_chora.deed`, `README.md`, `GOVERNANCE.md`,
 editing. The deed records descriptive project state; K9 components hold
 contractile policy; `coordination.k9` is the root agent-instructions protocol.
 
+Data-format routing: kyq is the estate gate interface for exactly TOML, Dhall,
+KYAML and I-JSON/JCS. Preserve TOML/Dhall; migrate YAML/YML content to KYAML and
+JSON variants to the estate I-JSON/JCS profile through kyq. Wider projection
+belongs to kyX. See `docs/standards-conformance.md` for the current kyq build
+blocker and explicit transitional enforcement; never count a placeholder as a
+passing gate or describe Kubernetes as kyq's entire scope.
+
 Invariants (see `coordination.k9` and the K9 contractiles):
 
 - Licence layers are deliberate: engine/code is AGPL-3.0-or-later, game

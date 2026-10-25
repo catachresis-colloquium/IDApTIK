@@ -4,7 +4,9 @@
 //! permissions and costs of a physical cut versus logical rewiring.
 
 use idaptik_core::scenario::definition::ValidationError;
-use idaptik_core::scenario::ids::{BreakerId, FeedId, HazardId, LoadId};
+use idaptik_core::scenario::ids::{
+    BreakerId, CircuitId, EquipmentId, FeedId, HazardId, LoadId, PowerSourceId, SignalId,
+};
 use idaptik_core::scenario::power::sim::{
     Fault, OffReason, POWER_SNAPSHOT_FORMAT, PowerAccess, PowerCommand, PowerDenyReason,
     PowerEvent, PowerIndex, PowerOp, PowerReadout, PowerSim, PowerSnapshot,
@@ -21,6 +23,53 @@ use idaptik_core::scenario::signal::sim::Seat;
 
 const OFFICE_CAM: &str = "cam-1";
 const LAUNDRY_LIGHT: &str = "light-laundry";
+
+// #171: wire compatibility must not erase the distinct domains at the Rust
+// boundary. Include the adjacent building, infrastructure and signal domains
+// so an apparently convenient alias cannot silently join the systems.
+#[test]
+fn electrical_id_domains_are_pairwise_distinct() {
+    use std::any::TypeId;
+    let domains = [
+        TypeId::of::<PowerSourceId>(),
+        TypeId::of::<FeedId>(),
+        TypeId::of::<BreakerId>(),
+        TypeId::of::<LoadId>(),
+        TypeId::of::<HazardId>(),
+        TypeId::of::<CircuitId>(),
+        TypeId::of::<EquipmentId>(),
+        TypeId::of::<SignalId>(),
+        TypeId::of::<String>(),
+    ];
+    let distinct: std::collections::HashSet<_> = domains.into_iter().collect();
+    assert_eq!(distinct.len(), domains.len());
+}
+
+fn assert_id_wire_contract<T>(raw: &str)
+where
+    T: From<String> + serde::Serialize + serde::de::DeserializeOwned + Eq + std::fmt::Debug,
+{
+    let id = T::from(raw.to_owned());
+    // Pin the external representation, not just serializer/deserializer
+    // agreement: changing both sides to an object must fail this assertion.
+    let json = serde_json::to_value(&id).unwrap();
+    assert_eq!(json, serde_json::Value::String(raw.to_owned()));
+    assert_eq!(serde_json::from_value::<T>(json).unwrap(), id);
+    for invalid in ["null", "0", "true", "[]", "{}", r#"{"id":"panel"}"#] {
+        assert!(serde_json::from_str::<T>(invalid).is_err(), "{invalid}");
+    }
+}
+
+proptest::proptest! {
+    #[test]
+    fn electrical_ids_preserve_the_v1_string_contract(raw in proptest::prelude::any::<String>()) {
+        assert_id_wire_contract::<PowerSourceId>(&raw);
+        assert_id_wire_contract::<FeedId>(&raw);
+        assert_id_wire_contract::<BreakerId>(&raw);
+        assert_id_wire_contract::<LoadId>(&raw);
+        assert_id_wire_contract::<HazardId>(&raw);
+    }
+}
 
 fn floor() -> PowerSim {
     PowerSim::new(power_test_floor()).expect("the test floor validates")

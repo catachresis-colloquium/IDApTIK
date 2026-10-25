@@ -143,6 +143,7 @@
     :medium ("Define long-term player-save compatibility and retention beyond per-session authority recovery."))
 
   (verification-notes
+    :electrical-id-contract "Issue #171: scenario/ids.rs is the canonical declaration site; power_network tests cover nominal separation and v1 string compatibility, with compiler-checked examples in the module documentation. The Rust-Integration-Floor ruleset payload is prepared but administrative activation is not claimed; see docs/verification/issue-171-electrical-ids.md."
     :items ("cargo fmt is gated as a fast CI check and inside test-ghost; run it before expensive tests." "cac-kernel-is-fixed-point pins scenario/vsm.rs only; actor/belief.rs, trace.rs, and agents.rs still hold floats and must convert before feeding the ledger." "The cross-repository UMS round-trip gate belongs to the sibling repository; this repo must not claim that its own CI runs it."))
 
   (governance-binding

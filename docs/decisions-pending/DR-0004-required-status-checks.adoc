@@ -4,6 +4,27 @@
 :guard: tests/ci_security_config_test.sh::check_mergify_conditions (partial — see below)
 :files: .mergify.yml
 
+== Update: 25 October 2026, issue #171
+
+The September observations below are historical. The repository is now
+`catachresis-colloquium/IDApTIK`. Its readable ruleset bodies show only a
+secret-scan required check and linear-history enforcement for the default
+branch, plus an immutable-tags rule. They do not require the Rust gate.
+
+`.mergify.yml` now requires positive Rust, fixture and lock-sync results and
+`#commits-behind = 0`. Its fixtures reject missing or stale check names and
+an absent current-base condition. This closes the source-controlled Mergify
+gap; it does not activate GitHub's administrative protection.
+
+`.github/rulesets/rust-integration.json` is the reviewed strict, no-bypass
+repository-level import payload. It preserves the existing rulesets by adding
+a separate floor. Activation and readback remain required before this decision
+can be closed. See link:../verification/issue-171-electrical-ids.md[the current
+evidence, application command and acceptance criteria]. Do not infer that
+committing the JSON file applies it to GitHub.
+
+== Historical September investigation
+
 == Question
 
 Is `actions.lock is in sync with the workflow YAML` — the check produced by

@@ -35,6 +35,14 @@ build_commands:
     purpose: "Run the required Burble-backed two-seat relay and recovery gate; this is not a skip-if-missing check."
 
 invariants:
+  - id: scenario-content-id-authority
+    rule: "Define scenario content ID newtypes once in crates/idaptik-core/src/scenario/ids.rs; retain domain separation and existing serialized strings. Reconcile current main before restoring an apparently missing type."
+    reason: "Issue #171 lost electrical IDs during integration, and independent restorations then duplicated them."
+    severity: critical
+  - id: current-base-integration-evidence
+    rule: "Require successful compilation and tests against the current integration base before merging; source-only or obsolete-head success is insufficient."
+    reason: "A textual merge can remove required declarations or introduce duplicate ones. See docs/verification/issue-171-electrical-ids.md for the tested source policy and pending administrative enforcement."
+    severity: critical
   - id: descriptive-state-home
     rule: "Keep descriptive project facts in IDApTIK_chora.deed, contractile policies in the six K9 components, and agent instructions in this root coordination.k9 protocol."
     reason: "These formats have distinct standards, semantics, validators, and discovery paths."
