@@ -93,7 +93,7 @@ fn inputs() -> Vec<InputSpec> {
         InputSpec {
             step: 4,
             intent: "three frontier scene frames for the infiltrator seat: force the \
-                     crisis at tick 1, walk the mole underground to 240, and schedule \
+                     crisis at tick 2, walk the mole underground to 240, and schedule \
                      the synth for tick 52"
                 .into(),
             expected: "all accepted: the guard is on shift and the diversion is inside \
@@ -374,7 +374,12 @@ impl Scenario for InfraOrdersScenario {
                         }
                     )
                 });
-                if synth_now && obs_at_billy.is_none() {
+                // The frontier acceptance probe also plays a synth at tick 2,
+                // outside Billy's hearing. Sampling that event ends the run
+                // before the scene diversion at SYNTH_AT can execute.
+                // advance_with calls us after the tick, so the scene's
+                // command tick has advanced to SYNTH_AT + 1 here.
+                if synth_now && obs_at_billy.is_none() && sim.current_tick() == SYNTH_AT + 1 {
                     let st = sim.state();
                     guard_on_shift = st.billy.mode != BillyMode::Offsite;
                     // The detector the watcher itself uses: canonical
