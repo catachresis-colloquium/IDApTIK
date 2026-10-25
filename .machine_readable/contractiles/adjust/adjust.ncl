@@ -15,11 +15,11 @@
         tolerance | String,
         corrective | String,
         evidence | String,
-        ..,
+        ..
       },
-      ..,
+      ..
     },
-    ..,
+    ..
   },
   run = {
     mode = "advisory-drift-review",

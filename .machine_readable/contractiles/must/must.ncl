@@ -17,11 +17,11 @@
         probe | String,
         scope | String,
         evidence | String,
-        ..,
+        ..
       },
-      ..,
+      ..
     },
-    ..,
+    ..
   },
   run = {
     mode = "repository-probes",

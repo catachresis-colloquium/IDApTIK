@@ -14,18 +14,18 @@
         description | String,
         tolerance | String,
         evidence | String,
-        ..,
+        ..
       },
       retirements | Array {
         id | String,
         status | String,
         disposition | String,
         evidence | String,
-        ..,
+        ..
       },
-      ..,
+      ..
     },
-    ..,
+    ..
   },
   run = {
     mode = "retirement-and-hygiene-report",

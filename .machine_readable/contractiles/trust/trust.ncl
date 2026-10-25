@@ -18,11 +18,11 @@
         description | String,
         scope | String,
         evidence | String,
-        ..,
+        ..
       },
-      ..,
+      ..
     },
-    ..,
+    ..
   },
   run = {
     mode = "integrity-and-provenance-review",

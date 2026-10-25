@@ -439,7 +439,40 @@ jobs:
             exit "$rc"
           fi
       - name: Font-parser-free graph with title-free CSD active
-        run: bash scripts/vendor_bevy_winit_check.sh graph
+        run: |
+          cp Cargo.lock /tmp/Cargo.lock.before
+          set +e
+          bash scripts/vendor_bevy_winit_check.sh graph > /tmp/vendor-graph.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/vendor-graph.log
+          if [ "$rc" -ne 0 ]; then
+            set +e
+            cargo metadata --format-version 1 > /tmp/unlocked-metadata.json 2> /tmp/unlocked-metadata.err
+            metadata_rc=$?
+            set -e
+            if [ "$metadata_rc" -eq 0 ]; then
+              diff -u /tmp/Cargo.lock.before Cargo.lock > /tmp/Cargo.lock.diff || true
+              cat /tmp/Cargo.lock.diff
+              {
+                echo '### Cargo.lock diff proposed by unlocked cargo metadata'
+                echo '```diff'
+                cat /tmp/Cargo.lock.diff
+                echo '```'
+              } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "vendor-parity (bevy_winit patch gate)") | .id' 2>/dev/null | head -1)"
+              if [ -n "$cr_id" ]; then
+                jq -n --arg title "Cargo.lock diff proposed by unlocked metadata" --rawfile body /tmp/Cargo.lock.diff \
+                  '{output: {title: $title, summary: ("```diff\n" + $body + "```")}}' > /tmp/lock-drift-patch.json \
+                  && gh api --input /tmp/lock-drift-patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+              fi
+            else
+              cat /tmp/unlocked-metadata.err
+              detail="$(tail -n 30 /tmp/unlocked-metadata.err | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+              echo "::error::unlocked cargo metadata also failed (rc=$metadata_rc) -- $detail"
+            fi
+            exit "$rc"
+          fi
 
   test-ghost:
     name: test-ghost (core/tui/ffi + clippy + fmt)

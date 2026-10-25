@@ -108,6 +108,7 @@ pub enum Event {
     /// An order to the hosted companion was refused.
     MoleDenied {
         reason: crate::scenario::common::MoleDenyReason,
+    },
     /// Something happened on the floor's electrical infrastructure (ADR-0013).
     Power {
         power: crate::scenario::power::sim::PowerEvent,

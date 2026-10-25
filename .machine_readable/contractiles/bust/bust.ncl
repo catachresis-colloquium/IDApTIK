@@ -14,11 +14,11 @@
         expected | String,
         recovery | String,
         evidence | String,
-        ..,
+        ..
       },
-      ..,
+      ..
     },
-    ..,
+    ..
   },
   run = {
     mode = "on-demand-failure-drills",

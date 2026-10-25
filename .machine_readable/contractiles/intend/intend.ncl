@@ -16,7 +16,7 @@
         status | String,
         description | String,
         evidence | String,
-        ..,
+        ..
       },
       horizon | Array {
         id | String,
@@ -24,11 +24,11 @@
         status | String,
         description | String,
         evidence | String,
-        ..,
+        ..
       },
-      ..,
+      ..
     },
-    ..,
+    ..
   },
   run = {
     mode = "status-report",
