@@ -52,14 +52,6 @@ id_newtype!(
     "Stable id of a building portal (door/stair/lift/ladder/vent)."
 );
 id_newtype!(CircuitId, "Stable id of a building power circuit.");
-id_newtype!(
-    PowerSourceId,
-    "Stable id of a power source: mains or backup."
-);
-id_newtype!(FeedId, "Stable id of a power feed out of a source.");
-id_newtype!(BreakerId, "Stable id of a breaker protecting a feed.");
-id_newtype!(LoadId, "Stable id of a load the power network carries.");
-id_newtype!(HazardId, "Stable id of an electrical hazard site.");
 id_newtype!(ZoneId, "Stable id of a building network zone.");
 id_newtype!(
     SignalId,
@@ -91,6 +83,34 @@ id_newtype!(DamperId, "Stable id of a duct damper.");
 id_newtype!(FilterId, "Stable id of a duct filter.");
 id_newtype!(EquipmentId, "Stable id of a powered equipment fixture.");
 id_newtype!(TraceSourceId, "Stable id of a scent or noise source.");
+
+// --- power ------------------------------------------------------------------
+//
+// The power module (`scenario::power`, `scenario::sim::power`) imports these
+// five from `crate::scenario::ids`, so they have to be *defined* here. They
+// were not: the power work landed its module, its events and its tests while
+// the id types it names were only ever imported. `main` therefore did not
+// compile — `cargo check -p idaptik-core` failed with five `E0432`
+// unresolved-import errors — and no test could run, so the gap could not
+// report itself.
+//
+// The definitions are deliberately the plain `id_newtype!` ones: nothing in
+// the power module needs anything more than a string id, and inventing a
+// richer type here would be a second decision taken in the wrong file.
+id_newtype!(
+    HazardId,
+    "Stable id of an authored hazard in a powered room."
+);
+id_newtype!(LoadId, "Stable id of a powered load on a circuit.");
+id_newtype!(
+    FeedId,
+    "Stable id of a circuit feed (the thing that cuts it)."
+);
+id_newtype!(BreakerId, "Stable id of a breaker on a power feed.");
+id_newtype!(
+    PowerSourceId,
+    "Stable id of an authored power source: grid, generator or battery."
+);
 
 /// Resolves content ids to `Vec` indices once, so the simulation can index
 /// directly. Built at [`crate::scenario::GhostLobbySim`] construction and after

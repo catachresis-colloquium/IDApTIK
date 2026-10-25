@@ -3,7 +3,7 @@
 //!
 //! This is **not** the relay and holds no relay authority. It re-states the
 //! documented rules of the pinned burble revision (see `Cargo.toml`'s
-//! `burble-client` pin and ADR-0013) so the corpus can exercise them without
+//! `burble-client` pin and ADR-0017) so the corpus can exercise them without
 //! a BEAM process:
 //!
 //! - join requires a known game and a role the profile lists;
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn the_known_signal_drift_is_pinned_not_silently_assumed_away() {
-        // If burble adds the Signal entry, this test changes and the ADR-0013
+        // If burble adds the Signal entry, this test changes and the ADR-0017
         // defect entry must be re-evaluated rather than staying stale.
         assert_eq!(
             RelayModel::client_tags_missing_from_relay(),

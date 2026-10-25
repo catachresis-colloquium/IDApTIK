@@ -28,6 +28,7 @@ pub mod constants;
 pub mod definition;
 pub mod event;
 pub mod floor_graph;
+pub mod guard_brain;
 pub mod ghost_lobby;
 pub mod ids;
 pub mod infra;
@@ -83,6 +84,9 @@ pub use floor_graph::{
     light_node_id, pivot_host, pump_node_id, valve_node_id, van_vantage,
 };
 pub use ghost_lobby::{GHOST_LOBBY_JSON, ghost_lobby};
+pub use guard_brain::{
+    GuardApplyOutcome, GuardBrainKind, GuardContact, GuardDecision, GuardPerception,
+};
 pub use ids::{CameraId, DoorId, HideSpotId, IdIndex, ObjectiveId, RoomId};
 pub use infra::{
     AlarmDef, AlarmTrip, Hearing, InfraDef, InfraState, NoiseSource, Observation, ObservationKind,

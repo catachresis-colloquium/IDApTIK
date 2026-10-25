@@ -1,6 +1,6 @@
 # Electrical infrastructure — designer's reference
 
-The design rationale is [ADR-0013](adr/0013-electrical-infrastructure.md). This
+The design rationale is [ADR-0016](adr/0016-electrical-infrastructure.md). This
 page is the working reference: what the model distinguishes, what the numbers
 mean, who may do what, and how to read a device that will not run.
 

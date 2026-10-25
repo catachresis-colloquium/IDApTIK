@@ -1,4 +1,4 @@
-# ADR-0013: Evil Weevil — a separate, deterministic adversarial testing adapter
+# ADR-0017: Evil Weevil — a separate, deterministic adversarial testing adapter
 
 - Status: Proposed
 - Date: 2026-10-24

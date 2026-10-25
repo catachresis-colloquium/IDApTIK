@@ -129,7 +129,9 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(&self) -> Result<Vec<SessionListing>, PersistError> {
+    pub fn list_sessions(
+        &self,
+    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
@@ -377,7 +379,8 @@ impl Store {
         // sequence number.
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
-        let range = commands.range((id.as_str(), checkpoint_at)..=(id.as_str(), u64::MAX))?;
+        let range = commands
+            .range((id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
@@ -503,12 +506,16 @@ impl Store {
         let mut expected: Option<u64> = None;
         let mut last_epoch: Option<u64> = None;
         for (&seq, batch) in &batches {
-            match expected {
-                Some(exp) if seq != exp => {
+            if let Some(exp) = expected {
+                if seq != exp {
                     issues.push(VerifyIssue::MissingSeq {
                         expected: exp,
                         found: seq,
                     });
+                }
+            } else {
+                if seq != 0 {
+                    issues.push(VerifyIssue::NonZeroStart { first: seq });
                 }
                 None if seq != 0 => issues.push(VerifyIssue::NonZeroStart { first: seq }),
                 _ => {}

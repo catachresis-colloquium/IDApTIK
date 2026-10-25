@@ -59,7 +59,7 @@ the signal network is; and the cross-layer references (`circuits` on the
 building, `node` on the grounded graph) are resolved *through* the scenario at
 validation time, which is how `signal` already handles its own.
 
-The design doc, ADR-0013 and both level excerpts are corrected to match — see
+The design doc, ADR-0018 and both level excerpts are corrected to match — see
 §6 of this document and the commit that follows.
 
 ---
@@ -674,7 +674,7 @@ actually pin rather than against a shape the documents still contradict.
 | File | Change |
 |---|---|
 | `infrastructure-interactions.md` §10.1 | `infra` on `ScenarioDefinition`, beside `signal`; the `BuildingDefinition` example is wrong and is replaced |
-| ADR-0013 §"Decision", item 1 | same: the seam is the scenario's, as `signal` is |
+| ADR-0018 §"Decision", item 1 | same: the seam is the scenario's, as `signal` is |
 | `infrastructure-level-1.md` §9 | the excerpt is a scenario payload: `scenario_id`/`floor_id`, not `building_id`/`entry`/`circuits`. Circuits stay on the building and are referenced, not redeclared |
 | `infrastructure-level-2.md` §10 | same |
 | `infrastructure-interactions.md` §14 | mark `rules.cited_if_reachable` and `objectives.reachable` **deferred to M1**, with the reason |
