@@ -41,6 +41,8 @@ VENDORED_NOTITLE='wayland-csd-adwaita-notitle = ["wayland", "winit/wayland-csd-a
 PUBLISHED_WAYLAND='wayland = ["winit/wayland", "winit/wayland-csd-adwaita"]'
 
 say()  { printf '[vendor-winit] %s\n' "$*"; }
+# Report all arguments as one failure message, emit a GitHub Actions error
+# annotation on stdout, and exit with status 1.
 die()  {
   printf '[vendor-winit] FAIL: %s\n' "$*" >&2
   # Also emit a check-run annotation: without it the failure detail exists
@@ -238,6 +240,10 @@ the vendor patch premise needs review"
 
 # ----------------------------------------------------------------- graph ----
 
+# Validate font-parser exclusion and title-free Wayland CSD selection using
+# IDAPTIK_BEVY_WINIT_METADATA when set, otherwise locked Cargo metadata.
+# Requires cargo and jq even with a fixture; exits on missing tools, metadata
+# errors, or graph violations.
 check_graph() {
   need cargo "resolving the workspace dependency graph"
   need jq "inspecting cargo metadata"

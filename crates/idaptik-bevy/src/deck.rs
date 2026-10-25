@@ -406,6 +406,9 @@ fn set(texts: &mut Query<(&CardText, &mut Text)>, which: CardText, text: String)
 }
 
 /// The card's button sends its verb when activated by pointer or keyboard.
+/// Queues a hack for the selected actionable device in the hacker's current
+/// screen view. Ignores other activation targets, activations outside Ghost
+/// Lobby, and selections with no actionable device in that view.
 pub fn card_press(
     activation: On<Activate>,
     card_buttons: Query<(), With<CardVerb>>,

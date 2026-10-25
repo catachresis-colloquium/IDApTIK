@@ -81,6 +81,22 @@ pub enum DeploymentError {
 impl DeploymentAxes {
     /// Validate that the four separate axes form one of the documented
     /// profiles. GSA presence is deliberately not part of these checks.
+    /// Participant and replica IDs are independent sets and need not match.
+    ///
+    /// # Errors
+    ///
+    /// - [`DeploymentError::AtLeastTwoPeersRequired`] if the participant or
+    ///   replica set has fewer than two entries.
+    /// - [`DeploymentError::AtLeastTwoFederatedServersRequired`] if the
+    ///   federation has fewer than two servers.
+    /// - [`DeploymentError::EmptyIdentity`] if a participant, replica,
+    ///   administrative server/operator, or federated authority ID is blank
+    ///   after trimming whitespace.
+    /// - [`DeploymentError::NonzeroAuthorityEpochRequired`] if a hosted or
+    ///   federated authority has epoch zero.
+    /// - [`DeploymentError::AxesDoNotDescribeASupportedProfile`] if the axis
+    ///   combination is unsupported, hosted server IDs differ, or the
+    ///   federated authority is absent from the operator map.
     pub fn validate(&self) -> Result<(), DeploymentError> {
         match (&self.topology, &self.administration, &self.authority) {
             (
@@ -279,6 +295,9 @@ pub struct StateContract {
     pub recovery: Recovery,
 }
 
+/// Return the ADR-0015 ownership, storage, consistency, partition, and recovery
+/// policy for a state class in the given topology. This only describes policy;
+/// it does not create stores or start services.
 pub fn state_contract(class: StateClass, topology: NetworkTopology) -> StateContract {
     use self::CacheStore as Cache;
     use self::Consistency as C;
@@ -553,8 +572,15 @@ pub fn route_authority(
 }
 
 /// Restore the next sequence number from a checkpoint only when it belongs to
-/// the same session and exact authority epoch. Actual storage and fencing are
-/// supplied by the future hosted/federated server implementation.
+/// the same session, authority server, and epoch. Returns one greater than
+/// `checkpoint.committed_through`. Actual storage and fencing are supplied by
+/// the future hosted/federated server implementation.
+///
+/// # Errors
+///
+/// Returns [`RecoveryError::SessionMismatch`] for a different session,
+/// [`RecoveryError::AuthorityMismatch`] for a different server or epoch, or
+/// [`RecoveryError::SequenceExhausted`] when `committed_through` is [`u64::MAX`].
 pub fn recover_next_sequence(
     placement: &SessionPlacement,
     checkpoint: &SessionCheckpoint,

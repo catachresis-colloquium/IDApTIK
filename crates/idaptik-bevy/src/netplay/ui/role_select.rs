@@ -201,6 +201,8 @@ fn hide_role_selection_ui(
 }
 
 /// Handle activation of one of the role-selection buttons.
+/// Records its role, marks selection inactive, requests the normal app state,
+/// and highlights the button if it has a background. Other targets are ignored.
 fn handle_role_button_activation(
     activation: On<Activate>,
     role_buttons: Query<&RoleButton>,

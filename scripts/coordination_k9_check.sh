@@ -14,6 +14,7 @@ case "$FILE" in
   *) FILE="$REPO_DIR/$FILE" ;;
 esac
 
+# Report all arguments as one failure message on stderr and exit with status 1.
 fail() { printf 'coordination-k9: FAIL: %s\n' "$*" >&2; exit 1; }
 [ -r "$FILE" ] || fail "cannot read $FILE"
 
