@@ -2,7 +2,7 @@
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
 #   just test-ghost           -> cargo test (core/tui/ffi/net/evil-weevil) + clippy -D warnings + fmt --check
-#   just evil-weevil-check    -> ADR-0013 deterministic adversarial corpus (offline, no sockets)
+#   just evil-weevil-check    -> ADR-0017 deterministic adversarial corpus (offline, no sockets)
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
@@ -574,7 +574,7 @@ jobs:
             fi
             exit "$rc"
           fi
-      # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
+      # ADR-0017 Evil Weevil offline gate: the full adversarial corpus
       # (binary, redacted artifacts, secret-shape and byte-identical
       # determinism gates), not only the crate's tests already run above.
       # run: step only — no new actions reference, per the actions.lock rule.
@@ -692,7 +692,7 @@ jobs:
         run: cargo install just --version 1.46.0 --locked
       - name: just loopback-check (Burble + ADR-0006 §4 gate)
         run: just loopback-check
-      # ADR-0013 real-relay leg: confirms the in-process relay model against
+      # ADR-0017 real-relay leg: confirms the in-process relay model against
       # the same throwaway local burble (loopback only, guest dummy
       # identity, bounded frames). Reuses the checkout and BEAM toolchain
       # above; run: step only, so the actions.lock set is unchanged.

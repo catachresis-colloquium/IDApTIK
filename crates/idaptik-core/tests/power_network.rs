@@ -1,4 +1,4 @@
-//! The electrical infrastructure (ADR-0013), end to end: the test floor's golden
+//! The electrical infrastructure (ADR-0016), end to end: the test floor's golden
 //! and validator, the arbitration ladder, selective loss, backup runtime,
 //! restart policy, protective trips and resets, exposed power, and the distinct
 //! permissions and costs of a physical cut versus logical rewiring.

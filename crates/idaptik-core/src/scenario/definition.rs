@@ -222,7 +222,7 @@ pub struct ScenarioDefinition {
     /// canonical Ghost Lobby, so its golden and every replay are unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<SignalNetworkDef>,
-    /// The floor's electrical infrastructure (ADR-0013), if it has one. Absent
+    /// The floor's electrical infrastructure (ADR-0016), if it has one. Absent
     /// everywhere else, so a floor without power — the canonical Ghost Lobby,
     /// every recorded replay, the exchange house — is byte-identical.
     #[serde(default, skip_serializing_if = "Option::is_none")]

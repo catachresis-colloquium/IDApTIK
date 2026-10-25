@@ -206,7 +206,11 @@ pub enum VerifyIssue {
         replayed: Buttons,
     },
     /// A checkpoint's `tick` is behind the last batch at or below its `seq`.
-    TickBehindLog { seq: u64, recorded: u64, logged: u64 },
+    TickBehindLog {
+        seq: u64,
+        recorded: u64,
+        logged: u64,
+    },
     /// Epoch went backwards between consecutive batches.
     EpochRegressed { seq: u64, from: u64, to: u64 },
 }

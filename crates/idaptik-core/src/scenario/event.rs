@@ -109,7 +109,7 @@ pub enum Event {
     MoleDenied {
         reason: crate::scenario::common::MoleDenyReason,
     },
-    /// Something happened on the floor's electrical infrastructure (ADR-0013).
+    /// Something happened on the floor's electrical infrastructure (ADR-0016).
     Power {
         power: crate::scenario::power::sim::PowerEvent,
     },

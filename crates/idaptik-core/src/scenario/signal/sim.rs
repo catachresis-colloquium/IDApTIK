@@ -65,7 +65,7 @@ impl Access {
 /// ([`SignalKind::host_outputs`]) are high. Anything else listed is ignored.
 ///
 /// It also says which devices **cannot operate at all** this tick — no supply,
-/// damaged, isolated, or still warming up (ADR-0013). An inert device emits
+/// damaged, isolated, or still warming up (ADR-0016). An inert device emits
 /// nothing and ignores its inputs, so no wire and no command can make it see,
 /// open or speak. The signal network stays the only owner of *what* a device
 /// does; power only decides whether it can.

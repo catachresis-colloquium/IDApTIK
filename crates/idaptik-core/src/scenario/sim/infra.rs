@@ -32,7 +32,6 @@
 use super::GhostLobbySim;
 use crate::netsim::Effect;
 use crate::scenario::agents::apply_effects;
-use crate::scenario::common::Phase;
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
 use crate::scenario::floor_graph::{
@@ -259,13 +258,22 @@ impl GhostLobbySim {
     /// to notice, announce the new episodes, and forget the ended ones so a
     /// recurrence is news again. Player-visible evidence that the guard
     /// reacts to observations (ADR-0014).
+    ///
+    /// The gate is Billy's **presence**, not the phase. A guard who is not in
+    /// the building hears nothing, so `Offsite` suppresses announcement; but
+    /// his awareness is not a phase behaviour, and asserting the phase here as
+    /// well was a second copy of the same test that read as an independent
+    /// rule. It is not one: `begin_crisis` is the only exit from `Offsite` and
+    /// it sets both at once, so `phase == Crisis` implies `mode != Offsite`
+    /// and the conjunction was equivalent to the presence check alone. Stating
+    /// only presence keeps the invariant in one place, and stops the phase
+    /// check from looking like the reason a quiet floor announces nothing when
+    /// the real reason is that nobody is on shift yet.
     pub(super) fn system_infra_watch(&mut self) {
         if self.def.infra.is_none() && self.def.mole.is_none() {
             return;
         }
-        if self.state.phase != Phase::Crisis
-            || self.state.billy.mode == crate::scenario::common::BillyMode::Offsite
-        {
+        if self.state.billy.mode == crate::scenario::common::BillyMode::Offsite {
             return;
         }
         let obs = self.actor_observations(self.state.billy.x);

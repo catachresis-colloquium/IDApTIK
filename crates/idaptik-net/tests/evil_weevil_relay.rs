@@ -1,4 +1,4 @@
-//! The real-relay leg of the Evil Weevil corpus (ADR-0013).
+//! The real-relay leg of the Evil Weevil corpus (ADR-0017).
 //!
 //! Ignored by default: it opens a WebSocket and therefore runs only when
 //! `scripts/evil_weevil_relay_check.sh` starts a throwaway local burble and
@@ -139,7 +139,7 @@ async fn relay_role_table_rejects_misrouted_and_unknown_commands() {
         "role enforcement must refuse the misrouted command"
     );
 
-    // The demonstrated profile gap (ADR-0013): the Signal verb exists in the
+    // The demonstrated profile gap (ADR-0017): the Signal verb exists in the
     // client table but the pinned burble profile carries no Signal entry.
     // Record the observed verdict; if burble adds the entry, this assertion
     // changes and the ADR defect entry is re-evaluated.
