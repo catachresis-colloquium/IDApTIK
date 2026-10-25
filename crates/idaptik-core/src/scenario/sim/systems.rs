@@ -18,6 +18,7 @@ use crate::scenario::common::{
 };
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
+use crate::scenario::guard_brain::GuardBrainKind;
 use crate::scenario::floor_graph::camera_node_id;
 use crate::scenario::ids::RoomId;
 use crate::scenario::mathf::{TICK_DT, approach, clamp, dist, powf, sin};
@@ -877,6 +878,16 @@ impl GhostLobbySim {
                 return;
             }
             _ => {}
+        }
+
+        // Kernel brain: the host queued a proposal for this tick. The kernel
+        // proposes; the game validates and applies it through its own movement
+        // and collision, and the classic FSM chain is bypassed for this tick.
+        if self.guard_brain == GuardBrainKind::Kernel
+            && let Some(decision) = self.guard_decision.take()
+        {
+            self.apply_guard_decision(&decision);
+            return;
         }
 
         // pre-switch fall-through

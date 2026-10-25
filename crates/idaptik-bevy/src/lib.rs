@@ -28,6 +28,8 @@ pub mod cones;
 pub mod deck;
 pub mod driver;
 pub mod fonts;
+#[cfg(feature = "weevil")]
+pub mod guard_weevil;
 pub mod hud;
 pub mod keymap;
 pub mod net_view;
@@ -84,15 +86,23 @@ impl Plugin for FrontendRenderPlugin {
                     hud::update_result_text,
                 )
                     .run_if(in_state(net_view::AppMode::GhostLobby)),
-            )
-            // The split runs in every mode: Net View takes the whole window.
-            .add_systems(
-                Update,
-                (
-                    seats::layout_seats.before(scene::follow_camera),
-                    deck::place_in_panes.after(seats::layout_seats),
-                ),
             );
+
+        // The guard-brain developer view is part of the weevil integration.
+        #[cfg(feature = "weevil")]
+        app.add_systems(
+            Update,
+            hud::update_guard_brain_text.run_if(in_state(net_view::AppMode::GhostLobby)),
+        );
+
+        // The split runs in every mode: Net View takes the whole window.
+        app.add_systems(
+            Update,
+            (
+                seats::layout_seats.before(scene::follow_camera),
+                deck::place_in_panes.after(seats::layout_seats),
+            ),
+        );
     }
 }
 

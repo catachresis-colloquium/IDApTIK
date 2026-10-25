@@ -13,9 +13,18 @@ repository.workspace = true
 idaptik-core = { workspace = true }
 idaptik-net = { workspace = true }
 idaptik-tui = { workspace = true }
+# The Evil Weevil guard brain is opt-in: it links the native kernel library,
+# so it is behind a feature rather than always on. Without it the game builds
+# and plays exactly as before, on the classic guard FSM.
+idaptik-weevil = { workspace = true, optional = true }
 bevy = { workspace = true }
 # Keep native Wayland while avoiding the font parser used only for CSD title text.
 bevy_winit = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
+
+[features]
+# Enables the Evil Weevil guard brain. Requires the native kernel library to be
+# built (see the developer guide); without it, the game uses the classic FSM.
+weevil = ["dep:idaptik-weevil"]

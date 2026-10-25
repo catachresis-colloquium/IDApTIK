@@ -129,6 +129,18 @@ fn main() -> AppExit {
             ),
         });
         app.add_plugins(FrontendPlugin);
+
+        // The Evil Weevil guard brain, opt-in behind the `weevil` feature.
+        // The profile and seed come from the environment so a player can
+        // compare the kernel against the classic FSM without a rebuild.
+        #[cfg(feature = "weevil")]
+        app.add_plugins(idaptik_bevy::guard_weevil::GuardBrainPlugin::for_profile(
+            std::env::var("IDAPTIK_WEEVIL_PROFILE").unwrap_or_else(|_| "cautious-sentry".into()),
+            std::env::var("IDAPTIK_WEEVIL_SEED")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(7),
+        ));
     }
 
     app.run()
