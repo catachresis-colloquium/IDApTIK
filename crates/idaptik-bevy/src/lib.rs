@@ -103,6 +103,7 @@ pub struct FrontendPlugin;
 impl Plugin for FrontendPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(FrontendRenderPlugin)
+            .add_observer(deck::card_press)
             .init_resource::<net_view::NetViewDrag>()
             .init_resource::<wiring::Wiring>()
             .init_resource::<screen::Screen>()
@@ -123,7 +124,6 @@ impl Plugin for FrontendPlugin {
                     wiring::wiring_keys,
                     wiring::wiring_mouse,
                     screen::deck_click,
-                    deck::card_press,
                     wiring::sync_wiring,
                     wiring::draw_wiring,
                     screen::screen_text,

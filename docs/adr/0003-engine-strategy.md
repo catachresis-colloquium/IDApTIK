@@ -14,10 +14,12 @@ rendering.
 
 ## Decision
 
-1. **Keep gameplay truth in an engine-agnostic core crate** (`idaptik-core`)
+1. **Keep game semantics in an engine-agnostic core crate** (`idaptik-core`)
    with no dependency on Bevy or Fyrox. This holds the network/topology model,
-   the simulation, movement rules, and the authoritative state that Elixir
-   coordinates (ADR-0002). It is `no_render` and unit-testable in isolation.
+   simulation, movement rules, and state transitions. The process allowed to
+   commit a session's simulation state is a separate topology-specific choice
+   (ADR-0015); current Elixir/Burble wiring coordinates and relays sessions
+   (ADR-0002). The core is `no_render` and unit-testable in isolation.
 2. **Treat Bevy and Fyrox as interchangeable frontends** over that core, each in
    its own crate (`idaptik-bevy`, `idaptik-fyrox`), during an evaluation
    phase. Both are pulled by Cargo — they are crates, not toolchains (ADR-0001).

@@ -152,11 +152,25 @@ pages-wellknown-test:
 toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 
-# Run every shell fixture suite (no Rust toolchain needed).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test
+# Run every offline shell fixture suite (Rust and Elixir gates remain separate).
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test
 
-# Execute the Mustfile physical-state probes (the estate `must check` verb).
-# Critical probes gate; a probe whose tool is missing fails, never skips.
+must-check-test:
+    bash tests/must_check_test.sh
+
+# Validate DEED, K9 components, Nickel runners, and coordination against pinned standards.
+machine-readable-check:
+    bash scripts/machine_readable_check.sh
+
+# Offline structural regression suites for coordination and migration layout.
+coordination-k9-test:
+    bash tests/coordination_k9_check_test.sh
+
+machine-readable-migration-test:
+    bash tests/machine_readable_migration_test.sh
+
+# Execute the K9 Must component's host-side physical-state probes.
+# Critical probes gate; a required tool missing fails, never skips.
 must-check:
     bash scripts/must_check.sh
 

@@ -1,14 +1,15 @@
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
-#   just test-ghost           -> cargo test (core/tui/ffi) + clippy -D warnings + fmt --check
+#   just test-ghost           -> cargo test (core/tui/ffi/net/evil-weevil) + clippy -D warnings + fmt --check
 #   just evil-weevil-check    -> ADR-0013 deterministic adversarial corpus (offline, no sockets)
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
 #   session loopback          -> relay tests + two-seat determinism/resync
-#   fixture suites            -> shell fixtures (doctor, launcher, vendor gate)
-#   must-check                -> Mustfile physical-state probes
+#   fixture suites            -> offline shell, toolchain, coordination, and migration fixtures
+#   must-check                -> K9 Must component physical-state probes
+#   machine-readable          -> pinned DEED/K9/Nickel and coordination checks
 #
 # The Rust toolchain (channel + clippy/rustfmt/rust-src + wasm32 target) is pinned
 # by rust-toolchain.toml, which rustup installs automatically on first use.
@@ -66,9 +67,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Shell fixture suites + Mustfile probes. These need nothing but the checkout
-  # and (for the rust-formatted probe) the pinned Rust toolchain, so they run
-  # before anything slow.
+  # Shell fixture suites + K9 Must probes. The pinned Rust toolchain is needed
+  # for rustfmt; this gate runs before the slower compiler/bootstrap jobs.
+  # Preserve the established check-run name for branch-protection compatibility;
+  # "Mustfile probes" is a historical label, while the runner below reads K9.
   fixtures-and-must:
     name: fixtures-and-must (shell suites + Mustfile probes)
     runs-on: ubuntu-latest
@@ -140,8 +142,14 @@ jobs:
       # pass over ten small files, about a second.
       - name: Actions lockfile synchronisation (issue #142 class of failure)
         run: ./scripts/check-lock-sync.sh
-      - name: Mustfile physical-state probes
+      - name: Coordination K9 structural fixtures
+        run: bash tests/coordination_k9_check_test.sh
+      - name: Machine-readable migration layout fixtures
+        run: bash tests/machine_readable_migration_test.sh
+      - name: K9 Must component physical-state probes
         run: bash scripts/must_check.sh
+      - name: K9 Must probe rejection fixtures
+        run: bash tests/must_check_test.sh
       # The proof-escape scan needs no Idris2 toolchain, so it lives here
       # rather than in abi-model: a `believe_me` is then caught on every
       # pull request, not only on the ones where the 20-25 minute compiler
@@ -163,6 +171,30 @@ jobs:
         run: ./scripts/doc_claims_check.sh --self-test
       - name: Documentation-claims scan (digest coverage + step-name claims)
         run: ./scripts/doc_claims_check.sh
+
+  machine-readable-conformance:
+    name: machine-readable (DEED, K9, Nickel, coordination)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Pinned DEED/K9 and coordination conformance
+        run: |
+          set +e
+          bash scripts/machine_readable_check.sh > /tmp/machine-readable.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/machine-readable.log
+          if [ "$rc" -ne 0 ]; then
+            detail="$(tail -n 30 /tmp/machine-readable.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+            echo "::error::machine-readable rc=$rc -- $detail"
+            exit "$rc"
+          fi
 
 # Idris2 ABI model gate (issue #103): bootstrap Idris 2 0.8.0 with a source
 # built Chez (no system deps beyond libc), then run the model gate.
@@ -310,6 +342,8 @@ jobs:
       # this check-run's output.title/output.summary.
       checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -366,6 +400,8 @@ jobs:
       # this check-run's output.title/output.summary.
       checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -409,7 +445,42 @@ jobs:
             exit "$rc"
           fi
       - name: Font-parser-free graph with title-free CSD active
-        run: bash scripts/vendor_bevy_winit_check.sh graph
+        run: |
+          cp Cargo.lock /tmp/Cargo.lock.before
+          set +e
+          bash scripts/vendor_bevy_winit_check.sh graph > /tmp/vendor-graph.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/vendor-graph.log
+          if [ "$rc" -ne 0 ]; then
+            set +e
+            cargo metadata --format-version 1 > /tmp/unlocked-metadata.json 2> /tmp/unlocked-metadata.err
+            metadata_rc=$?
+            set -e
+            if [ "$metadata_rc" -eq 0 ]; then
+              diff -u /tmp/Cargo.lock.before Cargo.lock > /tmp/Cargo.lock.diff || true
+              cat /tmp/Cargo.lock.diff
+              detail="$(head -c 50000 /tmp/Cargo.lock.diff | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')"
+              echo "::error::Cargo.lock diff proposed by unlocked metadata: $detail"
+              {
+                echo '### Cargo.lock diff proposed by unlocked cargo metadata'
+                echo '```diff'
+                cat /tmp/Cargo.lock.diff
+                echo '```'
+              } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              cr_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name == "vendor-parity (bevy_winit patch gate)") | .id' 2>/dev/null | head -1)"
+              if [ -n "$cr_id" ]; then
+                jq -n --arg title "Cargo.lock diff proposed by unlocked metadata" --rawfile body /tmp/Cargo.lock.diff \
+                  '{output: {title: $title, summary: ("```diff\n" + $body + "```")}}' > /tmp/lock-drift-patch.json \
+                  && gh api --input /tmp/lock-drift-patch.json -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$cr_id" >/dev/null 2>&1 || true
+              fi
+            else
+              cat /tmp/unlocked-metadata.err
+              detail="$(tail -n 30 /tmp/unlocked-metadata.err | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+              echo "::error::unlocked cargo metadata also failed (rc=$metadata_rc) -- $detail"
+            fi
+            exit "$rc"
+          fi
 
   test-ghost:
     name: test-ghost (core/tui/ffi + clippy + fmt)
@@ -427,7 +498,17 @@ jobs:
       - name: Install just (task runner, same recipe as local)
         run: cargo install just --version 1.46.0 --locked
       - name: just test-ghost
-        run: just test-ghost
+        run: |
+          set +e
+          just test-ghost > /tmp/test-ghost.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/test-ghost.log
+          if [ "$rc" -ne 0 ]; then
+            detail="$(tail -n 220 /tmp/test-ghost.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 45000)"
+            echo "::error::test-ghost rc=$rc -- $detail"
+            exit "$rc"
+          fi
       # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
       # (binary, redacted artifacts, secret-shape and byte-identical
       # determinism gates), not only the crate's tests already run above.
@@ -448,6 +529,8 @@ jobs:
       # this check-run's output.title/output.summary.
       checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 40
     steps:
       - name: Checkout
