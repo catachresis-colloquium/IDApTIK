@@ -17,6 +17,12 @@ asserted in the README and quietly contradicted later.
 | [0010](0010-cac-kernel-grown-in-idaptik-core.md) | The CAC kernel is grown in `idaptik-core`, not extracted yet | Accepted |
 | [0011](0011-cognitive-model-documented-in-the-open.md) | Cognitive-model work is documented in the open | Accepted |
 | [0012](0012-signal-network.md) | A signal network for re-wiring the building lives in `idaptik-core` | Proposed |
+| [0013](0013-water-gas-airflow.md) | Water, gas and airflow are three coarse building systems, not a fluid solver | Proposed |
+| [0014](0014-infrastructure-consequences-as-observations.md) | Infrastructure consequences are canonical-sim facts that reach actors only as observations | Proposed |
+| [0015](0015-deployment-topologies-and-state-ownership.md) | Deployment topologies, simulation authority, and state ownership | Accepted (contract; runtime partial) |
+| [0016](0016-electrical-infrastructure.md) | Electrical infrastructure in `idaptik-core` | Proposed |
+| [0017](0017-evil-weevil-adversarial-testing-adapter.md) | Evil Weevil deterministic adversarial testing adapter | Proposed |
+| [0018](0018-infrastructure-interaction-rules.md) | Infrastructure interactions are composable rules over typed capabilities | Proposed |
 
 New ADRs: copy the format of an existing one, take the next number, and add a row
 above.

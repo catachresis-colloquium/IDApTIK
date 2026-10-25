@@ -94,7 +94,9 @@ of a data-defined building* (`BuildingDefinition`, format `idaptik-scenario/1`):
   disengages it), and an optional `circuit` (an unpowered portal can't be
   traversed; **lifts must declare a circuit**).
 - **`CircuitDef`** — a power feed keyed to a `zone`; cutting its `source`
-  de-powers every portal and controller drawing from it.
+  de-powers every portal and controller drawing from it. It is the building-level
+  precedent for the scenario-level power network below: same idea (one feed, one
+  source, one set of loads), one boolean instead of a model.
 - **`ZoneDef`** — a named region with a dotted `/24 subnet`, mapped **1:1 to a
   netsim segment**.
 
@@ -143,6 +145,29 @@ the "wiring/plumbing" a level contains, and most of it is **derived, not authore
   line** to the substation.
 
 This grounded-network fusion is what took the scenario wire format to `v2`.
+
+## The plant: infrastructure as composable rules
+
+`netsim` answers *who can reach what* and the signal network answers *what
+happens when they get there*, both in booleans. Neither says what the building
+does when a pipe bursts. That is the infrastructure layer
+([design](architecture/infrastructure-interactions.md),
+[catalogue](architecture/infrastructure-rule-catalogue.md), ADR-0018): an
+optional `infra` sub-network on the building definition, evaluated as a staged
+deterministic rule layer over typed capabilities and authored materials.
+
+It is **design of record, not implemented** — the documents say so at the top,
+and ADR-0018 carries the slice plan. What it adds to the picture above is the
+third question a level can ask, and it does so without a second access model, a
+second network or a physics engine: the plant reads `netsim` power, binds to
+signal devices by id, and contributes facts to `signal_readout()` one tick
+later, so the signal graph's one-hop-per-tick propagation is unchanged.
+
+Two playable proofs are specified: [`infrastructure-level-1.md`](scenarios/infrastructure-level-1.md)
+(water, power, a pump, a drain and a crawl — six routes, two of which need no
+power and destroy nothing) and [`infrastructure-level-2.md`](scenarios/infrastructure-level-2.md)
+(the same floor with ventilation and `sable-2`, a fictional gas whose ignition
+depends on its authored class, its concentration band and the room it is in).
 
 ## Actors as data ("Billy as data")
 
@@ -196,8 +221,9 @@ these validated load points.
 
 - **Relay (ADR-0005, landed).** The Elixir `SessionChannel` is **relay-only**: it
   fans byte-preserving `command`/`event` wire enums between the two seats and reads
-  only the routing tag. Determinism (ADR-0004) makes lockstep sound, so no
-  authoritative host process is needed; the relay stays transport-agnostic.
+  only the routing tag. Determinism (ADR-0004) makes lockstep sound for this
+  cooperative vertical slice, so it does not need a host authority; this does
+  not rule out hosted/federated authorities specified in ADR-0015.
 - **Host + transport (ADR-0006, design-accepted, deferred).** The plan wraps the
   Bevy frontend in the **gossamer** desktop shell (a webview host, *not* Tauri) and
   carries the Phoenix socket over **burble** transport for the two-player windowed
@@ -217,10 +243,13 @@ these validated load points.
 | Moletaire companion | Landed module — **seam, not yet wired into the sim** |
 | UMS content load (`load_building` / `load_actor_pack`) | **Live** load points; generator is UMS-side |
 | Signal network (ADR-0012) | **Live** in the sim (opt-in floor), Bevy wiring overlay; netplay pending burble |
+| Electrical infrastructure (ADR-0016) | **Live** in the sim (opt-in floor, test floor only); no frontend overlay, netplay pending burble |
 | gossamer host + burble transport (ADR-0006) | **Design-accepted, deferred** |
 
 ## See also
 
+- ADR-0016 — electrical infrastructure: sources, feeds, loads, protection, backup
+  and exposed power (`docs/electrical-infrastructure.md`)
 - ADR-0004 — deterministic, event-sourced, definition-as-data scenario sim
 - ADR-0005 — session relay topology
 - ADR-0006 — gossamer host window + burble transport (design)

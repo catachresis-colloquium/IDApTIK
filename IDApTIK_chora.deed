@@ -1,0 +1,188 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; SPDX-FileCopyrightText: 2026 IDApTIK contributors
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "IDApTIK"
+  :repo-uuid #u8"gv-clade-index:github.com/catachresis-colloquium/IDApTIK"
+  :beholding-chora #u5"estate/chora"
+  :contractiles_required (adjust bust dust intend must trust)
+
+  (identity
+    :name "IDApTIK"
+    :description "An asymmetric two-player infiltration game built on a deterministic, replayable, cross-platform 2D game runtime."
+    :repository "https://github.com/catachresis-colloquium/IDApTIK"
+    :owner "catachresis-colloquium"
+    :maintainer "@metadatastician"
+    :lineage "Fourth iteration of the IDApTIK game-engine project."
+    :version "0.1.0")
+
+  (front-doors
+    :human "README.md"
+    :agent-startup "0-AI-MANIFEST.deed"
+    :agent-coordination "coordination.k9"
+    :project-state "IDApTIK_chora.deed"
+    :developer-tasks "justfile")
+
+  (licensing
+    :code "AGPL-3.0-or-later"
+    :documentation "CC-BY-SA-4.0"
+    :workflow-and-governance "MPL-2.0"
+    :license-files ("LICENSE" "LICENSES/AGPL-3.0-or-later.txt" "LICENSES/CC-BY-SA-4.0.txt")
+    :marks "IDApTIK and Moletaire names and marks are trademarks; all rights reserved.")
+
+  (lineage
+    :attempt 4
+    :predecessors ("IDApTIK (TypeScript/Excalibur)" "IDApixiTIK (AffineScript/PixiJS)" "idaptik (AffineScript/PixiJS)")
+    :current-implementation "Rust gameplay core with Elixir multiplayer services and selected foreign-function interfaces.")
+
+  (meta
+    :type game
+    :version "0.1.0"
+    :languages (rust nickel shell idris2 zig)
+    :build-tool just
+    :toolchain-manager mise
+    :rust-toolchain "1.97.1"
+    :ci-platform github-actions
+    :last-updated "2026-10-25")
+
+  (ecosystem
+    :gameplay-engine "Rust workspace; deterministic simulation and replay are authoritative."
+    :gameplay-purpose "One player infiltrates a physical space while the other acts through a grounded network simulation; the roles are asymmetric and both players share one world."
+    :session-language "Elixir/OTP in the external Burble service."
+    :windowed-client "Bevy is the current renderer and native input/window layer."
+    :terminal-client "Ratatui/crossterm Ghost Lobby frontend."
+    :multiplayer-runtime "Elixir/Phoenix and the Burble relay provide the current live network path."
+    :game-server-administration "GSA is an optional management integration; no live IDApTIK adapter is claimed."
+    :data-plane "VeriSimDB is optional for operations projections, not a universal gameplay store."
+    :scenario-authoring "Universal Modding Studio authors versioned UMS packages consumed by IDApTIK."
+    :ffi "Rust exports the C ABI; the Idris2 ABI model and Zig adapter/conformance suite are present. Remaining serde-wire work is tracked in issue #103."
+    :related-runtimes ("Bevy frontend" "Bandit/Phoenix Channels" "Nickel configuration" "Universal Modding Studio package boundary")
+    :not "A shared-control co-op game; a disembodied hacker-support role; an engine-locked game; or a LiveView application.")
+
+  (architecture
+    :gameplay-authority "The Rust core owns deterministic gameplay state, typed commands/events, replay, and verification."
+    :client-boundary "Bevy and TUI adapt input/output; they do not own gameplay rules."
+    :network-live-path "The current two-client path uses the Elixir/Phoenix relay; both clients still simulate."
+    :network-architecture "Peer-to-peer, hosted, and federated profiles are modeled separately from the live relay path."
+    :storage-policy "Choose hot state, durability, disposable cache, consistency, partition behavior, and recovery per state class and topology; no single store is imposed."
+    :snif-boundary "SNIF guests perform bounded computation over host-marshalled values and buffers; network and database I/O remain outside the guest."
+    :state-contract-source "docs/adr/0015-deployment-topologies-and-state-ownership.md"
+    :game-config "Nickel schemas and config files under config/ are the typed configuration source.")
+
+  (deployment-contract
+    :topologies (peer-to-peer hosted federated)
+    :gsa-options (absent present)
+    :axis-separation (network-topology administrative-ownership simulation-authority gsa-integration)
+    :status "Architecture contract only beyond the existing relay-only live client path."
+    :peer-to-peer "Peer replicas simulate deterministically without a required central service."
+    :hosted "One configured server is the session authority; loss of authority fails closed."
+    :federated "Independent operators retain administration; a federation directory is advisory and never elects a substitute authority."
+    :state-classes (membership-and-presence pending-inputs active-simulation committed-history federation-directory operator-configuration operations-catalog game-content derived-cache media-playout)
+    :storage-options (rust-process-memory beam-process-ets local-lmdb-journal versioned-package-files optional-verisimdb optional-dragonfly)
+    :cache-policy "ETS may hold volatile hosted or federated membership state; derived ETS or Dragonfly caches are optional and do not own gameplay truth or provide consensus."
+    :evidence "crates/idaptik-net/src/deployment.rs and docs/adr/0015-deployment-topologies-and-state-ownership.md")
+
+  (component-status
+    (component :name "idaptik-kernel" :state live-partial :path "crates/idaptik-kernel/" :role "Float-free types and operations held to Creusot proof boundaries.")
+    (component :name "idaptik-core" :state live :path "crates/idaptik-core/" :role "Deterministic, replayable gameplay rules and state, including grounded network, signal, electrical, water, gas, air, and building runtimes.")
+    (component :name "idaptik-tui" :state live :path "crates/idaptik-tui/" :role "Terminal frontend and headless replay tooling.")
+    (component :name "idaptik-bevy" :state selected-partial :path "crates/idaptik-bevy/" :role "Selected windowed client with renderer, HUD, keymap, interpolation, and parity tests; product shell and visual validation remain.")
+    (component :name "idaptik-net" :state live-partial :path "crates/idaptik-net/" :role "Burble/Phoenix relay client plus declarative deployment and state-placement contracts.")
+    (component :name "idaptik-evil-weevil" :state live-test-adapter :path "crates/idaptik-evil-weevil/" :role "Deterministic, sans-I/O adversarial test corpus for multiplayer acceptance and recovery rules; separate from gameplay AI." :coverage "The corpus runs over the real lockstep, envelope, and sim validators with a read-only fault-versus-hostility observer and local-only enforcement. Scenario EW-06 drives the infrastructure and companion orders and the observation trail; the relay-gap list carries Signal, Mole, and Power.")
+    (component :name "idaptik-ffi" :state partial :path "crates/idaptik-ffi/" :role "Rust C ABI, Idris2 ABI model, and Zig adapter/conformance suite; remaining serde-wire work is tracked in issue #103.")
+    (component :name "idaptik-config" :state live :path "config/" :role "Nickel configuration, scenario schema, and negative fixtures.")
+    (component :name "UMS-package-loader" :state live-v1 :path "crates/idaptik-core/" :role "Versioned package syntax, loader, semantic validation, deterministic execution, snapshot/restore, and replay.")
+    (component :name "UMS-round-trip" :state tested-sibling-gate :path "sibling Universal Modding Studio repository" :role "Round-trip comparison is tested in the sibling UMS repository; it is not a CI workflow in this repository.")
+    (component :name "CAC-trace" :state live-fixture :path "crates/idaptik-core/" :role "Six-stage trace runs in the package round trip; GuardTraceStage mapping to Enaction's Domain remains unvalidated.")
+    (component :name "evidence-ledger" :state in-repo-by-decision :path "crates/idaptik-core/" :role "Evidence ledger and VSM supervisor stay in idaptik-core until the extraction trigger in ADR-0010 fires.")
+    (component :name "Moletaire" :state tested-seam :path "crates/idaptik-core/" :role "Deterministic companion module exists but is not wired into GhostLobbySim."))
+
+  (status
+    :phase Envelope
+    :build-status "Envelope-stage vertical slice; the player-facing windowed shell and fuller gameplay experience remain in progress."
+    :test-status "In-repository Rust, Bevy, configuration, ABI, relay, and Evil Weevil adversarial suites are CI-gated. The cross-repository UMS round trip is gated in the sibling Universal Modding Studio repository, not by this repository's workflows."
+    :live-network-status "Relay-only multiplayer path; both clients simulate."
+    :unimplemented "Direct peer transport, hosted-authority server, federated session routing, and a live GSA adapter are not implemented.")
+
+  (roadmap
+    :current-phase Envelope
+    :next "Complete and validate the coherent two-player windowed slice, including its first art, mechanics, and real-window launch path."
+    :later ("Complete direct peer transport and recovery." "Implement hosted authority with durable local journal and fencing." "Implement advisory federation discovery without authority promotion." "Evaluate GSA and VeriSimDB adapters against their existing contracts."))
+
+  (decision-register
+    (adr :id "ADR-0001" :title "Toolchain and runtime management" :status accepted)
+    (adr :id "ADR-0002" :title "Multiplayer transport: Bandit and Phoenix Channels, not LiveView" :status accepted)
+    (adr :id "ADR-0003" :title "Engine-agnostic core and frontend strategy" :status superseded-in-part)
+    (adr :id "ADR-0004" :title "Deterministic event-sourced scenario simulation" :status accepted)
+    (adr :id "ADR-0005" :title "Session relay topology: relay-only lockstep" :status accepted)
+    (adr :id "ADR-0006" :title "Gossamer host and Burble transport" :status accepted)
+    (adr :id "ADR-0007" :title "IDApTIK-owned versioned UMS package boundary" :status accepted)
+    (adr :id "ADR-0008" :title "Select Bevy and retire Fyrox" :status accepted)
+    (adr :id "ADR-0009" :title "Enaction kernel dependency direction" :status accepted)
+    (adr :id "ADR-0010" :title "CAC kernel remains in idaptik-core until its extraction trigger" :status accepted)
+    (adr :id "ADR-0011" :title "Cognitive-model work is documented in the open" :status accepted)
+    (adr :id "ADR-0012" :title "Signal network for rewiring the building" :status proposed)
+    (adr :id "ADR-0018" :path "docs/adr/0018-infrastructure-interaction-rules.md" :title "Infrastructure interactions are composable rules over typed capabilities" :status proposed)
+    (adr :id "ADR-0013" :path "docs/adr/0013-water-gas-airflow.md" :title "Water, gas, and airflow as coarse building systems" :status proposed)
+    (adr :id "ADR-0016" :path "docs/adr/0016-electrical-infrastructure.md" :title "Electrical infrastructure in idaptik-core" :status proposed)
+    (adr :id "ADR-0017" :path "docs/adr/0017-evil-weevil-adversarial-testing-adapter.md" :title "Evil Weevil adversarial testing adapter" :status proposed)
+    (adr :id "ADR-0014" :path "docs/adr/0014-infrastructure-consequences-as-observations.md" :title "Infrastructure consequences reach actors only as observations" :status proposed)
+    (adr :id "ADR-0015" :path "docs/adr/0015-deployment-topologies-and-state-ownership.md" :title "Deployment topologies and state ownership" :status accepted))
+
+  (settled-boundaries
+    :items ("IDApTIK owns the versioned UMS package contract; UMS consumes it as data and is not linked into the shipped game." "IDApTIK does not import Chronicles of Slavia profile types." "Enaction adoption requires fresh game-host evidence." "The evidence ledger and VSM supervisor stay in idaptik-core until ADR-0010's extraction trigger fires." "Cognition is discrete and event-gated; affect is continuous and joins only at the event-sourced ledger. These mappings remain subject to the referenced cross-repository decisions."))
+
+  (open-decisions
+    :items ("Long-term player-save compatibility, export, and session-log retention beyond live-authority recovery." "Long-term Rust-Elixir wire encoding beyond the current JSON contract." "Canonical era versus switchable style axis." "Public matchmaking, rendezvous, NAT traversal, and consensus-backed cross-server authority transfer." "Canonical proposition language and whether a Dempster-Shafer focal set can contain a non-ground proposition." "Theory-of-mind depth and deterministic resource accounting before nested belief ships." "Whether affect is state or only an event annotation before affect enters Rust." "Verification semantics and requiring a veto to be an event rather than silent substitution before an action gate ships." "First cohesive gameplay loop and initial 2D art direction." "Final authored-content wire representation between UMS and IDApTIK." "Whether adaptive security and anti-cheat work belongs in the simulation envelope." "Which optional operations projections merit a VeriSimDB adapter." "Composable infrastructure interaction rules over capability-typed plant components: ADR-0018 is proposed, docs/architecture/infrastructure-interactions.md is the design of record, and nothing in either document is implemented or tested yet."))
+
+  (route-to-mvp
+    :critical ("Build the Bevy product shell: launch, session/seat choice, Ghost Lobby play, debrief, and restart." "Validate the Bevy frontend in a real window and establish performance/accessibility baselines.")
+    :high ("Add a first intentional art, UI, and sound pass." "Write the era ledger, initial region trope definitions, and story-bible skeleton.")
+    :medium ("Define long-term player-save compatibility and retention beyond per-session authority recovery."))
+
+  (verification-notes
+    :items ("cargo fmt is gated as a fast CI check and inside test-ghost; run it before expensive tests." "cac-kernel-is-fixed-point pins scenario/vsm.rs only; actor/belief.rs, trace.rs, and agents.rs still hold floats and must convert before feeding the ledger." "The cross-repository UMS round-trip gate belongs to the sibling repository; this repo must not claim that its own CI runs it."))
+
+  (governance-binding
+    :human-governance "docs/PROJECT-GOVERNANCE-BINDING.adoc"
+    :claims-register "docs/DOCUMENTATION-CLAIMS.md"
+    :upstream "https://github.com/hyperpolymath/standards"
+    :format-conformance "docs/standards-conformance.md"
+    :assurance-status draft)
+
+  (agentic-routing
+    :startup "0-AI-MANIFEST.deed"
+    :coordination "coordination.k9"
+    :instructions "AGENTS.md"
+    :status-source "IDApTIK_chora.deed"
+    :evidence-source "docs/adr/ and CI workflows")
+
+  (configuration
+    :language Nickel
+    :schema-files ("config/schema.ncl" "config/scenario-schema.ncl")
+    :default-config "config/default.ncl"
+    :scenario-config "config/ghost_lobby_scenario.ncl"
+    :negative-fixtures "config/scenario-fixtures/bad_*.ncl"
+    :validation-command "just config-check")
+
+  (operational-guidance
+    :task-runner "justfile"
+    :player-launcher "launcher.sh"
+    :launcher-manual "docs/man/idaptik-launcher.1"
+    :multiplayer-recovery "docs/MULTIPLAYER-TROUBLESHOOTING.md"
+    :windowed-launch-flow "docs/player-launch-flow.html"
+    :runtime-diagnostics "scripts/runtime-doctor.sh"
+    :runtime-diagnostic-tests "tests/runtime_doctor_test.sh"
+    :wslg-copy-mode "Use the existing troubleshooting and launcher recovery guidance; do not duplicate it in metadata." )
+
+  (contractiles
+    (contractile :verb adjust :component ".machine_readable/contractiles/adjust/adjust.k9.ncl" :runner ".machine_readable/contractiles/adjust/adjust.ncl" :authority advisory)
+    (contractile :verb bust :component ".machine_readable/contractiles/bust/bust.k9.ncl" :runner ".machine_readable/contractiles/bust/bust.ncl" :authority alarm)
+    (contractile :verb dust :component ".machine_readable/contractiles/dust/dust.k9.ncl" :runner ".machine_readable/contractiles/dust/dust.ncl" :authority advisory)
+    (contractile :verb intend :component ".machine_readable/contractiles/intend/intend.k9.ncl" :runner ".machine_readable/contractiles/intend/intend.ncl" :authority reporting)
+    (contractile :verb must :component ".machine_readable/contractiles/must/must.k9.ncl" :runner ".machine_readable/contractiles/must/must.ncl" :authority blocking)
+    (contractile :verb trust :component ".machine_readable/contractiles/trust/trust.k9.ncl" :runner ".machine_readable/contractiles/trust/trust.ncl" :authority blocking))
+
+  (migration
+    :date "2026-10-25"
+    :record "The retired A2ML metadata set was classified into this project deed, six K9 contractile components, and the root coordination protocol. Legacy files, readers, and generation instructions are not active."))

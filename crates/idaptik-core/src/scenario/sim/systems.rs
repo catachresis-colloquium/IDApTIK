@@ -10,7 +10,9 @@
 //! [`crate::scenario::actor::belief`] rather than a private copy.
 
 use super::GhostLobbySim;
+use crate::netsim::Effect;
 use crate::scenario::actor::{self, Leakage, belief};
+use crate::scenario::agents::apply_effects;
 use crate::scenario::command::{Button, Edge, TickInput};
 use crate::scenario::common::{
     BillyMode, ChuteMethod, CrisisReason, ExtractMethod, ObjectKind, ObjectiveStatus, Phase,
@@ -18,6 +20,7 @@ use crate::scenario::common::{
 };
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
+use crate::scenario::guard_brain::GuardBrainKind;
 use crate::scenario::floor_graph::camera_node_id;
 use crate::scenario::ids::RoomId;
 use crate::scenario::mathf::{TICK_DT, approach, clamp, dist, powf, sin};
@@ -71,6 +74,9 @@ impl GhostLobbySim {
     }
 
     // 2. PLAYER ------------------------------------------------------------
+    /// Advance movement, stamina, hiding, and noise by one fixed tick.
+    /// Floor water slows movement and raises movement noise; roof movement
+    /// is unaffected. Rope travel delegates to the rope movement rules.
     pub(super) fn system_player(&mut self, input: &TickInput) {
         let dt = TICK_DT;
         // On the rope the body only goes up or down it.
@@ -106,7 +112,15 @@ impl GhostLobbySim {
         } else {
             self.preset.player_speed
         };
-        let speed = base * if crouch { c::CROUCH_SPEED } else { 1.0 };
+        // Released water is knee-deep on the floor line (ADR-0014): it slows
+        // the player to a wade wherever it has been let in. The roof never
+        // floods, and a dry floor keeps the speed bit-identical to before.
+        let wade = if self.state.player.place == Place::Floor {
+            self.wade_factor_at(self.state.player.x)
+        } else {
+            1.0
+        };
+        let speed = base * if crouch { c::CROUCH_SPEED } else { 1.0 } * wade;
         let target_vx = dir * speed;
         let accel = if dir != 0.0 {
             c::ACCEL_DRIVE
@@ -201,10 +215,25 @@ impl GhostLobbySim {
             };
             self.state.player.noise = self.state.player.noise.max(n);
         }
+        // Wading through released water is loud: the same flood that hides a
+        // hack announces the wader to every ear in the room. A floor with no
+        // water contributes nothing here.
+        if self.state.player.place == Place::Floor
+            && self.state.player.vx.abs() > c::NOISE_MOVE_MIN_VX
+        {
+            let wade_noise = self.wade_noise_at(self.state.player.x);
+            if wade_noise > 0.0 {
+                self.state.player.noise = self.state.player.noise.max(wade_noise);
+            }
+        }
         self.state.player.noise = (self.state.player.noise - c::NOISE_DECAY * dt).max(0.0);
     }
 
     // 3. INTERACTIONS ------------------------------------------------------
+    /// Process nearby interactions and their hold progress for one tick,
+    /// emitting resulting events. Exterior handholds take priority outside;
+    /// indoors, props and chute interactions precede valves and consoles.
+    /// May extract the player and end the run.
     pub(super) fn system_interactions(&mut self, input: &TickInput) {
         let dt = TICK_DT;
         let pw = self.def.player.w;
@@ -299,6 +328,28 @@ impl GhostLobbySim {
                 }
             } else {
                 self.state.chute.progress = (self.state.chute.progress - 1.2 * dt).max(0.0);
+            }
+        }
+
+        // valve handle — the physical release (ADR-0014). A floor that
+        // declares a water zone with a handle in this room lets the
+        // infiltrator turn it by hand, and the zone releases through the
+        // same canonical path a hacked valve node walks: the splash, the
+        // shorts, the alarm and the guard's reaction are identical whichever
+        // way the water was let in.
+        if !active && let Some(zone) = self.valve_handle_at(room, cx) {
+            active = true;
+            if interact_held {
+                self.state.player.valve_turn += dt;
+                self.state.player.vx *= 0.7;
+                if self.state.player.valve_turn >= c::VALVE_TURN_HOLD {
+                    self.state.player.valve_turn = 0.0;
+                    let effects = vec![Effect::WaterReleased(valve_node_id(zone.as_str()))];
+                    let events = apply_effects(&self.def, &mut self.state, self.cfg, &effects);
+                    self.events.extend(events);
+                }
+            } else {
+                self.state.player.valve_turn = (self.state.player.valve_turn - 1.5 * dt).max(0.0);
             }
         }
 
@@ -596,7 +647,11 @@ impl GhostLobbySim {
     // 5. VACUUM ------------------------------------------------------------
     pub(super) fn system_vacuum(&mut self) {
         let dt = TICK_DT;
-        if !self.state.vacuum.active || self.state.vacuum.fallen {
+        // A vacuum with no working supply has no motor, but it has not been
+        // told to stop: the request lives in `active` and this is the gate that
+        // decides whether it can be carried out. Deleting the request would mean
+        // a `Restart::Resume` device that comes back warm could never move again.
+        if !self.state.vacuum.active || self.state.vacuum.fallen || self.power_holds_vacuum() {
             return;
         }
         if self.state.vacuum.x > c::VAC_LAG_X {
@@ -879,6 +934,16 @@ impl GhostLobbySim {
             _ => {}
         }
 
+        // Kernel brain: the host queued a proposal for this tick. The kernel
+        // proposes; the game validates and applies it through its own movement
+        // and collision, and the classic FSM chain is bypassed for this tick.
+        if self.guard_brain == GuardBrainKind::Kernel
+            && let Some(decision) = self.guard_decision.take()
+        {
+            self.apply_guard_decision(&decision);
+            return;
+        }
+
         // pre-switch fall-through
         if self.state.billy.belief.is_some()
             && !self.state.billy.has_note
@@ -913,6 +978,9 @@ impl GhostLobbySim {
         }
     }
 
+    /// Choose Billy's next action while assessing. An existing object belief
+    /// takes priority, then player sight or noise, then an audible infrastructure
+    /// source. Otherwise continue patrol. `sees` is the current player sight test.
     fn billy_assess(&mut self, sees: bool) {
         if self.state.billy.belief.is_some() {
             self.state.billy.target = self.state.billy.belief;
@@ -921,8 +989,18 @@ impl GhostLobbySim {
         }
         let noise_invest = self.state.player.noise > self.actor.stats.invest_noise
             && dist(self.state.billy.x, self.state.player.x) < self.actor.stats.invest_dist;
-        if sees || noise_invest {
-            self.state.billy.last_known_x = self.state.player.x;
+        // Building awareness (ADR-0014): when the guard neither sees the
+        // player nor hears their footsteps, the strongest unusual noise he
+        // can hear — splashing water, arcing shorts, a sounding alarm, a
+        // mole's decoy — pulls his attention to where *it* was heard, never
+        // to where the player is. His own ears are the only input.
+        let infra_pull = if sees || noise_invest {
+            None
+        } else {
+            self.infra_investigation_target()
+        };
+        if sees || noise_invest || infra_pull.is_some() {
+            self.state.billy.last_known_x = infra_pull.unwrap_or(self.state.player.x);
             self.set_billy_mode(if sees {
                 BillyMode::Pursue
             } else {

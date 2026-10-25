@@ -186,9 +186,11 @@ pub enum MoleCommand {
 /// Outbound events (archive `moleEvent`) — game-level consequences for the
 /// caller to act on.
 ///
-/// # Integration seam (not yet wired into `GhostLobbySim`)
+/// # Integration seam (hosted by a floor that declares a mole)
 ///
-/// Per the archive game loop:
+/// A scenario floor folds these into its own world through the host in
+/// `crate::scenario::sim` (ADR-0014); this module never touches scenario
+/// state itself. Per the archive game loop:
 /// * [`MoleEvent::SynthSoundPlayed`] distracts security dogs within **250 px**
 ///   of the mole's position (the sound spawns at the mole);
 /// * [`MoleEvent::VibrationDetected`] feeds the hacker's (Q's) view — the
@@ -362,7 +364,7 @@ pub struct MoletaireSnapshot {
 }
 
 /// The deterministic Moletaire companion simulation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MoletaireSim {
     def: CompanionDefinition,
     seed: u32,
@@ -1108,6 +1110,12 @@ impl MoletaireSim {
     /// The construction seed.
     pub fn seed(&self) -> u32 {
         self.seed
+    }
+    /// The RNG stream, resumed mid-sequence by [`MoletaireSim::restore`]. Read
+    /// by the scenario host that snapshots the mole's changing parts without
+    /// re-carrying the (constant) companion definition every tick.
+    pub fn rng(&self) -> &Mulberry32 {
+        &self.rng
     }
 
     // ── View state and hitbox ──

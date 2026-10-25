@@ -38,7 +38,8 @@ Disallow-Generation: yes
 # For AI agent integration instructions, see:
 #   AGENTS.md                          — the binding repository contract
 #   CLAUDE.md, GEMINI.md               — per-agent entry points
-#   .machine_readable/0-AI-MANIFEST.a2ml — structured state and full invariant list
+#   coordination.k9                     — current agent instructions and invariants
+#   IDApTIK_chora.deed                  — descriptive project state
 #   docs/decisions-pending/            — questions this repository cannot answer
 #                                        for itself, with the evidence gathered
 #

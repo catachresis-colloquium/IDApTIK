@@ -1,0 +1,14 @@
+;; SPDX-FileCopyrightText: 2026 IDApTIK contributors
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(praxis-deed
+  :schema-version "1.0.0"
+  :canonical-name "idaptik-building-authoring"
+  :beholding-chora #u5"estate/chora"
+
+  (rules
+    (rule :priority 10 :text "A building payload is admitted only through load_building: format tag idaptik-scenario/1, then the full validation report must pass. No runtime path may trust an unvalidated definition.")
+    (rule :priority 20 :text "Cross-system references use stable authored node ids only. Minted ids come from the single derivation module for their floor or building; no other module may format a node id by hand.")
+    (rule :priority 30 :text "Fail-secure is the default for lock controllers on a dead circuit: a lock that loses power stays locked and the denial reads Unpowered, not Unlocked.")
+    (rule :priority 40 :text "Capacity caps are part of the contract: columns at most 64, bands at most 8, portals at most 256, grounded nodes at most 512, signal devices at most 128, wires at most 96. A definition over a cap fails validation, not the tick.")
+    (rule :priority 50 :text "Rendering and debug projections are pure functions of runtime state. A view struct never converts into a command; the only mutation paths are the typed command stream and the sim's own systems.")
+    (rule :priority 60 :text "A compromised sensor rewrites knowledge only: fixes, estimates, and readouts. It never writes a truth field; a test that asserts the opposite is a contract violation.")))

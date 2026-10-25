@@ -600,7 +600,11 @@ pub fn ghost_lobby() -> ScenarioDefinition {
         arrival_clock: crate::scenario::definition::ArrivalClock::RunStart,
         consoles: Vec::new(),
         exterior: None,
-        secondary: None,
+        infra: None,
+        mole: None,
+        // The canonical floor has no power network: every device is simply as
+        // alive as the signal graph says, exactly as before ADR-0016.
+        power: None,
     }
 }
 
@@ -644,15 +648,4 @@ mod tests {
             "the Nickel-authored scenario drifted from the Rust-authored definition"
         );
     }
-}
-
-/// The Ghost Lobby definition with its secondary-space network attached:
-/// one maintenance route from the hall grille to the service grille, the
-/// substation feed cable, and the damaged-cable section beside the service
-/// device. Use this for the Moletaire vertical slice; [`ghost_lobby`]
-/// without it is unchanged.
-pub fn ghost_lobby_secondary() -> ScenarioDefinition {
-    let mut def = ghost_lobby();
-    def.secondary = Some(crate::scenario::secondary_spaces::fixture::ghost_lobby_secondary_spec());
-    def
 }

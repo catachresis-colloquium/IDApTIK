@@ -175,10 +175,11 @@ expect_fail "missing jq fails watch" "jq is required" \
 printf 'watch fixtures:\n'
 
 # Clean: today's reality — no released version above the vendored one drops
-# the forced titled CSD (0.20.0-rc.1 still forces it).
+# the forced titled CSD (0.20.1 is a stand-in for the next patch release,
+# which upstream will cut from the same forced-CSD manifest).
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.20.0-rc.1" "$FORCED_WAYLAND" '' false
+  index_line "0.20.1" "$FORCED_WAYLAND" '' false
 } > "$FIXTURE/index-no-split.jsonl"
 expect_pass "forced CSD upstream keeps the patch required" \
   env IDAPTIK_BEVY_WINIT_INDEX="$FIXTURE/index-no-split.jsonl" "$CHECKER" watch
@@ -186,7 +187,7 @@ expect_pass "forced CSD upstream keeps the patch required" \
 # Firing: a newer release ships a title-free CSD feature.
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.20.0" "$FORCED_WAYLAND" \
+  index_line "0.20.1" "$FORCED_WAYLAND" \
     ',"wayland-csd-notitle":["wayland","winit/wayland-csd-adwaita-notitle"]' false
 } > "$FIXTURE/index-notitle.jsonl"
 expect_fail "a notitle feature upstream triggers retirement" "RETIREMENT CONDITION MET" \
@@ -195,7 +196,7 @@ expect_fail "a notitle feature upstream triggers retirement" "RETIREMENT CONDITI
 # Firing: a newer release stops forcing the titled CSD.
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.19.2" '["winit/wayland"]' '' false
+  index_line "0.20.1" '["winit/wayland"]' '' false
 } > "$FIXTURE/index-unforced.jsonl"
 expect_fail "an unforced wayland upstream triggers retirement" "RETIREMENT CONDITION MET" \
   env IDAPTIK_BEVY_WINIT_INDEX="$FIXTURE/index-unforced.jsonl" "$CHECKER" watch
@@ -203,7 +204,7 @@ expect_fail "an unforced wayland upstream triggers retirement" "RETIREMENT CONDI
 # Clean: a yanked release with the split does not count.
 {
   index_line "$VENDOR_VERSION" "$FORCED_WAYLAND" '' false
-  index_line "0.20.0" "$FORCED_WAYLAND" \
+  index_line "0.20.1" "$FORCED_WAYLAND" \
     ',"wayland-csd-notitle":["wayland","winit/wayland-csd-adwaita-notitle"]' true
 } > "$FIXTURE/index-yanked.jsonl"
 expect_pass "yanked split releases are ignored" \
@@ -225,7 +226,7 @@ expect_fail "missing cargo fails graph" "cargo is required" \
 # spelling, which is what broke the graph check in the first place.
 make_metadata() {
   local winit_features="$1"
-  local bw_id="${2:-path+file:///w/vendor/bevy_winit#0.19.1}"
+  local bw_id="${2:-path+file:///w/vendor/bevy_winit#0.20.0}"
   local w_id="${3:-registry+https://github.com/rust-lang/crates.io-index#winit@0.31.0}"
   cat <<JSON
 { "packages": [
@@ -268,7 +269,7 @@ expect_fail "absent CSD feature is rejected" "native Wayland CSD is not wired" \
 # gate reports. Written with a package whose id matches no resolve node.
 make_metadata '["wayland","wayland-csd-adwaita-notitle"]' > "$FIXTURE/meta-nonode.json"
 sed -i 's|"resolve": { "nodes": \[|"resolve": { "nodes": [{"id":"unrelated#0.0.0","features":[]},|' "$FIXTURE/meta-nonode.json"
-sed -i '0,/{"name":"bevy_winit","id":"[^"]*"}/s||{"name":"bevy_winit","id":"path+file:///w/absent#0.19.1"}|' "$FIXTURE/meta-nonode.json"
+sed -i '0,/{"name":"bevy_winit","id":"[^"]*"}/s||{"name":"bevy_winit","id":"path+file:///w/absent#0.20.0"}|' "$FIXTURE/meta-nonode.json"
 expect_fail "a bevy_winit with no resolved node is rejected" "expected exactly one resolved bevy_winit node" \
   env IDAPTIK_BEVY_WINIT_METADATA="$FIXTURE/meta-nonode.json" "$CHECKER" graph
 
@@ -278,6 +279,61 @@ make_metadata '["wayland","wayland-csd-adwaita-notitle"]' > "$FIXTURE/meta-font.
 sed -i 's|{"name":"winit",|{"name":"ttf-parser","id":"registry+x#ttf-parser@0.1.0"},{"name":"winit",|' "$FIXTURE/meta-font.json"
 expect_fail "font-parser crates back in the graph are rejected" "font-parser crates are back in the resolved graph" \
   env IDAPTIK_BEVY_WINIT_METADATA="$FIXTURE/meta-font.json" "$CHECKER" graph
+
+
+# Regression coverage for the real cargo-metadata invocation and its diagnostics.
+# The Cargo stub keeps this path offline and makes stderr/status deterministic.
+mkdir -p "$FIXTURE/cargo-bin"
+cat > "$FIXTURE/cargo-bin/cargo" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$VENDOR_CARGO_ARGS"
+if [ "$VENDOR_CARGO_MODE" = success ]; then
+  cat "$VENDOR_CARGO_JSON"
+else
+  for ((line=1; line<=25; line++)); do
+    printf '  metadata detail %s\n' "$line" >&2
+  done
+  exit 37
+fi
+STUB
+chmod +x "$FIXTURE/cargo-bin/cargo"
+expect_pass 'live metadata path accepts valid Cargo output' \
+  env -u IDAPTIK_BEVY_WINIT_METADATA PATH="$FIXTURE/cargo-bin:$PATH" \
+  VENDOR_CARGO_MODE=success VENDOR_CARGO_ARGS="$FIXTURE/cargo.args" \
+  VENDOR_CARGO_JSON="$FIXTURE/meta-clean.json" "$CHECKER" graph
+expect_pass 'metadata is requested with the lockfile enforced' \
+  grep -Fxq 'metadata --format-version 1 --locked' "$FIXTURE/cargo.args"
+
+rc=0
+env -u IDAPTIK_BEVY_WINIT_METADATA PATH="$FIXTURE/cargo-bin:$PATH" \
+  VENDOR_CARGO_MODE=failure VENDOR_CARGO_ARGS="$FIXTURE/cargo.args" \
+  "$CHECKER" graph > "$FIXTURE/metadata.stdout" 2> "$FIXTURE/metadata.stderr" || rc=$?
+expect_pass 'metadata failure exits with status 1' test "$rc" -eq 1
+expect_pass 'metadata failure emits a useful Actions annotation' \
+  grep -Fq '::error::[vendor-winit] cargo metadata --locked failed;' "$FIXTURE/metadata.stdout"
+expect_pass 'annotation retains the end of the metadata diagnostic' \
+  grep -Fq 'metadata detail 25' "$FIXTURE/metadata.stdout"
+expect_pass 'annotation is a single physical line' \
+  test "$(wc -l < "$FIXTURE/metadata.stdout")" -eq 1
+expect_pass 'diagnostic keeps the last twenty lines' \
+  grep -Fq 'metadata detail 6 ' "$FIXTURE/metadata.stderr"
+if grep -Fq 'metadata detail 5 ' "$FIXTURE/metadata.stderr"; then
+  printf '  FAIL: metadata diagnostic was not limited to its last twenty lines\n' >&2
+  failures=$((failures + 1))
+fi
+
+# A missing patched node produces a single-line error annotation.
+expect_fail 'single-line failure retains its Actions annotation' \
+  '::error::[vendor-winit] expected exactly one resolved bevy_winit node, found 0;' \
+  env PATH="$FIXTURE/cargo-bin:$PATH" IDAPTIK_BEVY_WINIT_METADATA="$FIXTURE/meta-nonode.json" "$CHECKER" graph
+
+# Single-line failures used to emit an empty Actions annotation. Multiline
+# failures must retain every offender while folding whitespace for Actions.
+for tool in ttf-parser ab_glyph; do
+  sed "s/ttf-parser/$tool/g" "$FIXTURE/meta-font.json" > "$FIXTURE/meta-offender.json"
+  expect_fail "annotation names $tool" "::error::[vendor-winit] font-parser crates are back in the resolved graph: $tool" \
+    env PATH="$FIXTURE/cargo-bin:$PATH" IDAPTIK_BEVY_WINIT_METADATA="$FIXTURE/meta-offender.json" "$CHECKER" graph
+done
 
 if [ "$failures" -ne 0 ]; then
   printf 'vendor-winit check fixtures: %d FAILURES\n' "$failures" >&2

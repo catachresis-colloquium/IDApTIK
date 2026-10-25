@@ -5,7 +5,9 @@
 //! edge/uplink commands on a single tick, and `test` injects a Force* hook.
 
 use idaptik_core::scenario::ActionKind;
-use idaptik_core::scenario::command::{Button, Buttons, Command, Edge, PivotTarget, TickInput};
+use idaptik_core::scenario::command::{
+    Button, Buttons, Command, Edge, MoleOp, NetNodeIndex, PivotTarget, TickInput,
+};
 use idaptik_core::scenario::common::{ExtractMethod, FailReason};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +17,12 @@ pub struct ScriptFile {
     pub seed: u32,
     #[serde(default = "default_difficulty")]
     pub difficulty: String,
+    /// Which floor the script runs: absent (or `"ghost-lobby"`) is the
+    /// canonical floor, so every existing script is byte-identical;
+    /// `"ghost-lobby-wired"`, `"ghost-lobby-rooftop"` and `"pump-house"` name
+    /// the other committed floors (see [`crate::headless::scenario_for`]).
+    #[serde(default)]
+    pub scenario: Option<String>,
     #[serde(default)]
     pub reduced_motion: bool,
     /// Run the VSM security-team supervision inside the sim. Defaults off, so
@@ -27,10 +35,6 @@ pub struct ScriptFile {
     /// Optional recorded event log (for `--replay` cross-checking).
     #[serde(default)]
     pub expected_event_log: Option<serde_json::Value>,
-    /// When true, the floor carries secondary spaces (maintenance routes)
-    /// and Moletaire commands are available in this script.
-    #[serde(default)]
-    pub secondary: bool,
 }
 
 fn default_difficulty() -> String {
@@ -94,6 +98,11 @@ pub fn button_from(name: &str) -> Option<Button> {
 
 /// Resolve a script `press` token to a [`Command`]. Public for the same reason
 /// as [`button_from`]: one token vocabulary, resolved identically everywhere.
+/// Trims whitespace and ignores ASCII case. Supports `hack:<node-index>`,
+/// `mole:dig`, `mole:sabotage`, `mole:synth:<index>`, and `mole:move:<x>[:under]`.
+/// Move coordinates are world-x positions. Unknown tokens and numeric parse
+/// failures return `None`; target existence and order availability are checked
+/// by the simulation.
 pub fn press_command(name: &str) -> Option<Command> {
     match name.trim().to_ascii_lowercase().as_str() {
         "jump" | "w" | "space" => Some(Command::Jump),
@@ -130,15 +139,41 @@ pub fn press_command(name: &str) -> Option<Command> {
         // toggle so a script line means the same thing wherever it lands.
         "pause" => Some(Command::Pause { on: true }),
         "resume" => Some(Command::Pause { on: false }),
-        // Moletaire's secondary-space routes (infiltrator seat). Scripted like
-        // any other immediate; the sim refuses them when the floor has no
-        // routes or the mole is not in position.
-        "mole-enter" => Some(Command::MoleEnterRoute),
-        "mole-sabotage" => Some(Command::MoleSabotageCable),
-        "mole-return" => Some(Command::MoleReturnToEntry),
-        "mole-surface" => Some(Command::MoleSurface),
-        _ => None,
+        // The match arm sees the original token, so re-normalise the case for
+        // the parameterised families (`Mole:Dig` means `mole:dig`).
+        _ => parameterised(&name.trim().to_ascii_lowercase()),
     }
+}
+
+/// The parameterised token families: `hack:<node>` for the Net View click and
+/// the `mole:*` orders for a hosted companion (ADR-0014). A malformed token is
+/// `None` exactly like an unknown bare token — scripts are validated by what
+/// they do, and a typo'd order simply never fires.
+fn parameterised(name: &str) -> Option<Command> {
+    if let Some(index) = name.strip_prefix("hack:") {
+        let index: u32 = index.trim().parse().ok()?;
+        return Some(Command::NetHack {
+            node: NetNodeIndex(index),
+        });
+    }
+    let rest = name.strip_prefix("mole:")?;
+    let op = match rest.split(':').collect::<Vec<_>>().as_slice() {
+        ["dig"] => MoleOp::Dig,
+        ["sabotage"] => MoleOp::Sabotage,
+        ["synth", index] => MoleOp::Synth {
+            index: index.trim().parse::<u8>().ok()?,
+        },
+        ["move", x] => MoleOp::MoveTo {
+            x: x.trim().parse::<f64>().ok()?,
+            underground: false,
+        },
+        ["move", x, "under"] => MoleOp::MoveTo {
+            x: x.trim().parse::<f64>().ok()?,
+            underground: true,
+        },
+        _ => return None,
+    };
+    Some(Command::Mole { op })
 }
 
 fn extract_method(name: &str) -> ExtractMethod {

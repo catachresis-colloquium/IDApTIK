@@ -62,6 +62,35 @@ install-idris2:
 doctor:
     @bash scripts/doctor.sh
 
+# --- Environment ---------------------------------------------------------------
+
+# Enter the Guix development environment. Guix is the environment policy (nix is
+# retired); tool VERSIONS still come from mise.toml + rust-toolchain.toml. See
+# docs/dev-notes/toolchain-authority.md.
+guix-shell:
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed: https://guix.gnu.org/guix-install.sh" >&2; exit 1; }
+    guix shell -D -f guix.scm -- bash scripts/doctor.sh
+
+# The same environment in a rootless container (Podman or Docker).
+guix-container:
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed" >&2; exit 1; }
+    guix shell -D -f guix.scm -C --network -- bash scripts/doctor.sh
+
+# Provision rustup. Guix has no rustup package, so this is the step that makes
+# rust-toolchain.toml real inside a Guix shell.
+install-rustup:
+    bash scripts/install-rustup.sh
+
+# Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
+# --self-test plants ten defects and requires the check to catch each.
+toolchain-parity *ARGS:
+    bash scripts/toolchain-parity.sh {{ARGS}}
+
+# Build the dev container. Runtime-agnostic: Podman is the estate default.
+devcontainer-build:
+    @rt=$$(command -v podman || command -v docker) || { echo "neither podman nor docker is installed" >&2; exit 1; }
+    $$rt build -t idaptik-dev -f .devcontainer/Containerfile .
+
 # Diagnose only what players need to launch; unlike `just doctor`, this does
 # not require optional FFI/config development toolchains.
 runtime-doctor:
@@ -118,11 +147,30 @@ lock-sync-check:
 pages-wellknown-test:
     bash tests/pages_wellknown_test.sh
 
-# Run every shell fixture suite (no Rust toolchain needed).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check
+# Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
+# The self-test plants ten defects and requires the check to catch each.
+toolchain-parity-test:
+    bash scripts/toolchain-parity.sh --self-test
 
-# Execute the Mustfile physical-state probes (the estate `must check` verb).
-# Critical probes gate; a probe whose tool is missing fails, never skips.
+# Run every offline shell fixture suite (Rust and Elixir gates remain separate).
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test
+
+must-check-test:
+    bash tests/must_check_test.sh
+
+# Validate DEED, K9 components, Nickel runners, and coordination against pinned standards.
+machine-readable-check:
+    bash scripts/machine_readable_check.sh
+
+# Offline structural regression suites for coordination and migration layout.
+coordination-k9-test:
+    bash tests/coordination_k9_check_test.sh
+
+machine-readable-migration-test:
+    bash tests/machine_readable_migration_test.sh
+
+# Execute the K9 Must component's host-side physical-state probes.
+# Critical probes gate; a required tool missing fails, never skips.
 must-check:
     bash scripts/must_check.sh
 
@@ -159,11 +207,30 @@ replay FILE:
 test:
     cargo test --workspace
 
-# The Ghost Lobby scenario gate: core + tui + ffi + net (does not build Bevy).
+# The Ghost Lobby scenario gate: core + tui + ffi + net + evil-weevil + persist
+# (does not build Bevy). `persist` is here because it is the crate whose job is
+# to notice that a run does not replay to the state it claims -- a test gate that
+# skips it is a gate that skips the invariant.
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets -- -D warnings
+    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist
+    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist --all-targets -- -D warnings
     cargo fmt --all -- --check
+
+# The Evil Weevil adversarial-testing gate (ADR-0017): offline, sans-IO
+# corpus over the real production validators — stale/duplicate messages,
+# invalid targets, epoch conflicts, reconnect/obsolete frames, and
+# delayed/withheld observations with fault-vs-hostility classification, and
+# the infrastructure/companion orders with their observation trail (EW-06).
+# Hard-fails when cargo is missing; needs no Elixir and opens no sockets.
+evil-weevil-check:
+    bash scripts/evil_weevil_check.sh
+
+# The optional real-relay leg: the same relay rules confirmed against a
+# throwaway local burble (needs mix + a sibling burble checkout, like the
+# loopback gate). Not part of test-ghost: it exercises cross-repository
+# behaviour and has its own hard toolchain failure.
+evil-weevil-relay-check:
+    bash scripts/evil_weevil_relay_check.sh
 
 # The ADR-0006 §4 loopback gate: throwaway burble server + seat processes; asserts
 # byte-identical artifacts (vs each other AND the headless reference) for the
@@ -243,3 +310,86 @@ config-regen:
     cargo test -p idaptik-core regenerate_ghost_lobby_floor_json -- --ignored
     cargo test -p idaptik-core regenerate_floor_graph_json -- --ignored
     @echo "config: goldens regenerated"
+
+# --- Evil Weevil guard brain (vertical slice) --------------------------------
+#
+# The kernel is a separate checkout (catachresis-colloquium/evil-weevil).
+# scripts/weevil_kernel.sh locates it, pins the Zig it needs and runs its gates;
+# these recipes are thin wrappers so the resolution logic lives in one readable
+# place. Every one of them FAILS loudly rather than falling back to the classic
+# FSM — a silent fallback would make the comparison the integration exists for
+# meaningless, so a missing kernel is an error and never a skip.
+#
+# Read docs/dev-notes/weevil-local-setup.md for first-time setup and
+# docs/dev-notes/weevil-play.md for running the game and reading the developer
+# view.
+
+# Report every prerequisite: checkout, Zig, cargo, adapter. Exits non-zero if any
+# is missing, so a fresh machine gets the whole picture in one run.
+weevil-doctor:
+    bash scripts/weevil_kernel.sh doctor
+
+# Build the native kernel library (libevil_weevil.a).
+weevil-kernel:
+    bash scripts/weevil_kernel.sh build
+
+# The kernel's own gates: its Zig test suite, then the C null host.
+weevil-kernel-check:
+    bash scripts/weevil_kernel.sh check
+
+# The Rust #[repr(C)] transcription against the generated ee.h. Needs no
+# compiler, so it runs anywhere Python does — including a machine that has not
+# built the kernel yet.
+weevil-abi-mirror:
+    @root="$$(bash scripts/weevil_kernel.sh locate)" && python3 tools/verify_abi_mirror.py "$root/include/evil_weevil/ee.h" crates/idaptik-weevil/src/abi.rs
+
+# Build the adapter crate (links the native kernel).
+weevil-build:
+    cargo build -p idaptik-weevil
+
+# The adapter's tests: the headless replay and its correctness checks. This is
+# the gate that exercises the defects recorded in
+# docs/evidence/weevil-integration-evidence.md, so run it after any change there.
+weevil-test:
+    cargo test -p idaptik-weevil
+
+# The game's own suite. This is the one that proves the classic FSM is unchanged
+# by the seam: the seam is additive and opt-in, and this suite is the check.
+weevil-core-test:
+    cargo test -p idaptik-core
+
+# The whole slice, in order: kernel gates, ABI mirror, adapter tests, game suite.
+weevil-check: weevil-kernel-check weevil-abi-mirror weevil-test weevil-core-test
+
+# --- Headless replay ---------------------------------------------------------
+#
+# No window, no game, no server: the kernel, the adapter and a recorded decision
+# sequence. This is the reproducible half of the milestone and the thing to run
+# first when the adapter will not build.
+
+# Print a decision summary: actions, memory use, blocked and rejected ticks.
+weevil-replay TICKS="200" PROFILE="cautious-sentry" SEED="7":
+    cargo run -q -p idaptik-weevil --bin idaptik-weevil-replay -- --ticks {{TICKS}} --profile {{PROFILE}} --seed {{SEED}}
+
+# Write the replay to JSON.
+weevil-replay-out TICKS="200" PROFILE="cautious-sentry" SEED="7" OUT="/tmp/weevil-replay.json":
+    cargo run -q -p idaptik-weevil --bin idaptik-weevil-replay -- --ticks {{TICKS}} --profile {{PROFILE}} --seed {{SEED}} --out {{OUT}}
+
+# Reproducibility gate: a fresh run must equal the stored replay. The ticks,
+# profile and seed must be the ones the file was written with.
+weevil-replay-check FILE="/tmp/weevil-replay.json" TICKS="200" PROFILE="cautious-sentry" SEED="7":
+    cargo run -q -p idaptik-weevil --bin idaptik-weevil-replay -- --ticks {{TICKS}} --profile {{PROFILE}} --seed {{SEED}} --check {{FILE}}
+
+# --- The game ---------------------------------------------------------------
+
+# Run the game on the kernel brain. Needs a display; on Linux run
+# `just bevy-linux-deps` first. The profile and seed are environment variables,
+# so a player can compare runs without rebuilding.
+weevil-run PROFILE="cautious-sentry" SEED="7":
+    IDAPTIK_WEEVIL_PROFILE={{PROFILE}} IDAPTIK_WEEVIL_SEED={{SEED}} cargo run -q -p idaptik-bevy --features weevil
+
+# The same game on the classic FSM, for the comparison and the rollback. Nothing
+# to configure: the brain is Classic unless the plugin loaded the kernel, so this
+# is the build without the feature.
+weevil-run-classic:
+    cargo run -q -p idaptik-bevy

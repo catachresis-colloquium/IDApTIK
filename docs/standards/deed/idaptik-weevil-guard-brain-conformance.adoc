@@ -1,0 +1,168 @@
+= IDApTIK / Evil Weevil guard brain — DEED conformance report
+:version: 0.1.0
+:status: REPORT
+:toc:
+:toclevels: 3
+
+This report records how the Evil Weevil guard integration conforms to the
+project's normative DEED grammar, and — just as importantly — what was *not*
+verified when it was written.
+
+== Normative grammar
+
+The machine-checkable document is
+link:idaptik-weevil-guard-brain_chora.deed[idaptik-weevil-guard-brain_chora.deed].
+It is a `repo-deed` and was validated against the normative grammar,
+`deed.abnf`, using the owner's own linter:
+
+[source,console]
+----
+$ python3 /home/user/standards/1-formats/deed/tools/deed_lint.py \
+      docs/standards/deed/idaptik-weevil-guard-brain_chora.deed
+OK   docs/standards/deed/idaptik-weevil-guard-brain_chora.deed
+----
+
+The linter used is v1.0.0 (the version shipped with the standards clone); the
+grammar it implements is `deed.abnf` v1.2.0 as normative for parsing. The one
+consequence worth recording: `#u8"…"` literals are legal in v1.2.0 but not in
+the v1.0.0 linter, so this document uses the still-legal `#u5"…"` form.
+
+No new A2ML file was added. A2ML is retired in the standards project and must not
+be extended.
+
+== Checked clauses
+
+[cols="1,3,1"]
+|===
+| ID | Claim | Where
+
+| C1
+| The native integration uses the generated C ABI and never hand-edits a
+  generated header.
+| `crates/idaptik-weevil/src/abi.rs` transcribes the generated `ee.h` as
+  `#[repr(C)]` mirrors with compile-time `size_of!`/`offset_of!` assertions;
+  `build.rs` resolves the library, it does not regenerate the header.
+  **Verified**: `tools/verify_abi_mirror.py` lays out every struct in both
+  languages and reports all seven matching on field name, order, offset and
+  size; the C null host compiles the header under `-Werror` and prints the same
+  sizes and the four golden digests.
+
+| C2
+| The game owns truth, physics, collision, navigation, guard identity and
+  entity lifecycle, and authoritative action validation.
+| `crates/idaptik-core/src/scenario/sim/mod.rs` `guard_perception`,
+  `is_live_target`, `decision_target_x`, `apply_guard_decision`; movement goes
+  through `move_billy_toward`, which enforces the game's own door collision.
+
+| C3
+| The kernel owns per-agent memory and proposes intents only.
+| `crates/idaptik-weevil/src/host.rs` `WeevilHost::tick` returns a proposal;
+  the host never lets the kernel move anything.
+
+| C4
+| Memory is a bearing plus age, not a position. The host owns the last-known
+  position.
+| `crates/idaptik-weevil/src/observation.rs` carries `bearing` + `age_ticks`;
+  `GhostLobbySim::decision_target_x` resolves `INVESTIGATE` against the host's
+  own `last_known_x`. The kernel's memory is never treated as a coordinate.
+
+| C5
+| Replay equality is checked only within an explicitly supported configuration.
+| `crates/idaptik-weevil/src/replay.rs` `replay_equal` refuses to compare two
+  traces whose format, kernel version, ABI fingerprint, profile, seed, tick
+  rate, scenario id or initial context differ, and says why.
+
+| C6
+| The decision-cache identity folds memory, RNG and context into one digest.
+| `crates/idaptik-weevil/src/replay.rs` `decision_identity` hashes the header,
+  the initial per-agent state (including `rng_state` and memory) and every
+  entry's observation, intent and host outcome.
+
+| C7
+| The classic guard FSM remains selectable for comparison and rollback.
+| `GuardBrainKind::{Classic,Kernel}`; `GhostLobbySim::set_guard_brain`;
+  `crates/idaptik-bevy/src/guard_weevil.rs`. The default is `Classic`, so a
+  build without the feature plays exactly as before.
+
+| C8
+| One controlled in-game deception records source, age and confidence against
+  world truth.
+| The robot vacuum is reported to the guard as a `"decoy"` contact while the
+  world's truth about it is that it is a machine doing its rounds
+  (`GhostLobbySim::guard_perception`); `ContactSource::Decoy` and
+  `age_ticks`/`confidence` are recorded in the Rust schema and the replay.
+|===
+
+== What was not verified
+
+This report was written in a sandbox with no Rust toolchain and no access to the
+Rust distribution. Concretely:
+
+* The **kernel** is built and tested: Zig 0.16.0 (the CI-pinned version) builds
+  `libevil_weevil.a`, its suite reports 32/32 passing, and the C null host —
+  compiled from the generated header with `-Werror` — reports `null host: OK`
+  and prints the golden digests.
+* The **ABI mirror** in `crates/idaptik-weevil/src/abi.rs` was verified against
+  that header by `tools/verify_abi_mirror.py`, independently of either
+  compiler.
+* `cargo build`, `cargo test`, `cargo clippy` and `cargo fmt` were **not** run:
+  no Rust toolchain is obtainable in this sandbox (`static.rust-lang.org` and
+  every GitHub release-asset host are blocked, and no PyPI package bundles a
+  real `rustc`).
+* The game was **not** launched; there is no observed-play evidence.
+
+Every Rust file described here is therefore **unverified** until a Rust
+toolchain is available. The claim that the integration works is a *design*
+claim supported by the code and its documentation, not an observed result —
+except for the ABI mirror, which has been checked. See
+`docs/evidence/weevil-integration-evidence.md` for the same distinction.
+
+== Static review findings (not yet compiled)
+
+A careful read of the Rust against the kernel's own source, done in place of a
+compiler, found and fixed six defects. **None of these has been compiled or
+run.** They are recorded so the first `cargo test` reads as a check of the
+fixes rather than of the integration as a whole.
+
+* `DEFAULT_FX_PER_WORLD_UNIT` was `8.0`, which inverts the meaning of the
+  world→fx scale: the kernel's `1.0` attack range would have been one eighth
+  of a canvas unit, so a guard could never close to engage and a corridor
+  patrol crawled at a sixteenth of its speed. The corridor's own door test
+  (`tests/replay_repro.rs::a_guard_pressed_against_a_closed_door_does_not_pass_through_it`)
+  would have failed — at `8.0` the guard covers ~30 canvas units in 240 ticks
+  and never reaches the first closed door, so it is never blocked. Changed to
+  `1.0 / 8.0`, which is what "one fx unit is eight canvas units" requires.
+* `Profile::budget_units` was documented as driving `INTENT_FLAG_DEGRADED`.
+  The v0 `ee_init_desc` has no budget field, so `ee_init` overwrites the
+  context's allowance with a hard-coded 16 while the kernel's `workUnits`
+  reaches 13 at the eight-contact maximum: **degradation cannot fire in v0**
+  and the field changes nothing observable. The claim is now stated as a
+  forward-compatibility declaration, and `WeevilHost::budget_units()` reads
+  back the effective value.
+* `world.rs::apply` recorded `moved: true` on a tick pressed against a closed
+  door, where the guard's position did not change. `moved` is now computed from
+  the position delta, as the game's own `apply_guard_decision` does.
+* `WeevilHost::tick` mapped every unrecognised tick status to `UnknownStatus`,
+  which swallowed the `VERSION_MISMATCH` a context overwrite produces. The
+  status arms are now explicit.
+* `replay_equal` did not compare `scenario_id` or `initial_context`, although
+  both are folded into `decision_identity`; two traces differing only in their
+  starting state would have been called equal.
+* The movement limit was applied in the wrong unit. `max_speed_world` is
+  documented as "world units per tick", but the corridor clamped the kernel's
+  *fx* speed against its fx form; since the kernel advances at 1.0 fx against a
+  1.6 fx ceiling the clamp never bit, and the guard ran at 8 canvas units per
+  tick whatever the profile declared. The limit is now applied in world units
+  after the fx→world conversion.
+
+Two profile fields were also found to have no consumer — `investigate_dist_world`
+and `DecoyTuning` — and are now documented as declared rather than implied.
+`DecoyTuning` was wired into the headless corridor as the deception's authoring
+seam; `investigate_dist_world` stays unconsumed because consuming it needs the
+game to read a profile it does not currently hold.
+
+== Boundary
+
+Native pointer checks are not memory isolation. This adapter is an in-process
+seam around a kernel the host loads, not a security boundary against a hostile
+kernel.

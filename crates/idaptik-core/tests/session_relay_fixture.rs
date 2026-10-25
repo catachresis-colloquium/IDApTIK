@@ -78,6 +78,7 @@ fn command_fixture_covers_the_whole_alphabet() {
         "NetSsh",
         "NetHack",
         "Signal",
+        "Mole",
         "ForceCrisis",
         "ForceExtract",
         "ForceFail",

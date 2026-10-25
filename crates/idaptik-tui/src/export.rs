@@ -1,6 +1,5 @@
-//! The four JSON export surfaces: definition, runtime snapshot, after-action
-//! debrief, and the debug route view (secondary spaces; empty unless the
-//! scripted floor carries a secondary network).
+//! The three Exchange-House-style JSON export surfaces: definition, runtime
+//! snapshot, and after-action debrief.
 
 use idaptik_core::RunConfig;
 use idaptik_core::scenario::{GhostLobbySim, ghost_lobby};
@@ -13,7 +12,6 @@ pub enum ExportKind {
     Definition,
     Snapshot,
     Debrief,
-    Routes,
 }
 
 /// Print the requested export surface. If `script` is given it is run first so
@@ -40,7 +38,6 @@ pub fn run(
         ExportKind::Definition => serde_json::to_string_pretty(&sim.definition_export()),
         ExportKind::Snapshot => serde_json::to_string_pretty(&sim.snapshot()),
         ExportKind::Debrief => serde_json::to_string_pretty(&sim.debrief_export()),
-        ExportKind::Routes => serde_json::to_string_pretty(&sim.route_debug_view()),
     }
     .map_err(|e| format!("serialize: {e}"))?;
     println!("{json}");

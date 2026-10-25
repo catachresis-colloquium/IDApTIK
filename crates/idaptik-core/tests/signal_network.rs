@@ -561,6 +561,88 @@ fn a_latch_flips_on_each_rising_edge_not_each_tick() {
     assert_eq!(toggles(&run(&mut s, &on, 20)), 1);
 }
 
+/// A readout that holds `ids` inert: no supply, damaged, warming up — the
+/// device cannot operate whatever its wires say.
+fn unpowered(ids: &[&str]) -> Readout {
+    let mut r = Readout::default();
+    for id in ids {
+        r.unpower(id);
+    }
+    r
+}
+
+#[test]
+fn a_pulse_interrupted_by_an_outage_finishes_when_power_returns() {
+    // A momentary pulse opens a normally closed door. The supply dies halfway
+    // through it. The mechanism cannot move while it is dark — but the *order*
+    // it was given is still standing, so the door must end up closed once it
+    // has current again. Clearing the countdown and the saved state together
+    // would leave a pulse as an indefinitely open door.
+    let mut s = sim();
+    let all = Access::everyone(s.definition());
+    let pulse = s.definition().tuning.door_pulse_ticks;
+    s.apply(
+        &wire(
+            Seat::Hacker,
+            BRIDGE,
+            OutPort::Compromised,
+            D1,
+            InPort::Pulse,
+        ),
+        &all,
+    );
+    let held = high(BRIDGE, OutPort::Compromised);
+    run(&mut s, &held, 3);
+    assert!(s.device(D1).expect("door").open, "the pulse opened it");
+
+    // Dark for the rest of the pulse and well beyond it.
+    run(&mut s, &unpowered(&[D1]), pulse + 10);
+    // Still open: a mechanism with no current has not finished travelling.
+    assert!(s.device(D1).expect("door").open);
+
+    // Current returns with the input low; the interrupted pulse completes.
+    run(&mut s, &idle(), pulse + 5);
+    assert!(
+        !s.device(D1).expect("door").open,
+        "the pulse ran out and the door went back to closed"
+    );
+}
+
+#[test]
+fn a_relay_that_goes_dark_mid_edge_remembers_no_edge() {
+    // A relay computes `Q` from its cached edge bits, so a coil that dies on the
+    // tick it received an edge is holding a flag it never got to use — and
+    // `Q` would rise again, unprompted, the moment the coil had current.
+    //
+    // Two things must survive an outage: the *level* history (so a wire held
+    // high through the dark does not fire on restore) and the absence of any
+    // edge (because none was delivered). The state is asserted directly: the
+    // pulse a stale flag produces travels R.Q -> L.Toggle and is already tested
+    // for elsewhere.
+    let mut s = relay_rig(Gate::Or);
+    let on = high("T", OutPort::Compromised);
+    s.step(&on);
+    assert!(
+        s.device("R").expect("a relay").a,
+        "the edge landed while the coil was live"
+    );
+
+    let mut dark = on.clone();
+    dark.unpower("R");
+    run(&mut s, &dark, 3);
+
+    let relay = s.device("R").expect("a relay").clone();
+    assert!(
+        !relay.a,
+        "no edge was delivered while inert, so none is kept"
+    );
+    assert!(!relay.b);
+    assert_ne!(
+        relay.prev_in, 0,
+        "but the input level was, so restore is not an edge"
+    );
+}
+
 #[test]
 fn signals_cross_one_wire_per_tick() {
     let mut s = relay_rig(Gate::Or);

@@ -100,14 +100,9 @@ fn main() -> AppExit {
     };
 
     let mut app = App::new();
-    // No audio yet: Bevy's audio plugin opens the default output device at
-    // startup even when nothing plays, which grabs it from the desktop's
-    // sound server. Add it back when the game has sound.
-    app.add_plugins(
-        DefaultPlugins
-            .set(window_plugin)
-            .disable::<bevy::audio::AudioPlugin>(),
-    );
+    // This frontend enables Bevy's 2D and UI feature sets only. Add the audio
+    // feature and plugin deliberately when gameplay sound ships.
+    app.add_plugins(DefaultPlugins.set(window_plugin));
 
     if let Some(netplay_cfg) = netplay_config {
         // Multiplayer mode
@@ -129,6 +124,18 @@ fn main() -> AppExit {
             ),
         });
         app.add_plugins(FrontendPlugin);
+
+        // The Evil Weevil guard brain, opt-in behind the `weevil` feature.
+        // The profile and seed come from the environment so a player can
+        // compare the kernel against the classic FSM without a rebuild.
+        #[cfg(feature = "weevil")]
+        app.add_plugins(idaptik_bevy::guard_weevil::GuardBrainPlugin::for_profile(
+            std::env::var("IDAPTIK_WEEVIL_PROFILE").unwrap_or_else(|_| "cautious-sentry".into()),
+            std::env::var("IDAPTIK_WEEVIL_SEED")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(7),
+        ));
     }
 
     app.run()

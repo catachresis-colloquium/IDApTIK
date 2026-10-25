@@ -1,0 +1,20 @@
+[package]
+name = "idaptik-evil-weevil"
+description = "Evil Weevil: the isolated, deterministic adversarial testing adapter for IDApTIK's multiplayer acceptance rules and recovery behaviour (ADR-0017)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+idaptik-core = { workspace = true }
+idaptik-net = { workspace = true }
+idaptik-tui = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+
+[[bin]]
+name = "idaptik-evil-weevil"
+path = "src/bin/evil_weevil.rs"
