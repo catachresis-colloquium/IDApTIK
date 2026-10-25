@@ -336,22 +336,22 @@ impl GhostLobbySim {
         // same canonical path a hacked valve node walks: the splash, the
         // shorts, the alarm and the guard's reaction are identical whichever
         // way the water was let in.
-        if !active {
-            if let Some(zone) = self.valve_handle_at(room, cx) {
-                active = true;
-                if interact_held {
-                    self.state.player.valve_turn += dt;
-                    self.state.player.vx *= 0.7;
-                    if self.state.player.valve_turn >= c::VALVE_TURN_HOLD {
-                        self.state.player.valve_turn = 0.0;
-                        let effects = vec![Effect::WaterReleased(valve_node_id(zone.as_str()))];
-                        let events = apply_effects(&self.def, &mut self.state, self.cfg, &effects);
-                        self.events.extend(events);
-                    }
-                } else {
-                    self.state.player.valve_turn =
-                        (self.state.player.valve_turn - 1.5 * dt).max(0.0);
+        if !active
+            && let Some(zone) = self.valve_handle_at(room, cx)
+        {
+            active = true;
+            if interact_held {
+                self.state.player.valve_turn += dt;
+                self.state.player.vx *= 0.7;
+                if self.state.player.valve_turn >= c::VALVE_TURN_HOLD {
+                    self.state.player.valve_turn = 0.0;
+                    let effects = vec![Effect::WaterReleased(valve_node_id(zone.as_str()))];
+                    let events = apply_effects(&self.def, &mut self.state, self.cfg, &effects);
+                    self.events.extend(events);
                 }
+            } else {
+                self.state.player.valve_turn =
+                    (self.state.player.valve_turn - 1.5 * dt).max(0.0);
             }
         }
 
