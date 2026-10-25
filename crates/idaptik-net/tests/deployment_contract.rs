@@ -481,9 +481,22 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::UseInstalledContentOrRefuse,
             R::FetchExactContentDigest,
         ),
+        // ADR-0015's derived-cache row is topology-split: P2P requires no
+        // store; hosted/federated use local ETS or optional Dragonfly.
         (
             S::DerivedCache,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::DerivedOnly,
+            H::NotRequired,
+            D::Volatile,
+            None,
+            C::Recomputable,
+            P::CacheMissAndReadSource,
+            R::RecomputeFromAuthority,
+        ),
+        (
+            S::DerivedCache,
+            vec![Hosted, Federated],
             O::DerivedOnly,
             H::EtsOrDragonfly,
             D::Volatile,
@@ -492,9 +505,23 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::CacheMissAndReadSource,
             R::RecomputeFromAuthority,
         ),
+        // Same split in ADR-0015's media-playout row: P2P requires no
+        // store; hosted/federated use the Burble LMDB ring buffer with ETS
+        // fallback.
         (
             S::MediaPlayout,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::MediaSubsystem,
+            H::NotRequired,
+            D::SemanticallyDisposableMediaBuffer,
+            None,
+            C::OrderedBoundedMediaFrames,
+            P::DropMediaFrames,
+            R::FlushAndRejoinMedia,
+        ),
+        (
+            S::MediaPlayout,
+            vec![Hosted, Federated],
             O::MediaSubsystem,
             H::BurbleLmdbRingBufferOrEts,
             D::SemanticallyDisposableMediaBuffer,
