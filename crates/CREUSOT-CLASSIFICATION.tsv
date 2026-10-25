@@ -197,6 +197,15 @@ T	crates/idaptik-bevy/tests/interp_parity.rs	test
 T	crates/idaptik-bevy/tests/net_view_smoke.rs	test
 T	crates/idaptik-bevy/tests/parity.rs	test
 T	crates/idaptik-net/tests/mole_routing.rs	test
+D	crates/idaptik-persist/src/digest.rs	FNV-1a 64 over definition bytes; identity and corruption detection, proved by published test vectors, not by Creusot
+L	crates/idaptik-persist/src/store.rs	the durable log and replay; a wrong answer resumes a run into state it never had, and is silent until the next divergence -- observed by tests/persist.rs
+L	crates/idaptik-persist/src/record.rs	Store-facing records and verify reports; declared in every report shown to the player, round-trip tested
+D	crates/idaptik-persist/src/schema.rs	table names and the schema tag; constants, validated by the schema-mismatch test
+D	crates/idaptik-persist/src/error.rs	error text and the redb conversions; no logic of its own
+P	crates/idaptik-persist/src/lib.rs	crate documentation and re-exports
+T	crates/idaptik-persist/tests/persist.rs	observes the store; verifying it would be circular
+T	crates/idaptik-bevy/tests/button_activation.rs	observes the frontend; verifying it would be circular
+T	crates/idaptik-net/tests/deployment_contract.rs	observes the transport contract; verifying it would be circular
 T	crates/idaptik-tui/tests/headless_smoke.rs	test
 T	crates/idaptik-tui/tests/infra_script.rs	test
 T	crates/idaptik-tui/tests/net_smoke.rs	test

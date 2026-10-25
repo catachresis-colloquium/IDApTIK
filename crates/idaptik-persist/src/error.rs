@@ -38,10 +38,7 @@ pub enum PersistError {
     DigestMismatch { expected: String, found: String },
     /// A command batch was appended at a sequence number at or below the one
     /// already recorded. The log is append-only; this is a caller bug.
-    SeqRegression {
-        last: u64,
-        attempted: u64,
-    },
+    SeqRegression { last: u64, attempted: u64 },
     /// A snapshot's own format tag is not the one this build can restore.
     FormatMismatch { found: String, expected: String },
     /// A stored snapshot could not be rebuilt into a running simulation.
@@ -73,7 +70,10 @@ impl fmt::Display for PersistError {
             Self::NotAnObject => write!(f, "snapshot payload is not a JSON object"),
             Self::MissingDefinition(d) => write!(f, "definition blob {d} is missing"),
             Self::DigestMismatch { expected, found } => {
-                write!(f, "definition digest mismatch: stored {expected}, computed {found}")
+                write!(
+                    f,
+                    "definition digest mismatch: stored {expected}, computed {found}"
+                )
             }
             Self::SeqRegression { last, attempted } => write!(
                 f,

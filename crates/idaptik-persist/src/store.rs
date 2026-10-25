@@ -1,5 +1,6 @@
 //! The store itself: open, append, checkpoint, resume, verify.
 
+use crate::SCHEMA_VERSION;
 use crate::digest::digest_hex;
 use crate::error::PersistError;
 use crate::record::{
@@ -7,7 +8,6 @@ use crate::record::{
     VerifyReport,
 };
 use crate::schema::{self, BLOBS, CHECKPOINTS, COMMANDS, META, SESSIONS};
-use crate::SCHEMA_VERSION;
 use idaptik_core::scenario::{Buttons, Command, GhostLobbySim, RuntimeSnapshot, fold};
 use redb::{Database, ReadableTable};
 use std::collections::BTreeMap;
@@ -76,7 +76,8 @@ impl Store {
                     meta.insert(schema::SCHEMA_KEY, bytes.as_slice())?;
                 }
                 Some(bytes) => {
-                    let found: u32 = serde_json::from_slice(&bytes).map_err(PersistError::Decode)?;
+                    let found: u32 =
+                        serde_json::from_slice(&bytes).map_err(PersistError::Decode)?;
                     if found != SCHEMA_VERSION {
                         return Err(PersistError::SchemaMismatch {
                             found,
@@ -124,14 +125,19 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(&self) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
+    pub fn list_sessions(
+        &self,
+    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
         for entry in sessions.iter()? {
             let (k, v) = entry?;
             let id = SessionId::new(k.value());
-            out.push((id, serde_json::from_slice(v.value()).map_err(|e| e.to_string())));
+            out.push((
+                id,
+                serde_json::from_slice(v.value()).map_err(|e| e.to_string()),
+            ));
         }
         Ok(out)
     }
@@ -465,7 +471,10 @@ impl Store {
         for (&seq, batch) in &batches {
             match expected {
                 Some(exp) if seq != exp => {
-                    issues.push(VerifyIssue::MissingSeq { expected: exp, found: seq });
+                    issues.push(VerifyIssue::MissingSeq {
+                        expected: exp,
+                        found: seq,
+                    });
                 }
                 None if seq != 0 => issues.push(VerifyIssue::NonZeroStart { first: seq }),
                 _ => {}
@@ -501,8 +510,7 @@ impl Store {
         match rec.sim_kind {
             SimKind::GhostLobby => {
                 if let Some((&first_at, first_cp)) = cps.iter().next() {
-                    let (base, base_paused, base_held) =
-                        materialise(&txn, first_cp.clone())?;
+                    let (base, base_paused, base_held) = materialise(&txn, first_cp.clone())?;
                     let mut sim = match GhostLobbySim::restore(base.definition.clone(), base) {
                         Ok(s) => s,
                         Err(e) => {
@@ -712,8 +720,7 @@ fn materialise(
     let obj = body.as_object_mut().ok_or(PersistError::NotAnObject)?;
     obj.insert("definition".to_owned(), definition);
 
-    let snapshot: RuntimeSnapshot =
-        serde_json::from_value(body).map_err(PersistError::Decode)?;
+    let snapshot: RuntimeSnapshot = serde_json::from_value(body).map_err(PersistError::Decode)?;
     Ok((snapshot, record.paused, record.held))
 }
 

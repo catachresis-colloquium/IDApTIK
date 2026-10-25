@@ -227,10 +227,19 @@ pub enum VerifyIssue {
     TickBehindLog { at: u64, recorded: u64, logged: u64 },
     /// Replaying the log produced a different simulation state from the one the
     /// checkpoint recorded. The `field` names the first thing that differed.
-    StateMismatch { at: u64, field: String, replayed: String, recorded: String },
+    StateMismatch {
+        at: u64,
+        field: String,
+        replayed: String,
+        recorded: String,
+    },
     /// Two checkpoints in one session carry different definitions, so they
     /// cannot be compared by replay at all.
-    DefinitionMismatch { at: u64, expected: String, found: String },
+    DefinitionMismatch {
+        at: u64,
+        expected: String,
+        found: String,
+    },
     /// Verification could not replay the simulation for this session kind, so
     /// only the log-level checks ran.
     StateUnverified { reason: String },
