@@ -324,14 +324,19 @@ impl Scenario for InfraOrdersScenario {
         //   synth -- so a shadow of the same deterministic run (same seed,
         //   same script, same crisis frame, no companion frames) lands Billy
         //   exactly where the production run has him at the synth tick.
-        let mut shadow =
-            LockstepCore::new(Role::Hacker, 1, &script).expect("shadow core builds");
-        shadow.on_peer_commit(1).expect("shadow: opening commit accepted");
+        let mut shadow = LockstepCore::new(Role::Hacker, 1, &script).expect("shadow core builds");
+        shadow
+            .on_peer_commit(1)
+            .expect("shadow: opening commit accepted");
         let crisis_frame = wire::with_seq(wire::typed_command(SCENE_AT, &Command::ForceCrisis), 4);
-        let (at, cmd) = idaptik_net::envelope::decode_command(&crisis_frame)
-            .expect("crisis frame decodes");
-        shadow.on_peer_command(at, cmd).expect("shadow: crisis accepted");
-        shadow.on_peer_commit(SYNTH_AT + 4).expect("shadow: horizon commit accepted");
+        let (at, cmd) =
+            idaptik_net::envelope::decode_command(&crisis_frame).expect("crisis frame decodes");
+        shadow
+            .on_peer_command(at, cmd)
+            .expect("shadow: crisis accepted");
+        shadow
+            .on_peer_commit(SYNTH_AT + 4)
+            .expect("shadow: horizon commit accepted");
         let mut shadow_feed = ScriptFeed::new(&script, Role::Hacker);
         let mut billy_at_synth: Option<f64> = None;
         for _ in 0..=(SYNTH_AT + 2) {
@@ -345,7 +350,7 @@ impl Scenario for InfraOrdersScenario {
                 }
             });
         }
-        let billy_at_synth = billy_at_synth.expect("shadow reached the synth tick");
+        let billy_at_synth: f64 = billy_at_synth.expect("shadow reached the synth tick");
 
         // The diversion target: inside the 260-unit hearing gate (the gate
         // is strict, so keep a 40-unit corridor and stand at its centre) and
@@ -363,7 +368,7 @@ impl Scenario for InfraOrdersScenario {
         let max_walk_px = (SYNTH_AT - SCENE_AT - WALK_MARGIN_TICKS) as f64 * WALK_PX_PER_TICK;
         let reachable_lo = 390.0 - max_walk_px;
         let lo = reachable_lo.max(billy_at_synth - HEARING);
-        let hi = 390.0.min(billy_at_synth + HEARING);
+        let hi = 390.0_f64.min(billy_at_synth + HEARING);
         let corridor = hi - lo;
         let mole_target = (lo + hi) / 2.0;
         harness.check(
