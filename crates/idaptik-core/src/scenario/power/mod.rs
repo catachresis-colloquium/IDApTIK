@@ -4,7 +4,7 @@
 //! The signal network ([`crate::scenario::signal`]) answers *what happens when a
 //! command lands*; the grounded network ([`crate::netsim`]) answers *who can
 //! reach what*. This module answers the question underneath both: **is there
-//! any power, and is the device allowed to run?** See ADR-0013.
+//! any power, and is the device allowed to run?** See ADR-0016.
 //!
 //! The model is deliberately small. It is not a circuit solver: no volts, no
 //! amps, no impedance, no inrush. Every quantity is an abstract integer with a

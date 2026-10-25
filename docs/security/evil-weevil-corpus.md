@@ -3,7 +3,7 @@
 - Date: 2026-10-24 (updated 2026-10-25: EW-06 added)
 - Corpus version: `2` (`CORPUS_VERSION` in `crates/idaptik-evil-weevil/src/scenarios/mod.rs`)
 - Report schema: `idaptik-evil-weevil-corpus-v1`
-- Decision record: [ADR-0013](../adr/0013-evil-weevil-adversarial-testing-adapter.md)
+- Decision record: [ADR-0017](../adr/0017-evil-weevil-adversarial-testing-adapter.md)
 - Code: `crates/idaptik-evil-weevil/` (sans-IO, `#![forbid(unsafe_code)]`)
 
 This document is the runbook for the first, fixed adversarial corpus. It

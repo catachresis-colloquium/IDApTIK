@@ -3,7 +3,7 @@
 - Last revised: 2026-10-25, for branch `arena/1287ad93-idaptik`
 - Purpose: let one operator, on one machine, reproduce **every required
   CI gate** from a clean checkout, record each verdict, and report back.
-- House doctrine (AGENTS.md, ADR-0013): a gate that cannot find its
+- House doctrine (AGENTS.md, ADR-0017): a gate that cannot find its
   toolchain **fails, never skips**. If a command prints "tool missing",
   that is a FAIL result for the gate, not a reason to tick it.
 
@@ -126,7 +126,7 @@ infrastructure-order perception contract and the ADR-0015
 `state_contract` table (`crates/idaptik-net/tests/deployment_contract.rs`,
 30 topology/class cells).
 
-### G3 — Evil Weevil offline adversarial corpus (ADR-0013)
+### G3 — Evil Weevil offline adversarial corpus (ADR-0017)
 
 ```bash
 just evil-weevil-check
@@ -289,7 +289,7 @@ Requires §3's sibling burble checkout and OTP/Elixir from §1.
 # two live delay-lockstep seats, mid-stream kills, snapshot resync.
 just loopback-check
 
-# ADR-0013 real-relay leg against the same throwaway server:
+# ADR-0017 real-relay leg against the same throwaway server:
 # guest dummy identity, bounded frames, loopback only.
 just evil-weevil-relay-check
 ```

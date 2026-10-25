@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# The Evil Weevil real-relay leg (ADR-0013): confirms the in-process relay
+# The Evil Weevil real-relay leg (ADR-0017): confirms the in-process relay
 # model against a throwaway, local, isolated burble GameChannel. It uses
 # the fixed burble test port (4002 — hard-coded in burble's config/test.exs,
 # same convention as scripts/loopback_check.sh; hosted runners are isolated

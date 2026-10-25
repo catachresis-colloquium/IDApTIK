@@ -170,7 +170,7 @@ pub enum Command {
     /// a floor with no mole; the mole is the infiltrator's companion, so the
     /// seat table routes it to the infiltrator.
     Mole { op: MoleOp },
-    /// Immediate: work the floor's electrical infrastructure (ADR-0013) —
+    /// Immediate: work the floor's electrical infrastructure (ADR-0016) —
     /// cut a cable by hand, rewire a load, work a breaker, throw a source,
     /// switch a device, or ask why one is off. `op` says which, and the sim
     /// checks that seat can touch what it names.

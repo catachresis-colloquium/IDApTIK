@@ -179,9 +179,9 @@ external follow-up on the introducing PR.
 **Relationship to the adjacent building systems.** Three neighbours landed on
 `main` while this ADR was written, all currently sharing the 0013 slot pending
 a numbering cleanup there: the power network
-(`0013-electrical-infrastructure.md`), the coarse water/gas/airflow systems
+(`0016-electrical-infrastructure.md`), the coarse water/gas/airflow systems
 (`0013-water-gas-airflow.md`) and the Evil Weevil adversarial testing adapter
-(`0013-evil-weevil-adversarial-testing-adapter.md`). This ADR's water zones are
+(`0017-evil-weevil-adversarial-testing-adapter.md`). This ADR's water zones are
 scenario-local flood machinery for driving actors; they do not compete with the
 coarse water system, which moves the building's water between rooms — one owns
 "this room is flooding", the other owns "where the building's water goes". The

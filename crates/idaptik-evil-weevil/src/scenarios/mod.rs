@@ -1,7 +1,7 @@
 //! The bounded adversarial corpus.
 //!
 //! Every scenario is a fixed, deterministic script over the shared agent
-//! interface — the "start simple" slice of ADR-0013. Each one declares the
+//! interface — the "start simple" slice of ADR-0017. Each one declares the
 //! five things the task requires: its principal and permitted operations,
 //! the protocol invariant under test, its exact bounded input sequence, the
 //! expected rejection/acceptance/recovery, and the observable result and

@@ -603,7 +603,7 @@ pub fn ghost_lobby() -> ScenarioDefinition {
         infra: None,
         mole: None,
         // The canonical floor has no power network: every device is simply as
-        // alive as the signal graph says, exactly as before ADR-0013.
+        // alive as the signal graph says, exactly as before ADR-0016.
         power: None,
     }
 }

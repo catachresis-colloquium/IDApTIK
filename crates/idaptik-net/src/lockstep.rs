@@ -182,7 +182,7 @@ impl LockstepCore {
 
     /// The peer's committed watermark: the first tick the peer has not
     /// committed through. Read-only observability for the adversarial test
-    /// adapter (ADR-0013), which must target the exact post-loss frontier
+    /// adapter (ADR-0017), which must target the exact post-loss frontier
     /// when proving obsolete frames are rejected. Production drivers derive
     /// the same value implicitly through [`Self::blocked_on_peer`].
     pub fn peer_watermark(&self) -> u64 {

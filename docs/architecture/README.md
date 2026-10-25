@@ -10,7 +10,7 @@ integration boundaries.
 - [Observer-relative evidence ledger](evidence-ledger-design.adoc)
 - [UMS package contract ownership](ums-package-contract.md)
 - [Infrastructure interactions](infrastructure-interactions.md) — the plant as a
-  staged, deterministic rule layer over typed capabilities (ADR-0013)
+  staged, deterministic rule layer over typed capabilities (ADR-0018)
 - [Infrastructure M0 acceptance tests](infrastructure-m0-acceptance-tests.md) —
   the tests written before the loader exists, and where `infra` hangs
 - [Infrastructure rule catalogue](infrastructure-rule-catalogue.md) — the eleven

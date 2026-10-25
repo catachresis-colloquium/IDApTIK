@@ -152,12 +152,12 @@ This grounded-network fusion is what took the scenario wire format to `v2`.
 happens when they get there*, both in booleans. Neither says what the building
 does when a pipe bursts. That is the infrastructure layer
 ([design](architecture/infrastructure-interactions.md),
-[catalogue](architecture/infrastructure-rule-catalogue.md), ADR-0013): an
+[catalogue](architecture/infrastructure-rule-catalogue.md), ADR-0018): an
 optional `infra` sub-network on the building definition, evaluated as a staged
 deterministic rule layer over typed capabilities and authored materials.
 
 It is **design of record, not implemented** — the documents say so at the top,
-and ADR-0013 carries the slice plan. What it adds to the picture above is the
+and ADR-0018 carries the slice plan. What it adds to the picture above is the
 third question a level can ask, and it does so without a second access model, a
 second network or a physics engine: the plant reads `netsim` power, binds to
 signal devices by id, and contributes facts to `signal_readout()` one tick
@@ -243,12 +243,12 @@ these validated load points.
 | Moletaire companion | Landed module — **seam, not yet wired into the sim** |
 | UMS content load (`load_building` / `load_actor_pack`) | **Live** load points; generator is UMS-side |
 | Signal network (ADR-0012) | **Live** in the sim (opt-in floor), Bevy wiring overlay; netplay pending burble |
-| Electrical infrastructure (ADR-0013) | **Live** in the sim (opt-in floor, test floor only); no frontend overlay, netplay pending burble |
+| Electrical infrastructure (ADR-0016) | **Live** in the sim (opt-in floor, test floor only); no frontend overlay, netplay pending burble |
 | gossamer host + burble transport (ADR-0006) | **Design-accepted, deferred** |
 
 ## See also
 
-- ADR-0013 — electrical infrastructure: sources, feeds, loads, protection, backup
+- ADR-0016 — electrical infrastructure: sources, feeds, loads, protection, backup
   and exposed power (`docs/electrical-infrastructure.md`)
 - ADR-0004 — deterministic, event-sourced, definition-as-data scenario sim
 - ADR-0005 — session relay topology

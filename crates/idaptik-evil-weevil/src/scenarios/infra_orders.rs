@@ -6,14 +6,17 @@
 //! acceptance rules as every other frame — the relay's role table is the
 //! seat authority and fails closed on tags it does not carry, the lockstep
 //! watermark rejects stale orders, an accepted order reaches the sim as a
-//! typed command — and the consequences it sets off enter canonical state
-//! (a `DiversionState`) and flow back through the production perception door
-//! (`GhostLobbySim::actor_observations`) strictly as what an actor's own
-//! senses can perceive, never as a leak of the hidden order. The
-//! player-visible `Event::GuardObserved` announce path is additionally
-//! gated on Crisis phase and hearing range; its positive case is proved by
-//! idaptik-core's own `infra_observations` suite, while this scenario pins
-//! the gates it cannot cross in a short lockstep run.
+//! typed command — and the consequences it sets off come back through the
+//! canonical event log *as observations* (`Event::GuardObserved`) computed
+//! by the actor's own senses, never as a leak of the hidden order.
+//!
+//! Two preconditions decide whether that second half can be observed at all,
+//! and the run states both rather than assuming them: the guard has to be on
+//! shift (Billy is `Offsite` until a crisis, and an off-site guard hears
+//! nothing), and the noise has to land inside his hearing radius at the
+//! position the crisis assigns him. A diversion played at the mole's spawn is
+//! 364 units away against a 260-unit gate: audible in the abstract, never
+//! heard in fact.
 //!
 //! Cross-repository finding, recorded not simulated: at the pinned burble
 //! revision `command_roles()` carries neither `Mole` nor `Power`, so the
@@ -33,10 +36,8 @@ use crate::relay_model::RelayModel;
 use crate::telemetry::ViolationKind;
 use crate::wire;
 use idaptik_core::companion::MoleEvent;
-use idaptik_core::scenario::DiversionState;
-use idaptik_core::scenario::Phase;
 use idaptik_core::scenario::command::{Command, MoleOp};
-use idaptik_core::scenario::constants::MOLE_SYNTH_NOISE;
+use idaptik_core::scenario::common::BillyMode;
 use idaptik_core::scenario::event::Event;
 use idaptik_core::scenario::infra::ObservationKind;
 use idaptik_core::scenario::power::sim::{PowerIndex, PowerOp};
@@ -46,21 +47,21 @@ use idaptik_net::lockstep::{LockstepCore, ScriptFeed};
 
 const ID: &str = "EW-06-infrastructure-orders-and-observations";
 
-/// What the perception probes captured on the tick the synth diversion
-/// played. All fields come from production surfaces: the phase and diversion
-/// out of canonical [`idaptik_core::scenario::RuntimeState`], the observation
-/// lists out of `GhostLobbySim::actor_observations` — the only door the
-/// guard's own watch system uses.
-#[derive(Debug)]
-struct PerceptionCapture {
-    phase: Phase,
-    billy_x: f64,
-    diversion: Option<DiversionState>,
-    /// Observation kinds at Billy's actual position.
-    at_billy: Vec<ObservationKind>,
-    /// Observation kinds at a position inside the diversion's hearing range.
-    in_earshot: Vec<ObservationKind>,
-}
+/// The tick the diversion is played on. Late enough that the mole has walked
+/// from its spawn (390) into the guard's hearing at 240: 150 units at the
+/// companion's 200 px/s underground is 0.75 s, and `TICK_DT` is 1/60.
+const SYNTH_AT: u64 = 52;
+
+/// The tick the scene is set on. Not tick 1: a commit *through* `n` advances
+/// the peer watermark to `n + 1`, so the opening `feed_commit(.., 1)` in this
+/// scenario would reject a frame for tick 1 as arriving after its own commit.
+/// Tick 2 is the first the watermark permits.
+const SCENE_AT: u64 = 2;
+
+/// The peer watermark committed before the run is driven. Past the synth, so
+/// the tick the diversion plays on is provably uncommitted until now and then
+/// executed.
+const HORIZON: u64 = SYNTH_AT + 4;
 
 /// The fixed, bounded input sequence. Every frame is pre-declared; nothing
 /// is discovered or generated at runtime.
@@ -84,25 +85,32 @@ fn inputs() -> Vec<InputSpec> {
         },
         InputSpec {
             step: 3,
-            intent: "ForceCrisis (harness control) then the same Mole order on the \
-                     infiltrator peer path, at the frontier, direct to the production validator"
+            intent: "the same Mole order on the infiltrator peer path, at the frontier, \
+                     direct to the production validator"
                 .into(),
-            expected: "both accepted into the peer schedule; the floor tips to Crisis \
-                       before the synth plays"
-                .into(),
+            expected: "accepted into the peer schedule".into(),
         },
         InputSpec {
             step: 4,
-            intent: "commit the infiltrator horizon through tick 3, sample the hacker \
-                     seat's own schedule, and advance in rounds"
+            intent: "three frontier scene frames for the infiltrator seat: force the \
+                     crisis at tick 1, walk the mole underground to 240, and schedule \
+                     the synth for tick 52"
                 .into(),
-            expected: "ticks 0-3 execute: the sim applies the order, a canonical diversion \
-                       appears, and the production perception door carries it only inside \
-                       hearing range"
+            expected: "all accepted: the guard is on shift and the diversion is inside \
+                       his hearing rather than 364 units outside it"
                 .into(),
         },
         InputSpec {
             step: 5,
+            intent: "commit the infiltrator horizon through SYNTH_AT + 4, sample the hacker \
+                     seat's own schedule, and advance in rounds"
+                .into(),
+            expected: "the ordered ticks execute: the sim applies the synth and the guard \
+                       announces the noise he actually heard"
+                .into(),
+        },
+        InputSpec {
+            step: 6,
             intent: "a Mole order below the committed watermark, direct to the validator".into(),
             expected: "lockstep rejection: stale after commit".into(),
         },
@@ -126,13 +134,10 @@ impl Scenario for InfraOrdersScenario {
             bounded_inputs: inputs(),
             expectation: "Both relay refusals are recorded as role violations; the frontier \
                           Mole order applies on the pump-house floor (a typed companion \
-                          event, no denial) and lands as a canonical DiversionState; the \
-                          production perception door (actor_observations) reports the \
-                          UnusualNoise only inside the archetype's hearing range and nothing \
-                          at Billy's out-of-range position, so the watch system emits no \
-                          GuardObserved it cannot perceive; the stale order never re-enters \
-                          the input set. The positive Crisis-plus-in-earshot announce path is \
-                          covered by idaptik-core's infra_observations tests.",
+                          event, no denial); with the guard on shift and the mole walked \
+                          into earshot, Billy's own senses turn the synth diversion into a \
+                          GuardObserved(UnusualNoise) event and the same observations list \
+                          it; the stale order never re-enters the input set.",
             topology: TopologyMode::SingleRendezvousRelay,
             game_server_admin_present: false,
             evidence: EvidenceStatus::Demonstrated,
@@ -146,8 +151,23 @@ impl Scenario for InfraOrdersScenario {
         // The shared live-seat fixture, pointed at the pump-house floor by
         // its `scenario` field: the floor that hosts a mole. No
         // scenario-specific fixture copy that could drift.
+        //
+        // Two edits to the shared fixture, both deliberate and both narrow:
+        //
+        // * the horizon is raised, because the diversion has to be played
+        //   where the guard can hear it (see the timing note below), and
+        // * the fixture's own tail is dropped. Its `at: 40` line is
+        //   `force_extract`, which would end the mission at tick 40 and stop
+        //   the run before the synth plays, and its `at: 6`/`at: 10` pause and
+        //   resume would stall the timeline this run has to advance through.
+        //   The `at: 26` line is kept because it is the `hold: []` release:
+        //   without it the opening `hold right` would run for the whole
+        //   horizon. Seed, difficulty and the opening movement are unchanged,
+        //   so the provenance is still the shared fixture, not a private copy.
         let mut script = crate::harness::load_live_script();
         script.scenario = Some("pump-house".to_owned());
+        script.max_ticks = 90;
+        script.commands.retain(|line| line.at < 5 || line.at == 26);
         // The local seat is the hacker; the infiltrator is the peer whose
         // frames the adversary forges.
         let mut target =
@@ -250,19 +270,7 @@ impl Scenario for InfraOrdersScenario {
         // 3. The same Mole order on its sanctioned path: authored for the
         //    infiltrator peer seat, at the frontier, straight to the
         //    production validator (the relay cannot carry it yet — that is
-        //    the finding above, not a licence to smuggle it). First schedule
-        //    the production ForceCrisis control at the same tick: the guard's
-        //    announce-once watch path only runs in Crisis, so without it the
-        //    observation contract below could never be exercised. This is a
-        //    harness control, not an adversarial intent — Evil Weevil never
-        //    proposes it and it does not spend the agent's intent budget.
-        let crisis = wire::with_seq(wire::typed_command(2, &Command::ForceCrisis), 4);
-        let crisis_outcome = harness.feed_raw_to_validator(&mut target, &crisis);
-        harness.check(
-            "force-crisis-accepted",
-            matches!(crisis_outcome, ValidatorOutcome::Accepted),
-            "the production validator schedules ForceCrisis at the frontier",
-        );
+        //    the finding above, not a licence to smuggle it).
         let mole_peer = weevil
             .propose(
                 IntentKind::InvalidTargetClaim,
@@ -286,25 +294,75 @@ impl Scenario for InfraOrdersScenario {
             "the lockstep validator accepts the frontier order for the peer seat",
         );
 
-        // Commit the executed horizon so the run may proceed through the
-        // tick the order lives on: advance stops at the peer watermark, and
-        // a scheduled-but-uncommitted frame never executes.
+        // Scene-setting peer frames. Two things have to be true before a
+        // guard can report anything at all, and neither is true at tick 0:
+        //
+        // * **Somebody is on shift.** Billy starts every run `Offsite`, and
+        //   `begin_crisis` is the only exit from that mode. `Offsite` is the
+        //   watcher's gate -- an off-site guard hears nothing -- so without a
+        //   crisis the run has nobody to speak for the plant, however loud it
+        //   is. This frame is authored for the infiltrator seat, which is what
+        //   `seat_for` permits for a test hook.
+        // * **The diversion is within earshot of where the crisis puts him.**
+        //   `begin_crisis` assigns `CRISIS_BILLY_X` (26) and the mole spawns at
+        //   390. The hearing gate is `NOISE_INVEST_DIST` (260), and 364 > 260,
+        //   so a synth played from the spawn point is inaudible from the
+        //   position the crisis is about to assign -- the order would run, the
+        //   noise would exist, and no observation would ever reach the guard.
+        //   240 is 214 units from Billy and 150 from the spawn: 0.75 s of
+        //   underground travel at the companion's 200 px/s, which is why the
+        //   synth below is not played at the frontier.
+        for (seq, at, cmd) in [
+            (4, SCENE_AT, Command::ForceCrisis),
+            (
+                5,
+                SCENE_AT,
+                Command::Mole {
+                    op: MoleOp::MoveTo {
+                        x: 240.0,
+                        underground: true,
+                    },
+                },
+            ),
+            (
+                6,
+                SYNTH_AT,
+                Command::Mole {
+                    op: MoleOp::Synth { index: 0 },
+                },
+            ),
+        ] {
+            let frame = wire::with_seq(wire::typed_command(at, &cmd), seq);
+            let outcome = harness.feed_raw_to_validator(&mut target, &frame);
+            harness.check(
+                &format!("scene-frame-accepted-at-{at}"),
+                matches!(outcome, ValidatorOutcome::Accepted),
+                format!("the frontier frame for tick {at} must schedule: {cmd:?}"),
+            );
+        }
+
+        // Commit the executed horizon so the run may proceed: advance stops at
+        // the peer watermark, and a scheduled-but-uncommitted frame never
+        // executes. The horizon covers the tick the synth plays on.
         harness
-            .feed_commit(&mut target, Role::Infiltrator, 3)
+            .feed_commit(&mut target, Role::Infiltrator, HORIZON)
             .expect("horizon commit accepted");
 
-        // Run the ready steps, collecting events; on the tick the synth
-        // plays, sample the perception contract through the production door
-        // (`GhostLobbySim::actor_observations`), the same call the guard's
-        // watch system makes. Sampling the seat's own script horizon first is
-        // what lets the run proceed: advance stops at either watermark, and
-        // the sampling horizon only moves in pump_outgoing — the same rounds
-        // the observations scenario runs. Two rounds carry the run past the
-        // order's tick.
+        // Run the ready steps, collecting events; on the tick the synth plays,
+        // read the perception contract where Billy stands. Sampling the seat's
+        // own script horizon first is what lets the run proceed: advance stops
+        // at either watermark, and the sampling horizon only moves in
+        // pump_outgoing -- the same rounds the observations scenario runs. The
+        // loop ratchets towards SYNTH_AT two ticks at a time and stops as soon
+        // as the diversion has been heard.
         let mut feed = ScriptFeed::new(&script, Role::Hacker);
         let mut events: Vec<Event> = Vec::new();
-        let mut capture: Option<PerceptionCapture> = None;
-        for _round in 0..3 {
+        let mut obs_at_billy: Option<(f64, Vec<ObservationKind>)> = None;
+        let mut guard_on_shift = false;
+        for _round in 0..200 {
+            if obs_at_billy.is_some() || target.finished() {
+                break;
+            }
             let _ = target.pump_outgoing(&mut feed);
             target.advance_with(|sim, fresh| {
                 events.extend(fresh.iter().cloned());
@@ -316,44 +374,30 @@ impl Scenario for InfraOrdersScenario {
                         }
                     )
                 });
-                if synth_now && capture.is_none() {
+                if synth_now && obs_at_billy.is_none() {
                     let st = sim.state();
-                    // The same production call the watch system uses: it
-                    // applies the archetype's own hearing and the hosting
-                    // seam's extra_noise (the live diversion) to canonical
-                    // state, so the hidden order never leaks as world truth.
-                    let at_billy = sim
-                        .actor_observations(st.billy.x)
-                        .into_iter()
-                        .map(|o| o.kind)
-                        .collect();
-                    // An actor standing 100px short of the diversion is
-                    // inside the 260px hearing range; the noise intensity
-                    // (MOLE_SYNTH_NOISE) clears the archetype threshold.
-                    let in_earshot_x = st
-                        .diversion
-                        .as_ref()
-                        .map(|d| d.x - 100.0)
-                        .unwrap_or(st.billy.x);
-                    let in_earshot = sim
-                        .actor_observations(in_earshot_x)
-                        .into_iter()
-                        .map(|o| o.kind)
-                        .collect();
-                    capture = Some(PerceptionCapture {
-                        phase: st.phase,
-                        billy_x: st.billy.x,
-                        diversion: st.diversion.clone(),
-                        at_billy,
-                        in_earshot,
-                    });
+                    guard_on_shift = st.billy.mode != BillyMode::Offsite;
+                    // The detector the watcher itself uses: canonical
+                    // observations at the actor's own position, including the
+                    // companion's noise. Sampling it through the sim rather
+                    // than re-deriving it here is what stops this assertion
+                    // drifting away from `system_infra_watch` again.
+                    obs_at_billy = Some((
+                        st.billy.x,
+                        sim.actor_observations(st.billy.x)
+                            .into_iter()
+                            .map(|o| o.kind)
+                            .collect(),
+                    ));
                 }
             });
-            if capture.is_some() {
-                break;
-            }
         }
-        let capture = capture.expect("the synth tick executed and produced a perception capture");
+        harness.check(
+            "guard-on-shift-when-the-synth-plays",
+            guard_on_shift,
+            "the diversion has to be played where the guard can hear it; an \
+             off-site Billy is not a witness to anything",
+        );
 
         let applied = events.iter().any(|e| {
             matches!(
@@ -374,52 +418,10 @@ impl Scenario for InfraOrdersScenario {
             "the pump-house floor hosts the mole; the legitimate order was not refused",
         );
 
-        // The observation trail, checked against the production architecture
-        // rather than an imagined one. Two facts make the player-visible
-        // `Event::GuardObserved` unreachable in this short lockstep run:
-        //   1. the watch system announces only in Crisis (forced above via a
-        //      production control command), and
-        //   2. it announces only what `actor_observations` carries at Billy's
-        //      own position, and the mole spawns 364px away — beyond the
-        //      archetype's 260px hearing range.
-        // What IS demonstrable through this pipeline, and checked here:
-        let in_crisis = capture.phase == Phase::Crisis;
-        harness.check(
-            "floor-entered-crisis-through-production-command",
-            in_crisis,
-            "ForceCrisis, fed through the lockstep validator, tips the phase to Crisis",
-        );
-        let diversion_is_canonical = capture
-            .diversion
-            .as_ref()
-            .is_some_and(|d| d.intensity == MOLE_SYNTH_NOISE && d.t > 0.0);
-        harness.check(
-            "synth-diversion-enters-canonical-state",
-            diversion_is_canonical,
-            "the hidden order's consequence is a canonical DiversionState (mole position, \
-             MOLE_SYNTH_NOISE intensity, bounded window), never a leak of the order itself",
-        );
-        // The production perception door, sampled the same way the guard's
-        // watch system samples it: the noise is present for an actor inside
-        // earshot and absent at Billy's actual out-of-range position — the
-        // hearing gate, not omniscience.
-        let door_carries_the_noise = capture.in_earshot.contains(&ObservationKind::UnusualNoise)
-            && !capture.at_billy.contains(&ObservationKind::UnusualNoise);
-        harness.check(
-            "perception-door-gates-the-diversion-by-earshot",
-            door_carries_the_noise,
-            format!(
-                "actor_observations in-earshot={:?}, at billy.x={:.1}: {:?} — the UnusualNoise \
-                 is carried by the production door only inside the 260px hearing range",
-                capture.in_earshot, capture.billy_x, capture.at_billy
-            ),
-        );
-        // The announce-once record cannot invent a perception: while the
-        // diversion is outside Billy's earshot, no GuardObserved(UnusualNoise)
-        // appears even though the floor is in Crisis. The positive announce
-        // path (Crisis + in-earshot) is proved by idaptik-core's own
-        // infra_observations suite, which drives Billy next to the diversion.
-        let announced = events.iter().any(|e| {
+        // The observation trail: Billy heard the diversion through his own
+        // senses — the player-visible record is the GuardObserved event, and
+        // the perception contract lists the same noise where he stands.
+        let observed = events.iter().any(|e| {
             matches!(
                 e,
                 Event::GuardObserved {
@@ -429,10 +431,23 @@ impl Scenario for InfraOrdersScenario {
             )
         });
         harness.check(
-            "guard-announce-respects-the-earshot-gate",
-            !announced,
-            "no GuardObserved(UnusualNoise) while the diversion is outside Billy's hearing \
-             range: the watch system reports perceptions, never world truth",
+            "guard-observed-the-diversion",
+            observed,
+            "the synth diversion came back as an UnusualNoise observation event",
+        );
+        let contract_lists_noise = obs_at_billy
+            .as_ref()
+            .is_some_and(|(_, kinds)| kinds.contains(&ObservationKind::UnusualNoise));
+        harness.check(
+            "perception-contract-lists-the-noise",
+            contract_lists_noise,
+            match &obs_at_billy {
+                Some((x, kinds)) => format!(
+                    "observations at billy.x={x:.1}: {kinds:?} — computed from canonical \
+                     state at the actor's own position"
+                ),
+                None => "the run never reached the tick the synth played".to_owned(),
+            },
         );
 
         // 5. A stale Mole order below the watermark: the acceptance rules
@@ -482,16 +497,17 @@ impl Scenario for InfraOrdersScenario {
              tag-keyed table cannot express without splitting the verb. Until then the relay \
              fails closed, which is the safe direction."
                 .into(),
-            "The observation evidence is read through the production door \
-             GhostLobbySim::actor_observations, which is also the only input to the guard's \
-             announce-once watch system: an in-earshot position carries UnusualNoise while \
-             Billy's actual out-of-range position (the mole spawns 364px away, beyond the \
-             260px hearing range) carries none, so no GuardObserved is invented. The positive \
-             Crisis-plus-in-earshot announcement is demonstrated in idaptik-core's \
-             infra_observations tests against the same pump-house floor."
+            "The observation evidence is the player-visible pair: Event::GuardObserved in the \
+             canonical log (rendered as Billy's own words) and the observations() contract \
+             evaluated at Billy's position with the archetype's hearing — the guard reacts to \
+             what it perceives, never to the hidden Mole order."
                 .into(),
-            "The run rides the shared live-seat fixture with its scenario field pointed at \
-             pump-house; no scenario-specific fixture copy exists to drift."
+            "The run still rides the shared live-seat fixture, with its scenario field \
+             pointed at pump-house; it is not a private copy. Two fields are adjusted in \
+             place and both are visible here: the horizon is raised, because the diversion \
+             has to be played after the mole has walked into earshot, and the fixture's \
+             tail is dropped because its at: 40 force_extract would end the mission before \
+             the synth plays."
                 .into(),
         ];
         finalize(spec, &mut harness, notes)

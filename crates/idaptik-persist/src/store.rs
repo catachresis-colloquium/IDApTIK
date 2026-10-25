@@ -26,11 +26,6 @@ pub struct Store {
     path: PathBuf,
 }
 
-/// One enumerated session: its id alongside the decode result for its record.
-/// A record that fails to decode is reported as an `Err` rather than dropped,
-/// so one corrupt row cannot hide the rest of the session index.
-type ListedSession = (SessionId, Result<SessionRecord, String>);
-
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Store").field("path", &self.path).finish()
@@ -129,7 +124,9 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(&self) -> Result<Vec<ListedSession>, PersistError> {
+    pub fn list_sessions(
+        &self,
+    ) -> Result<Vec<(SessionId, Result<SessionRecord, String>)>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();

@@ -25,7 +25,7 @@ The proposed cross-repository epistemic state-machine seam is documented in
 │   ├── idaptik-tui/   #   ratatui/crossterm frontend + --headless/--replay/--export verifier
 │   ├── idaptik-bevy/  #   selected Bevy side-on 2.5D frontend (ADR-0008)
 │   ├── idaptik-net/   #   Phoenix Channels client over burble game-session fabric (ADR-0006)
-│   └── idaptik-evil-weevil/  # sans-IO deterministic adversarial testing adapter (ADR-0013)
+│   └── idaptik-evil-weevil/  # sans-IO deterministic adversarial testing adapter (ADR-0017)
 ├── config/            # Nickel typed config: scenario-schema.ncl + fixtures (incl. bad_*.ncl)
 ├── docs/adr/          # Architecture Decision Records
 ├── fixtures/          # cross-language wire fixtures
@@ -92,7 +92,7 @@ server-authoritative hosted game. Federated authority, direct peer transport,
 and the optional GSA control plane are specified—but not yet wired—in
 [ADR-0015](adr/0015-deployment-topologies-and-state-ownership.md).
 
-The `idaptik-evil-weevil` crate (ADR-0013) exercises these acceptance rules
+The `idaptik-evil-weevil` crate (ADR-0017) exercises these acceptance rules
 adversarially: a sans-IO, deterministic five-scenario corpus drives raw,
 unsanitised frames through the unchanged production validators, with four
 permission-separated realms (adversary, harness, read-only defensive
@@ -107,7 +107,7 @@ Rust/Crusoe toolchains are pinned via `mise.toml` and `rust-toolchain.toml`. Key
 
 - `just test-ghost` — `cargo test` (core/tui/ffi/net/evil-weevil) +
   `cargo clippy -D warnings` + `cargo fmt --check`.
-- `just evil-weevil-check` — the ADR-0013 offline adversarial corpus:
+- `just evil-weevil-check` — the ADR-0017 offline adversarial corpus:
   tests, clippy, redacted JSON artifacts, secret-shape and byte-identical
   determinism gates. `just evil-weevil-relay-check` adds the optional
   throwaway-burble leg (needs Elixir + a sibling burble checkout).
