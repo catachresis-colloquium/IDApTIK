@@ -35,9 +35,7 @@ libm = "0.2"
 ratatui = "0.30"
 crossterm = "0.29"
 clap = { version = "4", features = ["derive"] }
-# The frontend renders a 2D floor and Bevy UI only. Avoid unused 3D/audio
-# features (notably the 3D zstd path); add them deliberately when needed.
-bevy = { version = "0.20", default-features = false, features = ["2d", "ui"] }
+bevy = "0.20"
 bevy_winit = { version = "0.20.0", default-features = false, features = ["wayland-csd-adwaita-notitle"] }
 # The client-side session transport (ADR-0006 §2): async runtime + WebSocket.
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
