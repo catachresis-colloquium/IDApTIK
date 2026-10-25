@@ -40,6 +40,7 @@ use idaptik_core::scenario::command::{Command, MoleOp};
 use idaptik_core::scenario::common::BillyMode;
 use idaptik_core::scenario::event::Event;
 use idaptik_core::scenario::infra::ObservationKind;
+use idaptik_core::scenario::mathf::TICK_DT;
 use idaptik_core::scenario::power::sim::{PowerIndex, PowerOp};
 use idaptik_core::scenario::signal::sim::Seat;
 use idaptik_net::envelope::Role;
@@ -51,6 +52,10 @@ const ID: &str = "EW-06-infrastructure-orders-and-observations";
 /// from its spawn (390) into the guard's hearing at 240: 150 units at the
 /// companion's 200 px/s underground is 0.75 s, and `TICK_DT` is 1/60.
 const SYNTH_AT: u64 = 52;
+
+/// `SYNTH_AT` on the sim clock. `RuntimeState` accumulates `t` by `TICK_DT`
+/// per tick and exposes no tick counter, so the gate below compares seconds.
+const SYNTH_AT_SECS: f64 = SYNTH_AT as f64 * TICK_DT;
 
 /// The tick the scene is set on. Not tick 1: a commit *through* `n` advances
 /// the peer watermark to `n + 1`, so the opening `feed_commit(.., 1)` in this
@@ -384,7 +389,7 @@ impl Scenario for InfraOrdersScenario {
                 // read the perception contract over a diversion the guard was
                 // never supposed to hear. `SYNTH_AT` is the scene synth, played
                 // once the mole has walked into earshot.
-                if synth_now && obs_at_billy.is_none() && sim.state().tick >= SYNTH_AT {
+                if synth_now && obs_at_billy.is_none() && sim.state().t >= SYNTH_AT_SECS {
                     let st = sim.state();
                     guard_on_shift = st.billy.mode != BillyMode::Offsite;
                     // The detector the watcher itself uses: canonical
