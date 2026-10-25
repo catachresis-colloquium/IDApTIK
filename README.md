@@ -92,6 +92,7 @@ crates/idaptik-ffi      Rust-exported C ABI + Idris2 ABI model (abi/) + Zig adap
 crates/idaptik-tui      ratatui/crossterm evaluation frontend + --headless/--replay/--export verifier over core (ADR-0004)
 crates/idaptik-bevy     selected Bevy rendering frontend (ADR-0008)
 crates/idaptik-net      Phoenix Channels client over burble game-session fabric (ADR-0006)
+crates/idaptik-evil-weevil  sans-IO deterministic adversarial testing adapter over the multiplayer acceptance rules (ADR-0013)
 config/                    Nickel — typed, schema-checked game/network config
 docs/adr/                  architecture decision records
 ```
@@ -100,7 +101,10 @@ docs/adr/                  architecture decision records
 `just loopback-check`, `just config-check`); toolchains are pinned in
 `mise.toml` + `rust-toolchain.toml`. The loopback gate starts a throwaway
 server from the sibling `metadatastician/burble` checkout; IDApTIK no longer
-contains its own relay server.
+contains its own relay server. `just evil-weevil-check` runs the offline
+adversarial corpus (no sockets, no Elixir); `just evil-weevil-relay-check`
+adds the optional real-relay leg against that same throwaway local burble —
+see `docs/security/evil-weevil-corpus.md`.
 
 ## UMS-authored package proof
 

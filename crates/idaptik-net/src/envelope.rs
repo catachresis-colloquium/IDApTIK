@@ -80,6 +80,10 @@ pub fn seat_for(cmd: &Command) -> Seat {
             idaptik_core::scenario::signal::sim::Seat::Infiltrator => Seat::Infiltrator,
             idaptik_core::scenario::signal::sim::Seat::Hacker => Seat::Hacker,
         },
+        Command::Power { op } => match op.seat() {
+            idaptik_core::scenario::signal::sim::Seat::Infiltrator => Seat::Infiltrator,
+            idaptik_core::scenario::signal::sim::Seat::Hacker => Seat::Hacker,
+        },
         Command::ForceCrisis
         | Command::ForceExtract { .. }
         | Command::ForceFail { .. }

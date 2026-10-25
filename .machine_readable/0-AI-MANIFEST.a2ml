@@ -17,6 +17,9 @@ Read `AGENTS.md`, `README.md`, `GOVERNANCE.md`,
 - `crates/idaptik-net` — deterministic delay-lockstep client and resync.
 - `crates/idaptik-ffi` — C-ABI surface for non-Rust consumers.
 - `crates/idaptik-tui` — playable reference frontend and headless verifier.
+- `crates/idaptik-evil-weevil` — sans-IO deterministic adversarial testing
+  adapter over the multiplayer acceptance rules (ADR-0013); offline corpus
+  plus an optional loopback-only real-relay leg.
 - `crates/idaptik-bevy` — selected graphical frontend (ADR-0008).
 - sibling `../burble/server/` — Bandit + Phoenix Channels relay; override with
   `IDAPTIK_BURBLE_DIR` when the checkout lives elsewhere.

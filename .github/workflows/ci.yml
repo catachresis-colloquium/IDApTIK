@@ -2,6 +2,7 @@
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
 #   just test-ghost           -> cargo test (core/tui/ffi) + clippy -D warnings + fmt --check
+#   just evil-weevil-check    -> ADR-0013 deterministic adversarial corpus (offline, no sockets)
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
@@ -102,6 +103,14 @@ jobs:
       # two gates below, these are not scripts whose executable bit is itself
       # the claim being made, and invoking them the way the justfile does keeps
       # `just fixture-tests` and this job reading the same command.
+      # The environment, its tool versions and its Rust pin are three files.
+      # Before this step they had already drifted: guix.scm provided neither
+      # Nickel nor a container runtime, and provided a bare `rust` that would
+      # shadow rust-toolchain.toml. The self-test plants eight defects -- one of
+      # which found a control with a pass branch and no fail branch, in the very
+      # script written to catch that defect.
+      - name: Toolchain parity check (guix.scm, mise.toml, rust-toolchain.toml)
+        run: bash scripts/toolchain-parity.sh --self-test
       - name: ABI authority pin fixtures (issue #141, was invoked by nothing)
         run: bash tests/abi_authority_pin_test.sh
       - name: CI security configuration fixtures (was invoked by nothing)
@@ -419,6 +428,12 @@ jobs:
         run: cargo install just --version 1.46.0 --locked
       - name: just test-ghost
         run: just test-ghost
+      # ADR-0013 Evil Weevil offline gate: the full adversarial corpus
+      # (binary, redacted artifacts, secret-shape and byte-identical
+      # determinism gates), not only the crate's tests already run above.
+      # run: step only — no new actions reference, per the actions.lock rule.
+      - name: just evil-weevil-check (deterministic adversarial corpus)
+        run: just evil-weevil-check
 
   bevy-frontend:
     name: bevy-frontend (tests + clippy)
@@ -529,6 +544,12 @@ jobs:
         run: cargo install just --version 1.46.0 --locked
       - name: just loopback-check (Burble + ADR-0006 §4 gate)
         run: just loopback-check
+      # ADR-0013 real-relay leg: confirms the in-process relay model against
+      # the same throwaway local burble (loopback only, guest dummy
+      # identity, bounded frames). Reuses the checkout and BEAM toolchain
+      # above; run: step only, so the actions.lock set is unchanged.
+      - name: just evil-weevil-relay-check (model vs pinned GameChannel)
+        run: just evil-weevil-relay-check
 
   config-scenario-check:
     name: config-scenario-check (Nickel negative fixtures + round-trip)
