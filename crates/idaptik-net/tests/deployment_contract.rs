@@ -481,9 +481,22 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::UseInstalledContentOrRefuse,
             R::FetchExactContentDigest,
         ),
+        // ADR-0015 §4: P2P has no required store for derived state; the
+        // ETS/Dragonfly hot store exists only on hosted/federated seats.
         (
             S::DerivedCache,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::DerivedOnly,
+            H::NotRequired,
+            D::Volatile,
+            None,
+            C::Recomputable,
+            P::CacheMissAndReadSource,
+            R::RecomputeFromAuthority,
+        ),
+        (
+            S::DerivedCache,
+            vec![Hosted, Federated],
             O::DerivedOnly,
             H::EtsOrDragonfly,
             D::Volatile,
@@ -492,9 +505,22 @@ fn state_storage_and_recovery_follow_the_adr0015_policy_table() {
             P::CacheMissAndReadSource,
             R::RecomputeFromAuthority,
         ),
+        // ADR-0015 §4: media playout likewise has no P2P hot store; the
+        // bounded LMDB ring buffer with ETS fallback is a Burble-side seat.
         (
             S::MediaPlayout,
-            TOPOLOGIES.to_vec(),
+            vec![PeerToPeer],
+            O::MediaSubsystem,
+            H::NotRequired,
+            D::SemanticallyDisposableMediaBuffer,
+            None,
+            C::OrderedBoundedMediaFrames,
+            P::DropMediaFrames,
+            R::FlushAndRejoinMedia,
+        ),
+        (
+            S::MediaPlayout,
+            vec![Hosted, Federated],
             O::MediaSubsystem,
             H::BurbleLmdbRingBufferOrEts,
             D::SemanticallyDisposableMediaBuffer,

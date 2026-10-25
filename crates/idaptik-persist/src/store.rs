@@ -506,14 +506,14 @@ impl Store {
 
         // A checkpoint's tick must not lag the last batch at or below its seq.
         for (&cp_seq, cp) in &cps {
-            if let Some((_, batch)) = batches.range(..=cp_seq).next_back() {
-                if cp.tick < batch.tick {
-                    issues.push(VerifyIssue::TickBehindLog {
-                        seq: cp_seq,
-                        recorded: cp.tick,
-                        logged: batch.tick,
-                    });
-                }
+            if let Some((_, batch)) = batches.range(..=cp_seq).next_back()
+                && cp.tick < batch.tick
+            {
+                issues.push(VerifyIssue::TickBehindLog {
+                    seq: cp_seq,
+                    recorded: cp.tick,
+                    logged: batch.tick,
+                });
             }
         }
 

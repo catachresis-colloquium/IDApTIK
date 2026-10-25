@@ -389,9 +389,10 @@ impl Scenario for InfraOrdersScenario {
             in_crisis,
             "ForceCrisis, fed through the lockstep validator, tips the phase to Crisis",
         );
-        let diversion_is_canonical = capture.diversion.as_ref().is_some_and(|d| {
-            d.intensity == MOLE_SYNTH_NOISE && d.t > 0.0
-        });
+        let diversion_is_canonical = capture
+            .diversion
+            .as_ref()
+            .is_some_and(|d| d.intensity == MOLE_SYNTH_NOISE && d.t > 0.0);
         harness.check(
             "synth-diversion-enters-canonical-state",
             diversion_is_canonical,
@@ -402,9 +403,8 @@ impl Scenario for InfraOrdersScenario {
         // watch system samples it: the noise is present for an actor inside
         // earshot and absent at Billy's actual out-of-range position — the
         // hearing gate, not omniscience.
-        let door_carries_the_noise =
-            capture.in_earshot.contains(&ObservationKind::UnusualNoise)
-                && !capture.at_billy.contains(&ObservationKind::UnusualNoise);
+        let door_carries_the_noise = capture.in_earshot.contains(&ObservationKind::UnusualNoise)
+            && !capture.at_billy.contains(&ObservationKind::UnusualNoise);
         harness.check(
             "perception-door-gates-the-diversion-by-earshot",
             door_carries_the_noise,

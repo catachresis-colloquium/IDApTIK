@@ -42,6 +42,18 @@ jobs:
             2> .arena-diagnostics/lock-check.txt
           echo "exit=$?" >> .arena-diagnostics/lock-check.txt
 
+          # config-scenario-check's Rust half (nickel-lang-cli itself is not
+          # installed in this probe; the Nickel fixtures run on the user gate).
+          cargo test -p idaptik-core nickel_scenario_round_trips_and_validates -- --ignored \
+            > .arena-diagnostics/nickel-rt.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/nickel-rt.txt
+
+          # session-loopback's Rust prerequisite (the Elixir/burble half
+          # requires OTP/Elixir and the sibling burble checkout).
+          cargo build -p idaptik-net -p idaptik-tui \
+            > .arena-diagnostics/loopback-build.txt 2>&1
+          echo "exit=$?" >> .arena-diagnostics/loopback-build.txt
+
           for suite in tests/runtime_doctor_test.sh tests/launcher_fixture_test.sh \
                        tests/vendor_winit_check_test.sh tests/abi_authority_pin_test.sh \
                        tests/ci_security_config_test.sh tests/pages_wellknown_test.sh; do
@@ -88,6 +100,15 @@ jobs:
           emit_gzip rustfmt-gz .arena-diagnostics/rustfmt.txt
           tail -3 .arena-diagnostics/lock-check.txt > .arena-diagnostics/lock-tail.txt
           emit lock-tail .arena-diagnostics/lock-tail.txt
+          {
+            grep -E "test result|FAILED|^exit=" .arena-diagnostics/nickel-rt.txt
+            grep -E -A4 "panicked|error\[" .arena-diagnostics/nickel-rt.txt
+          } | head -40 > .arena-diagnostics/nickel-rt-compact.txt
+          emit nickel-rt .arena-diagnostics/nickel-rt-compact.txt
+          {
+            grep -E "error|warning|^exit=" .arena-diagnostics/loopback-build.txt
+          } | head -40 > .arena-diagnostics/loopback-build-compact.txt
+          emit loopback-build .arena-diagnostics/loopback-build-compact.txt
           # Shell suites: only failures and the exit ledger.
           grep -E "FAIL|exit=|parity-exit=|ledger-exit=|assertion" .arena-diagnostics/shell-suites.txt \
             | head -60 > .arena-diagnostics/shell-compact.txt
