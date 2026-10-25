@@ -374,7 +374,17 @@ impl Scenario for InfraOrdersScenario {
                         }
                     )
                 });
-                if synth_now && obs_at_billy.is_none() {
+                // Two synths play in this scenario, and only the second one
+                // is meant to be heard. The first is the *evidence* order from
+                // step 3: the identical Mole verb pushed through the frontier
+                // peer path at tick 2, which the companion faithfully obeys
+                // from where it happens to be standing — its spawn at 390,
+                // 364 units from the guard. That one is deliberately
+                // inaudible, so sampling on the first `SynthSoundPlayed` would
+                // read the perception contract over a diversion the guard was
+                // never supposed to hear. `SYNTH_AT` is the scene synth, played
+                // once the mole has walked into earshot.
+                if synth_now && obs_at_billy.is_none() && sim.state().tick >= SYNTH_AT {
                     let st = sim.state();
                     guard_on_shift = st.billy.mode != BillyMode::Offsite;
                     // The detector the watcher itself uses: canonical
