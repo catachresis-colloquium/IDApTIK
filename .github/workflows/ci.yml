@@ -340,6 +340,8 @@ jobs:
       # this check-run's output.title/output.summary.
       checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -396,6 +398,8 @@ jobs:
       # this check-run's output.title/output.summary.
       checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -454,6 +458,8 @@ jobs:
             if [ "$metadata_rc" -eq 0 ]; then
               diff -u /tmp/Cargo.lock.before Cargo.lock > /tmp/Cargo.lock.diff || true
               cat /tmp/Cargo.lock.diff
+              detail="$(head -c 50000 /tmp/Cargo.lock.diff | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')"
+              echo "::error::Cargo.lock diff proposed by unlocked metadata: $detail"
               {
                 echo '### Cargo.lock diff proposed by unlocked cargo metadata'
                 echo '```diff'
@@ -497,7 +503,7 @@ jobs:
           set -e
           cat /tmp/test-ghost.log
           if [ "$rc" -ne 0 ]; then
-            detail="$(tail -n 40 /tmp/test-ghost.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+            detail="$(tail -n 220 /tmp/test-ghost.log | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g' | head -c 45000)"
             echo "::error::test-ghost rc=$rc -- $detail"
             exit "$rc"
           fi
@@ -521,6 +527,8 @@ jobs:
       # this check-run's output.title/output.summary.
       checks: write
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     timeout-minutes: 40
     steps:
       - name: Checkout

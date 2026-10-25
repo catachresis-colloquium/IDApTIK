@@ -912,7 +912,7 @@ mod tests {
             room: "corridor".into(),
             cause: ReleaseCause::Valve,
         };
-        supervisor.ingest(&[event.clone()]);
+        supervisor.ingest(std::slice::from_ref(&event));
         assert_eq!(
             supervisor.director.observations.get(TACTIC_INFRA_SABOTAGE),
             Some(&1)
