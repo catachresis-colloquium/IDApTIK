@@ -478,7 +478,11 @@ pub fn state_contract(class: StateClass, topology: NetworkTopology) -> StateCont
         },
         StateClass::DerivedCache => StateContract {
             owner: O::DerivedOnly,
-            hot_store: H::EtsOrDragonfly,
+            hot_store: if topology == NetworkTopology::PeerToPeer {
+                H::NotRequired
+            } else {
+                H::EtsOrDragonfly
+            },
             durability: D::Volatile,
             cache: Cache::None,
             consistency: C::Recomputable,
@@ -487,7 +491,11 @@ pub fn state_contract(class: StateClass, topology: NetworkTopology) -> StateCont
         },
         StateClass::MediaPlayout => StateContract {
             owner: O::MediaSubsystem,
-            hot_store: H::BurbleLmdbRingBufferOrEts,
+            hot_store: if topology == NetworkTopology::PeerToPeer {
+                H::NotRequired
+            } else {
+                H::BurbleLmdbRingBufferOrEts
+            },
             durability: D::SemanticallyDisposableMediaBuffer,
             cache: Cache::None,
             consistency: C::OrderedBoundedMediaFrames,
@@ -755,6 +763,12 @@ mod tests {
                         assert_eq!(contract.durability, expected_durability);
                     }
                     StateClass::DerivedCache => {
+                        let expected_store = if topology == NetworkTopology::PeerToPeer {
+                            HotStore::NotRequired
+                        } else {
+                            HotStore::EtsOrDragonfly
+                        };
+                        assert_eq!(contract.hot_store, expected_store);
                         assert_eq!(contract.durability, Durability::Volatile);
                         assert_eq!(contract.consistency, Consistency::Recomputable);
                         assert_eq!(
@@ -789,10 +803,17 @@ mod tests {
                             PartitionBehavior::ContinueGameplayWithoutOperationsPlane
                         );
                     }
+                    StateClass::MediaPlayout => {
+                        let expected_store = if topology == NetworkTopology::PeerToPeer {
+                            HotStore::NotRequired
+                        } else {
+                            HotStore::BurbleLmdbRingBufferOrEts
+                        };
+                        assert_eq!(contract.hot_store, expected_store);
+                    }
                     StateClass::OperatorConfiguration
                     | StateClass::FederationDirectory
-                    | StateClass::OperationsCatalog
-                    | StateClass::MediaPlayout => {}
+                    | StateClass::OperationsCatalog => {}
                 }
 
                 // All policy dimensions are explicit closed enums rather than

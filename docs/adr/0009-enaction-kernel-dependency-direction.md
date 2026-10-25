@@ -54,8 +54,12 @@ redefine kernel field meaning.
 
 The local half of this boundary is enforced by the `no-authoring-dependency`
 invariant in `.machine_readable/contractiles/must/must.k9.ncl`, executed by
-`scripts/must_check.sh` against this repository's own manifests so the gate
-runs without a sibling repository present. The cross-repository half lives in
+`scripts/must_check.sh` against this repository's own manifests. The probe
+checks `idaptik-ums`, `ums-*`, and `slavia-*` package identities, including
+renamed `package` declarations, dependency subtables, dev/build dependencies,
+and target-specific declarations. Its rejection fixtures live in
+`tests/must_check_test.sh`; the gate runs without a sibling repository present.
+The cross-repository half lives in
 `idaptik-ums/scripts/check-architecture-boundaries.sh`.
 
 ## Consequences

@@ -61,6 +61,14 @@ if ! awk '
   exit 2
 fi
 
+# grep returns 1 only after searching all inputs without a match. Errors must
+# fail the probe too, including missing files and unmatched manifest globs.
+grep_no_matches() {
+  local status=0
+  grep "$@" || status=$?
+  [ "$status" -eq 1 ]
+}
+
 run_probe() {
   local id="$1"
   case "$id" in
@@ -120,11 +128,17 @@ run_probe() {
       (cd "$REPO_DIR" && cargo fmt --all -- --check)
       ;;
     no-authoring-dependency)
-      ! grep -rqE '^[[:space:]]*(ums-[a-z-]+|slavia-[a-z-]+)[[:space:]]*=' \
+      local prohibited='(idaptik-ums|ums-[[:alnum:]_-]+|slavia-[[:alnum:]_-]+)'
+      # Cover ordinary keys, renamed packages (inline or table form), and
+      # dependency subtables across workspace, target, dev and build scopes.
+      grep_no_matches -E \
+        -e "^[[:space:]]*[\"']?$prohibited[\"']?[[:space:]]*=" \
+        -e "(^|[.,{[:space:]])[\"']?package[\"']?[[:space:]]*=[[:space:]]*[\"']$prohibited[\"']" \
+        -e "^[[:space:]]*\\[.*dependencies[[:space:]]*\\.[[:space:]]*[\"']?$prohibited[\"']?[[:space:]]*\\]" \
         "$REPO_DIR/Cargo.toml" "$REPO_DIR"/crates/*/Cargo.toml
       ;;
     cac-kernel-is-fixed-point)
-      ! grep -qE '(^|[^[:alnum:]_])(f32|f64)([^[:alnum:]_]|$)' \
+      grep_no_matches -E '(^|[^[:alnum:]_])(f32|f64)([^[:alnum:]_]|$)' \
         "$REPO_DIR/crates/idaptik-core/src/scenario/vsm.rs"
       ;;
     package-contract-published)
@@ -204,7 +218,10 @@ run_probe() {
       printf 'must: no host-side probe is registered for K9 clause %s\n' "$id" >&2
       return 2
       ;;
-  esac
+  esac && return 0
+  # Reserve status 2 for unregistered probes; commands may themselves return
+  # 2 (or another error), so normalize every registered failure to status 1.
+  return 1
 }
 
 critical_failures=0
@@ -217,6 +234,12 @@ while IFS=$'\t' read -r id severity probe; do
   if run_probe "$probe" >"$DETAIL" 2>&1; then
     printf '  ok    %s\n' "$id"
   else
+    if [ "$?" -eq 2 ]; then
+      critical_failures=$((critical_failures + 1))
+      printf '  FAIL  %s (unregistered probe)\n' "$id" >&2
+      sed 's/^/        /' "$DETAIL" >&2
+      continue
+    fi
     case "$severity" in
       warning)
         warnings_failed=$((warnings_failed + 1))

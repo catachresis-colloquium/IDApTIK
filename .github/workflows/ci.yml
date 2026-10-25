@@ -148,6 +148,8 @@ jobs:
         run: bash tests/machine_readable_migration_test.sh
       - name: K9 Must component physical-state probes
         run: bash scripts/must_check.sh
+      - name: K9 Must probe rejection fixtures
+        run: bash tests/must_check_test.sh
       # The proof-escape scan needs no Idris2 toolchain, so it lives here
       # rather than in abi-model: a `believe_me` is then caught on every
       # pull request, not only on the ones where the 20-25 minute compiler

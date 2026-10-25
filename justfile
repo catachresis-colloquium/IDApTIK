@@ -153,7 +153,10 @@ toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 
 # Run every offline shell fixture suite (Rust and Elixir gates remain separate).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test
+
+must-check-test:
+    bash tests/must_check_test.sh
 
 # Validate DEED, K9 components, Nickel runners, and coordination against pinned standards.
 machine-readable-check:

@@ -79,7 +79,7 @@
     :federated "Independent operators retain administration; a federation directory is advisory and never elects a substitute authority."
     :state-classes (membership-and-presence pending-inputs active-simulation committed-history federation-directory operator-configuration operations-catalog game-content derived-cache media-playout)
     :storage-options (rust-process-memory beam-process-ets local-lmdb-journal versioned-package-files optional-verisimdb optional-dragonfly)
-    :cache-policy "ETS or Dragonfly is optional derived cache only; it is not authoritative state or consensus."
+    :cache-policy "ETS may hold volatile hosted or federated membership state; derived ETS or Dragonfly caches are optional and do not own gameplay truth or provide consensus."
     :evidence "crates/idaptik-net/src/deployment.rs and docs/adr/0015-deployment-topologies-and-state-ownership.md")
 
   (component-status
