@@ -415,8 +415,9 @@ impl Store {
     ///    same definition digest. Different digests produce
     ///    [`VerifyIssue::DefinitionMismatch`] and skip that comparison.
     ///
-    /// The earliest checkpoint is trusted as the replay baseline; its state and
-    /// held buttons, and any batches before its boundary, are not replay-checked.
+    /// The earliest checkpoint is trusted as the replay baseline; its snapshot
+    /// is not replay-checked. Its held buttons are checked against the folded
+    /// log prefix only when that prefix is contiguous from `seq 0` and decodes.
     /// Batches after the last checkpoint are replayed without a state comparison.
     /// Undecodable rows become issues and are excluded from the report's counts.
     ///
