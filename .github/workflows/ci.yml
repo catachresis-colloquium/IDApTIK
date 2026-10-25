@@ -581,6 +581,41 @@ jobs:
       - name: just evil-weevil-check (deterministic adversarial corpus)
         run: just evil-weevil-check
 
+  # The interactive frontend, launched for real. `test-ghost` runs the built
+  # binary through its TTY-free paths (`--headless`/`--replay`/`--export`, see
+  # crates/idaptik-tui/tests/headless_smoke.rs), and `bevy-frontend` tests the
+  # windowed crate in-process -- but nothing started `app::run`, which is the
+  # loop a player actually sits in front of: raw mode, alternate screen, draw,
+  # poll, tick, quit. A regression there is invisible to a test that never
+  # allocates a terminal.
+  #
+  # `just smoke` runs the harness's own `--self-test` first (four deliberately
+  # broken apps, each of which it must reject) and only then boots the real
+  # binary on a pty. The self-test is what keeps this from being a gate that
+  # cannot fail.
+  #
+  # run:-only steps and no new `uses:` ref, per the actions.lock rule above.
+  runtime-smoke:
+    name: runtime-smoke (real TUI boots, paints, quits)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Provision pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup show
+      - name: Install just (task runner, same recipe as local)
+        run: cargo install just --version 1.46.0 --locked
+      - name: just smoke
+        run: just smoke
+
   bevy-frontend:
     name: bevy-frontend (tests + clippy)
     permissions:
