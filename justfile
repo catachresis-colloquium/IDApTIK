@@ -62,6 +62,35 @@ install-idris2:
 doctor:
     @bash scripts/doctor.sh
 
+# --- Environment ---------------------------------------------------------------
+
+# Enter the Guix development environment. Guix is the environment policy (nix is
+# retired); tool VERSIONS still come from mise.toml + rust-toolchain.toml. See
+# docs/dev-notes/toolchain-authority.md.
+guix-shell:
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed: https://guix.gnu.org/guix-install.sh" >&2; exit 1; }
+    guix shell -D -f guix.scm -- bash scripts/doctor.sh
+
+# The same environment in a rootless container (Podman or Docker).
+guix-container:
+    @command -v guix >/dev/null 2>&1 || { echo "guix is not installed" >&2; exit 1; }
+    guix shell -D -f guix.scm -C --network -- bash scripts/doctor.sh
+
+# Provision rustup. Guix has no rustup package, so this is the step that makes
+# rust-toolchain.toml real inside a Guix shell.
+install-rustup:
+    bash scripts/install-rustup.sh
+
+# Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
+# --self-test plants ten defects and requires the check to catch each.
+toolchain-parity *ARGS:
+    bash scripts/toolchain-parity.sh {{ARGS}}
+
+# Build the dev container. Runtime-agnostic: Podman is the estate default.
+devcontainer-build:
+    @rt=$$(command -v podman || command -v docker) || { echo "neither podman nor docker is installed" >&2; exit 1; }
+    $$rt build -t idaptik-dev -f .devcontainer/Containerfile .
+
 # Diagnose only what players need to launch; unlike `just doctor`, this does
 # not require optional FFI/config development toolchains.
 runtime-doctor:
@@ -118,8 +147,13 @@ lock-sync-check:
 pages-wellknown-test:
     bash tests/pages_wellknown_test.sh
 
+# Prove guix.scm, mise.toml and rust-toolchain.toml still describe one plan.
+# The self-test plants ten defects and requires the check to catch each.
+toolchain-parity-test:
+    bash scripts/toolchain-parity.sh --self-test
+
 # Run every shell fixture suite (no Rust toolchain needed).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test
 
 # Execute the Mustfile physical-state probes (the estate `must check` verb).
 # Critical probes gate; a probe whose tool is missing fails, never skips.

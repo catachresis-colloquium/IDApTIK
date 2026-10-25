@@ -103,6 +103,14 @@ jobs:
       # two gates below, these are not scripts whose executable bit is itself
       # the claim being made, and invoking them the way the justfile does keeps
       # `just fixture-tests` and this job reading the same command.
+      # The environment, its tool versions and its Rust pin are three files.
+      # Before this step they had already drifted: guix.scm provided neither
+      # Nickel nor a container runtime, and provided a bare `rust` that would
+      # shadow rust-toolchain.toml. The self-test plants eight defects -- one of
+      # which found a control with a pass branch and no fail branch, in the very
+      # script written to catch that defect.
+      - name: Toolchain parity check (guix.scm, mise.toml, rust-toolchain.toml)
+        run: bash scripts/toolchain-parity.sh --self-test
       - name: ABI authority pin fixtures (issue #141, was invoked by nothing)
         run: bash tests/abi_authority_pin_test.sh
       - name: CI security configuration fixtures (was invoked by nothing)

@@ -20,3 +20,10 @@ IDApTIK uses Bevy as its thin graphical frontend over `idaptik-core`
 (ADR-0008). The first package round trip remains headless. The current
 Gossamer-hosted client design makes Bevy the target for implementing this
 outline without moving package or simulation authority into the renderer.
+
+`water-gas-airflow.md` is the design of record for the water, gas and airflow
+systems implemented in `crates/idaptik-core/src/scenario/infrastructure/`
+(ADR-0013). It states what is modelled, what is deliberately qualitative, how
+the two systems interoperate, and how every hazard presents a cue and a
+recovery. The runtime and its three fixtures are exercised by
+`crates/idaptik-core/tests/infrastructure.rs`.

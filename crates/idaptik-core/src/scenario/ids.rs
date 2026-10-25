@@ -58,19 +58,31 @@ id_newtype!(
     "Stable id of a device in a signal network (door, relay, console, ...)."
 );
 id_newtype!(
-    PowerSourceId,
-    "Stable id of an electrical source (mains, generator, battery)."
+    CompartmentId,
+    "Stable id of an infrastructure compartment: `floor/room`, or `exterior/<name>`."
 );
 id_newtype!(
-    FeedId,
-    "Stable id of a distribution feed: the power module's circuit."
+    OpeningId,
+    "Stable id of a door, hatch, grille or window opening."
 );
+id_newtype!(ReservoirId, "Stable id of an authored water reservoir.");
+id_newtype!(JunctionId, "Stable id of a water-pipe junction.");
+id_newtype!(PipeId, "Stable id of a pressurised water pipe.");
+id_newtype!(ValveId, "Stable id of a water valve.");
+id_newtype!(WaterOutletId, "Stable id of a water outlet or tap.");
+id_newtype!(LeakId, "Stable id of a water leak point.");
+id_newtype!(DrainId, "Stable id of a floor drain.");
 id_newtype!(
-    LoadId,
-    "Stable id of a load: a device that draws from a feed."
+    GasSpeciesId,
+    "Stable id of an explicitly fictional gas species."
 );
-id_newtype!(BreakerId, "Stable id of a protective breaker on a feed.");
-id_newtype!(HazardId, "Stable id of an authored exposed-power hazard.");
+id_newtype!(GasSourceId, "Stable id of a gas source or canister.");
+id_newtype!(DuctId, "Stable id of a ventilation duct segment.");
+id_newtype!(FanId, "Stable id of a duct fan.");
+id_newtype!(DamperId, "Stable id of a duct damper.");
+id_newtype!(FilterId, "Stable id of a duct filter.");
+id_newtype!(EquipmentId, "Stable id of a powered equipment fixture.");
+id_newtype!(TraceSourceId, "Stable id of a scent or noise source.");
 
 /// Resolves content ids to `Vec` indices once, so the simulation can index
 /// directly. Built at [`crate::scenario::GhostLobbySim`] construction and after
