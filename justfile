@@ -214,7 +214,7 @@ test-ghost:
     cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil --all-targets -- -D warnings
     cargo fmt --all -- --check
 
-# The Evil Weevil adversarial-testing gate (ADR-0013): offline, sans-IO
+# The Evil Weevil adversarial-testing gate (ADR-0017): offline, sans-IO
 # corpus over the real production validators — stale/duplicate messages,
 # invalid targets, epoch conflicts, reconnect/obsolete frames, and
 # delayed/withheld observations with fault-vs-hostility classification, and

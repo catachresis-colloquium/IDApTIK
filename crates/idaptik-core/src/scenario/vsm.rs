@@ -216,7 +216,7 @@ pub fn most_plausible_target(evidence: &EvidenceLedger) -> &'static str {
 /// The tactic id the supervisor counts when infrastructure is sabotaged.
 pub const TACTIC_INFRA_SABOTAGE: &str = "infrastructure_sabotage";
 
-/// Whether an event is intruder-shaped infrastructure sabotage (ADR-0013):
+/// Whether an event is intruder-shaped infrastructure sabotage (ADR-0016):
 /// a valve deliberately opened, equipment shorting out, an alarm tripped, or
 /// a hosted mole chewing a cable. A pump failing open is *not* sabotage —
 /// nobody's hand is on it — but its consequences (`InfraShorted`, a tripped

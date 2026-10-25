@@ -1,4 +1,4 @@
-//! Hosting the floor's electrical infrastructure (ADR-0013) inside the Ghost
+//! Hosting the floor's electrical infrastructure (ADR-0016) inside the Ghost
 //! Lobby run.
 //!
 //! The network itself lives in [`crate::scenario::power`]; this is the seam that

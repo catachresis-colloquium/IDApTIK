@@ -6,7 +6,7 @@
 //! LMDB may later hold a local replay/index (burble's LMDB today stores only
 //! media frames), and Dragonfly remains an optional, non-authoritative hosted
 //! cache experiment; neither is an authority and neither is wired in here
-//! (ADR-0013).
+//! (ADR-0017).
 //!
 //! Every report passes through [`redact`] before it is written, and the
 //! scenarios themselves only ever use dummy guest identities, so no secret

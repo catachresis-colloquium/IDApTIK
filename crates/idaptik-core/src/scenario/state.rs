@@ -346,7 +346,7 @@ pub struct RuntimeState {
     #[serde(default, skip_serializing_if = "is_zero")]
     pub signal_busy: f64,
     /// The floor's electrical infrastructure, when the definition carries it
-    /// (ADR-0013). Skipped when absent, so an unpowered run's snapshot is
+    /// (ADR-0016). Skipped when absent, so an unpowered run's snapshot is
     /// byte-identical to one from before power existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub power: Option<PowerState>,

@@ -1,4 +1,4 @@
-//! # Evil Weevil — IDApTIK's adversarial testing adapter (ADR-0013)
+//! # Evil Weevil — IDApTIK's adversarial testing adapter (ADR-0017)
 //!
 //! A separate, deterministic, **sans-IO** test adapter that exercises
 //! IDApTIK's multiplayer acceptance rules and recovery behaviour inside

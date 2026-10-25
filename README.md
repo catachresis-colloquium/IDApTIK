@@ -101,7 +101,7 @@ crates/idaptik-ffi      Rust-exported C ABI + Idris2 ABI model (abi/) + Zig adap
 crates/idaptik-tui      ratatui/crossterm evaluation frontend + --headless/--replay/--export verifier over core (ADR-0004)
 crates/idaptik-bevy     selected Bevy rendering frontend (ADR-0008)
 crates/idaptik-net      Phoenix Channels client over burble game-session fabric (ADR-0006)
-crates/idaptik-evil-weevil  sans-IO deterministic adversarial testing adapter over the multiplayer acceptance rules (ADR-0013)
+crates/idaptik-evil-weevil  sans-IO deterministic adversarial testing adapter over the multiplayer acceptance rules (ADR-0017)
 config/                    Nickel — typed, schema-checked game/network config
 docs/adr/                  architecture decision records
 ```

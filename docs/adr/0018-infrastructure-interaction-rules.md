@@ -1,4 +1,4 @@
-# ADR-0013: Infrastructure interactions are composable rules over typed capabilities
+# ADR-0018: Infrastructure interactions are composable rules over typed capabilities
 
 - Status: Proposed
 - Date: 2026-10-24

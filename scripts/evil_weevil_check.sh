@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# The Evil Weevil offline gate (ADR-0013): deterministic adversarial testing
+# The Evil Weevil offline gate (ADR-0017): deterministic adversarial testing
 # of the multiplayer acceptance rules and recovery behaviour, with no sockets
 # and no remote systems. PASS requires:
 #

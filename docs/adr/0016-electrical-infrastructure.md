@@ -1,4 +1,4 @@
-# ADR-0013: Electrical infrastructure in `idaptik-core`
+# ADR-0016: Electrical infrastructure in `idaptik-core`
 
 - Status: Proposed
 - Date: 2026-10-24

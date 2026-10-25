@@ -310,7 +310,7 @@ Five open PRs, all touching the same ground. Fetched and read; none merged.
 | [#162](https://github.com/metadatastician/IDApTIK/pull/162) | `arena/e86a742d-idaptik` | Electrical infrastructure in core: `SourceDef`/`FeedDef`/`LoadDef`/`BreakerDef`, one rule `operating = commanded AND energized AND intact AND not interlocked AND warmed up`, off-reasons rendered as one sentence | **The power plane this request needs.** "Distinguish removed fuse / protective trip / disconnected supply / broken load" is nearly this PR's `Condition` + breaker vocabulary |
 | [#163](https://github.com/metadatastician/IDApTIK/pull/163) | `arena/9befe5c4-idaptik` | ADR-0013 *consequences as observations*; `scenario/infra.rs` (water zones, alarms incl. a tamper circuit whose trip **is** watched-node power loss), a hosted Moletaire, `Command::Mole`, building audit, `tests/infra_observations.rs` + `tests/challenge_set.rs` | **Closest existing work.** Its observation-only actor perception is the rule this request restates. WIP, CI used as compile loop, mergeable UNKNOWN |
 | [#164](https://github.com/metadatastician/IDApTIK/pull/164) | — | **MERGED** (`9680a7f`): `docs/architecture/building-infrastructure-design.md`, `NodeId` identity plan, interaction matrix, tick contract, three test levels, staged plan | The design of record to extend, not duplicate |
-| [#165](https://github.com/metadatastician/IDApTIK/pull/165) | `arena/df59c446-idaptik` | Docs only: **another** ADR-0013 (`0013-infrastructure-interaction-rules.md`), `infrastructure-interactions.md`, a 32-rule catalogue, two levels ("Sump", "Sable"), M0 acceptance tests | Explicitly says no Rust exists and no test named in it exists |
+| [#165](https://github.com/metadatastician/IDApTIK/pull/165) | `arena/df59c446-idaptik` | Docs only: **another** ADR-0013 (`0018-infrastructure-interaction-rules.md`), `infrastructure-interactions.md`, a 32-rule catalogue, two levels ("Sump", "Sable"), M0 acceptance tests | Explicitly says no Rust exists and no test named in it exists |
 | [#166](https://github.com/metadatastician/IDApTIK/pull/166) | `arena/cb226ff1-idaptik` | `idaptik-evil-weevil` crate: five deterministic adversarial scenarios over session/movement/epoch/reconnect/observation rules, four permission-separated realms | The request's "integrate Evil Weevil only where its adapter exists" — **it does not exist on `main`**; it is this PR. ADR-0013 too |
 | [#167](https://github.com/metadatastician/IDApTIK/pull/167) | `arena/a7c1a66b-idaptik` | Water/gas/air runtime in `scenario/infrastructure/` | Out of scope for this request beyond noting it claims the same module namespace |
 
@@ -318,7 +318,7 @@ Five open PRs, all touching the same ground. Fetched and read; none merged.
 
 1. **Three unmerged PRs each claim ADR-0013** (#162 title, #163
    `0013-infrastructure-consequences-as-observations.md`, #165
-   `0013-infrastructure-interaction-rules.md`, #166 title). `docs/adr/README.md`
+   `0018-infrastructure-interaction-rules.md`, #166 title). `docs/adr/README.md`
    says "take the next number" and the next free number is 0013. Whatever this
    feature's decision record is, **take a number only after those land**, or it
    collides three ways.

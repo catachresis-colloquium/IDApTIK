@@ -19,7 +19,7 @@ about the layer being designed, the word is *must*.
 
 Navigation: rules live in
 [`infrastructure-rule-catalogue.md`](infrastructure-rule-catalogue.md); the
-decision is [ADR-0013](../adr/0013-infrastructure-interaction-rules.md). The
+decision is [ADR-0018](../adr/0018-infrastructure-interaction-rules.md). The
 rule catalogue is the authority for *what each interaction does*; this document
 is the authority for *how any interaction is evaluated*.
 

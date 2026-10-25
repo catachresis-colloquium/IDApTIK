@@ -20,7 +20,7 @@ use std::process::ExitCode;
 #[derive(Debug, Parser)]
 #[command(
     name = "idaptik-evil-weevil",
-    about = "Deterministic adversarial testing of IDApTIK multiplayer acceptance rules (ADR-0013)"
+    about = "Deterministic adversarial testing of IDApTIK multiplayer acceptance rules (ADR-0017)"
 )]
 struct Cli {
     /// Directory for the redacted corpus report and per-scenario replay

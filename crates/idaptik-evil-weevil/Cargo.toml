@@ -1,6 +1,6 @@
 [package]
 name = "idaptik-evil-weevil"
-description = "Evil Weevil: the isolated, deterministic adversarial testing adapter for IDApTIK's multiplayer acceptance rules and recovery behaviour (ADR-0013)."
+description = "Evil Weevil: the isolated, deterministic adversarial testing adapter for IDApTIK's multiplayer acceptance rules and recovery behaviour (ADR-0017)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -62,7 +62,7 @@ L	crates/idaptik-core/src/scenario/rooftop.rs	the played Ghost Lobby begun from 
 L	crates/idaptik-core/src/scenario/infra.rs	canonical infrastructure state and actor observation rules; gameplay consequences checked by tests
 L	crates/idaptik-core/src/scenario/signal/mod.rs	signal-network model (ADR-0012): devices wired output-to-input and re-wired in play
 L	crates/idaptik-core/src/scenario/signal/sim.rs	deterministic signal-network runtime; replay-visible, and observed directly by tests/signal_network.rs
-L	crates/idaptik-core/src/scenario/power/mod.rs	electrical-infrastructure model and validator (ADR-0013)
+L	crates/idaptik-core/src/scenario/power/mod.rs	electrical-infrastructure model and validator (ADR-0016)
 L	crates/idaptik-core/src/scenario/power/sim.rs	deterministic power-network runtime; observed directly by tests/power_network.rs
 L	crates/idaptik-core/src/scenario/sim/console.rs	per-tick console interaction inside the Ghost Lobby run
 L	crates/idaptik-core/src/scenario/sim/signal.rs	the seam that hosts the signal network inside the run tick

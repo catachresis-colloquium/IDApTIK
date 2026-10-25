@@ -9,7 +9,7 @@
 //!
 //! This is deliberately a fixed, deterministic machine over a scenario's
 //! pre-declared sequence — not an adaptive planner and not an LLM. Adaptive
-//! action selection is explicitly deferred (ADR-0013, "start simple") until
+//! action selection is explicitly deferred (ADR-0017, "start simple") until
 //! the fixed corpus demonstrates reproducible coverage; the in-game enemy
 //! utility policy is gameplay AI and is not a security policy.
 
