@@ -1,65 +1,111 @@
-name: arena-build-feedback
-
-# TEMPORARY, agent-authored. The development sandbox has no Rust toolchain and
-# no route to install one, and GitHub's job logs are served from a blob host the
-# sandbox cannot reach. This workflow compiles the branch, then pushes what the
-# compiler said (and what rustfmt wanted) to a side branch the sandbox *can*
-# fetch. It carries no `uses:` refs, so the Actions lockfile gate cannot desync
-# on it. Delete it with the rest of the feedback machinery.
+# TEMPORARY authoring aid (removed before merge): the authoring sandbox can
+# reach api.github.com but not the Azure blob host the Actions log API
+# redirects to, so this job runs a subset of `just test-ghost` (formatting and
+# core tests), plus core/TUI/net checks, and posts a compact PR digest. It does
+# not run TUI/FFI/net tests or warnings-denied Clippy.
+name: arena-feedback
 
 on:
   push:
-    branches:
-      - arena/e86a742d-idaptik
+    branches: [ "arena/9befe5c4-idaptik" ]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pull-requests: write
 
 jobs:
   feedback:
     runs-on: ubuntu-latest
+    env:
+      DIGEST: /tmp/arena-digest.md
     steps:
-      - name: Fetch the branch
-        run: |
-          set -eu
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" work
-          cd work
-          git log --oneline -1
-
+      # Pinned to an immutable 40-hex commit (actions/checkout v4), matching
+      # abi-conformance.yml and creusot-proof.yml: an unonboarded workflow
+      # with a movable tag ref fails scripts/check-lock-sync.sh, and this
+      # temporary file is removed before merge rather than entered into the
+      # machine-generated actions.lock.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Provision pinned Rust toolchain
-        working-directory: work
-        run: rustup show
-
-      - name: Collect compiler diagnostics
-        working-directory: work
         run: |
-          set +e
-          mkdir -p feedback
-          cargo check -p idaptik-core -p idaptik-net -p idaptik-tui -p idaptik-ffi -p idaptik-evil-weevil --all-targets --keep-going --message-format=short > feedback/check.txt 2>&1
-          echo "check exit: $?" >> feedback/check.txt
-          cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil --all-targets --keep-going --message-format=short -- -D warnings > feedback/clippy.txt 2>&1
-          echo "clippy exit: $?" >> feedback/clippy.txt
-          cargo test -p idaptik-core --all-targets --no-fail-fast > feedback/test-core.txt 2>&1
-          echo "test-core exit: $?" >> feedback/test-core.txt
-          cargo test -p idaptik-net -p idaptik-tui --all-targets --no-fail-fast > feedback/test-front.txt 2>&1
-          echo "test-front exit: $?" >> feedback/test-front.txt
-          cargo test -p idaptik-ffi -p idaptik-evil-weevil --all-targets --no-fail-fast > feedback/test-other.txt 2>&1
-          echo "test-other exit: $?" >> feedback/test-other.txt
-          cargo fmt --all -- --check > feedback/fmt-check.txt 2>&1
-          echo "fmt exit: $?" >> feedback/fmt-check.txt
-          cargo fmt --all
-          git diff > feedback/fmt.patch feedback/test-other.txt
-          wc -l feedback/check.txt feedback/clippy.txt feedback/test-core.txt feedback/test-front.txt feedback/fmt.patch feedback/test-other.txt
-
-      - name: Publish the diagnostics to a side branch
-        working-directory: work
+          rustup show
+          : > "$DIGEST"
+      - name: fmt --check
+        continue-on-error: true
         run: |
-          set -eu
-          git config user.name "arena-feedback"
-          git config user.email "arena-feedback@users.noreply.github.com"
-          git checkout -b arena/feedback
-          git add -A feedback
-          git commit --no-verify -m "chore: build feedback for ${GITHUB_SHA}"
-          git push --no-verify --force origin HEAD:refs/heads/arena/feedback
+          output=$(mktemp)
+          status=0
+          cargo fmt --all -- --check > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## fmt --check'
+            echo "Exit status: $status"
+            echo '```diff'
+            head -c 30000 "$output"
+            echo
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: check (short messages, all targets)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets --message-format short > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo check --all-targets (core/tui/net) — short'
+            echo "Exit status: $status"
+            echo '```'
+            head -160 "$output"
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: check (full context)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo check -p idaptik-core -p idaptik-tui -p idaptik-net --all-targets > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo check — full context (first 240 lines)'
+            echo "Exit status: $status"
+            echo '```'
+            head -240 "$output"
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: test (core)
+        continue-on-error: true
+        run: |
+          output=$(mktemp)
+          status=0
+          cargo test -p idaptik-core > "$output" 2>&1 || status=$?
+          cat "$output"
+          {
+            echo '## cargo test -p idaptik-core'
+            echo "Exit status: $status"
+            echo '```'
+            grep -E "^test result:|^warning: .*generated|panicked" "$output" | head -60
+            echo '--- failure details ---'
+            sed -n '/^failures:$/,$p' "$output" | head -400
+            echo '```'
+          } >> "$DIGEST"
+          exit "$status"
+      - name: Post digest as PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -s "$DIGEST" || echo "no digest produced" > "$DIGEST"
+          head -c 60000 "$DIGEST" > digest-trimmed.md
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number -q '.[0].number')
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" --body-file digest-trimmed.md
+          else
+            echo "::error::No open PR for $GITHUB_REF_NAME"
+            cat digest-trimmed.md
+          fi

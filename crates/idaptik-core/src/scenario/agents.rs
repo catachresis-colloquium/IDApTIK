@@ -13,8 +13,10 @@ use crate::scenario::constants as c;
 use crate::scenario::definition::ScenarioDefinition;
 use crate::scenario::event::Event;
 use crate::scenario::floor_graph::{
-    camera_node_id, door_node_id, inside_vantage, light_node_id, van_vantage,
+    camera_node_id, door_node_id, inside_vantage, light_node_id, pump_node_id, valve_node_id,
+    van_vantage,
 };
+use crate::scenario::infra::ReleaseCause;
 use crate::scenario::sim::GhostLobbySim;
 use crate::scenario::state::RuntimeState;
 use serde::{Deserialize, Serialize};
@@ -52,6 +54,43 @@ fn camera_index(def: &ScenarioDefinition, id: &str) -> Option<usize> {
 /// Whether `id` names a room's lights.
 fn is_light_node(def: &ScenarioDefinition, id: &str) -> bool {
     def.rooms.iter().any(|r| light_node_id(r.id.as_str()) == id)
+}
+
+/// Release a water zone and report it, if the floor carries the zone and it
+/// is still dry. The node id is matched against the derived valve/pump ids
+/// rather than string-surgery'd back into a zone, exactly as `DoorHeld`
+/// recovers its door. Returns the event, or `None` when nothing was released
+/// (no infrastructure, unknown node, or the zone is already flooding — the
+/// first cause stands, as [`crate::scenario::infra::InfraState::release`]
+/// guarantees).
+fn release_zone_by_node(
+    def: &ScenarioDefinition,
+    state: &mut RuntimeState,
+    node_id: &str,
+    cause: ReleaseCause,
+) -> Option<Event> {
+    let infra_def = def.infra.as_ref()?;
+    let infra = state.infra.as_mut()?;
+    // The cause decides which derived node can release the zone: a hacked
+    // valve releases through the valve; a pump failure releases only through
+    // a fail-open pump. A valve that merely lost power stays shut.
+    let zone = match cause {
+        ReleaseCause::Valve => infra_def
+            .water_zones
+            .iter()
+            .find(|z| valve_node_id(&z.id) == node_id)?,
+        ReleaseCause::PumpFailure => infra_def
+            .water_zones
+            .iter()
+            .find(|z| z.fail_open && pump_node_id(&z.id) == node_id)?,
+    };
+    infra
+        .release(&zone.id, cause)
+        .then(|| Event::WaterReleased {
+            zone: zone.id.clone(),
+            room: zone.room.clone(),
+            cause,
+        })
 }
 
 /// The lights-out window, honouring reduced motion exactly as `perform_action`
@@ -175,7 +214,24 @@ pub fn apply_effects(
                     events.push(Event::PowerLost { nodes });
                 }
             }
-            Effect::DevicePowerLost(id) => unpower(def, state, cfg, id),
+            Effect::DevicePowerLost(id) => {
+                unpower(def, state, cfg, id);
+                // A sump pump felled by the cascade fails its zone's valve
+                // open — the consequence nobody ordered, arriving through the
+                // ordinary power-loss path rather than any new channel.
+                if let Some(event) = release_zone_by_node(def, state, id, ReleaseCause::PumpFailure)
+                {
+                    events.push(event);
+                }
+            }
+            Effect::WaterReleased(id) => {
+                // The deliberate flood: a hacked valve node releases its
+                // zone. Recovered by matching the minted node id, never by
+                // cutting a prefix off the string.
+                if let Some(event) = release_zone_by_node(def, state, id, ReleaseCause::Valve) {
+                    events.push(event);
+                }
+            }
             // The floor graph authors no node with these actuations, so nothing on
             // this floor can raise them. They are matched explicitly, and left to
             // do nothing, so that a future `Effect` variant is a compile error here
