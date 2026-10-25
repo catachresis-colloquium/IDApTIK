@@ -129,7 +129,7 @@ impl Store {
     ///
     /// A record that will not decode is reported rather than skipping the whole
     /// enumeration: one unreadable session must not hide the other twenty.
-    pub fn list_sessions(&self) -> Result<Vec<SessionListEntry>, PersistError> {
+    pub fn list_sessions(&self) -> Result<Vec<SessionListing>, PersistError> {
         let txn = self.db.begin_read()?;
         let sessions = txn.open_table(SESSIONS)?;
         let mut out = Vec::new();
@@ -378,7 +378,7 @@ impl Store {
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
         let range = commands
-            .range((id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX))?;
+            .range((id.as_str(), checkpoint_at.saturating_add(1))..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
