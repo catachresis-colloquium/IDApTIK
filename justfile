@@ -207,11 +207,13 @@ replay FILE:
 test:
     cargo test --workspace
 
-# The Ghost Lobby scenario gate: core + tui + ffi + net + evil-weevil
-# (does not build Bevy).
+# The Ghost Lobby scenario gate: core + tui + ffi + net + evil-weevil + persist
+# (does not build Bevy). `persist` is here because it is the crate whose job is
+# to notice that a run does not replay to the state it claims -- a test gate that
+# skips it is a gate that skips the invariant.
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil --all-targets -- -D warnings
+    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist
+    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist --all-targets -- -D warnings
     cargo fmt --all -- --check
 
 # The Evil Weevil adversarial-testing gate (ADR-0017): offline, sans-IO
