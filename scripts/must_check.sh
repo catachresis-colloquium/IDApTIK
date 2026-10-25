@@ -120,12 +120,16 @@ run_probe() {
       (cd "$REPO_DIR" && cargo fmt --all -- --check)
       ;;
     no-authoring-dependency)
-      ! grep -rqE '^[[:space:]]*(ums-[a-z-]+|slavia-[a-z-]+)[[:space:]]*=' \
-        "$REPO_DIR/Cargo.toml" "$REPO_DIR"/crates/*/Cargo.toml
+      local rc=0
+      grep -rqE '^[[:space:]]*(ums-[a-z-]+|slavia-[a-z-]+)[[:space:]]*=' \
+        "$REPO_DIR/Cargo.toml" "$REPO_DIR"/crates/*/Cargo.toml || rc=$?
+      [ "$rc" -eq 1 ]
       ;;
     cac-kernel-is-fixed-point)
-      ! grep -qE '(^|[^[:alnum:]_])(f32|f64)([^[:alnum:]_]|$)' \
-        "$REPO_DIR/crates/idaptik-core/src/scenario/vsm.rs"
+      local rc=0
+      grep -qE '(^|[^[:alnum:]_])(f32|f64)([^[:alnum:]_]|$)' \
+        "$REPO_DIR/crates/idaptik-core/src/scenario/vsm.rs" || rc=$?
+      [ "$rc" -eq 1 ]
       ;;
     package-contract-published)
       test -f "$REPO_DIR/contracts/idaptik/v1/contract.json" \
