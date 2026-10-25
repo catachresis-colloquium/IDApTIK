@@ -411,8 +411,8 @@ impl Store {
     ///    blob integrity, and checkpoint ticks relative to preceding batches.
     /// 2. **State-level** — for [`SimKind::GhostLobby`], restore the earliest
     ///    decodable checkpoint, tick the subsequent batches, and compare held
-    ///    buttons and the whole `RuntimeSnapshot` at later checkpoints with the
-    ///    same definition digest. Different digests produce
+    ///    buttons, the frontend pause latch, and the whole `RuntimeSnapshot` at
+    ///    later checkpoints with the same definition digest. Different digests produce
     ///    [`VerifyIssue::DefinitionMismatch`] and skip that comparison.
     ///
     /// The earliest checkpoint is trusted as the replay baseline; its snapshot
@@ -613,6 +613,14 @@ impl Store {
                                 replayed: held,
                             });
                         }
+                        if cp.paused != paused {
+                            issues.push(VerifyIssue::StateMismatch {
+                                at,
+                                field: "frontend_paused".to_owned(),
+                                replayed: paused.to_string(),
+                                recorded: cp.paused.to_string(),
+                            });
+                        }
 
                         // Compare the *whole* snapshot, not a selected few
                         // fields: the point of this pass is to catch drift the
@@ -661,8 +669,8 @@ impl Store {
 
 /// Tick one recorded batch, updating held buttons and the frontend pause latch.
 ///
-/// The latch takes the last `Pause` value in the batch, if any. Emitted and
-/// buffered events are discarded. The batch's tick and epoch are metadata;
+/// `Pause` sets the latch and `Restart` clears it, in command order. Emitted
+/// and buffered events are discarded. The batch's tick and epoch are metadata;
 /// they do not cause additional simulation ticks.
 fn replay_batch(
     sim: &mut GhostLobbySim,
@@ -674,8 +682,10 @@ fn replay_batch(
     // The frontend latches `paused` from the same command it sends to the sim;
     // mirroring that here keeps the returned latch in step with the tick.
     for cmd in &batch.cmds {
-        if let Command::Pause { on } = cmd {
-            *paused = *on;
+        match cmd {
+            Command::Pause { on } => *paused = *on,
+            Command::Restart => *paused = false,
+            _ => {}
         }
     }
     let _events = sim.tick(&input);

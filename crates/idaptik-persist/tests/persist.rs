@@ -926,6 +926,23 @@ fn resume_preserves_the_frontend_latch_and_applies_the_last_pause_in_a_batch() {
     for (base_paused, base_latch, cmds, expected_latch, expected_paused, ticks) in [
         (false, true, vec![], true, false, 1),
         (true, false, vec![], false, true, 0),
+        (true, true, vec![Command::Restart], false, false, 0),
+        (
+            true,
+            true,
+            vec![Command::Pause { on: true }, Command::Restart],
+            false,
+            false,
+            0,
+        ),
+        (
+            false,
+            false,
+            vec![Command::Restart, Command::Pause { on: true }],
+            true,
+            false,
+            0,
+        ),
         (
             true,
             true,
@@ -979,6 +996,52 @@ fn resume_preserves_the_frontend_latch_and_applies_the_last_pause_in_a_batch() {
         assert_eq!(
             (resumed.epoch, resumed.next_seq, resumed.replayed_batches),
             (8, 1, 1)
+        );
+    }
+}
+
+#[test]
+fn verify_compares_the_frontend_pause_latch_independently_of_the_snapshot() {
+    for (base_latch, cmds, expected_latch) in [
+        (false, vec![], false),
+        (true, vec![], true),
+        (false, vec![Command::Pause { on: true }], true),
+        (true, vec![Command::Restart], false),
+    ] {
+        let dir = tmp();
+        let store = Store::open(dir.path()).expect("open");
+        let id = SessionId::new("s-verify-pause-latch");
+        store
+            .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+            .expect("begin");
+        let mut s = sim();
+        let mut held = Buttons::default();
+        store
+            .checkpoint(&id, 0, 0, &s.snapshot(), held, base_latch)
+            .expect("base");
+        store.append_commands(&id, 0, 0, 0, &cmds).expect("append");
+        step(&mut s, &mut held, &cmds);
+        let snapshot = s.snapshot();
+        store
+            .checkpoint(&id, 1, 0, &snapshot, held, expected_latch)
+            .expect("matching checkpoint");
+        let report = store.verify(&id).expect("verify matching latch");
+        assert!(report.ok(), "{cmds:?}: {:?}", report.issues);
+
+        // Only the frontend latch drifts; the simulation and held buttons match.
+        store
+            .checkpoint(&id, 1, 0, &snapshot, held, !expected_latch)
+            .expect("drifted checkpoint");
+        let report = store.verify(&id).expect("verify drifted latch");
+        assert_eq!(
+            report.issues,
+            vec![VerifyIssue::StateMismatch {
+                at: 1,
+                field: "frontend_paused".to_owned(),
+                replayed: expected_latch.to_string(),
+                recorded: (!expected_latch).to_string(),
+            }],
+            "commands: {cmds:?}",
         );
     }
 }
