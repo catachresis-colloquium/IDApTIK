@@ -8,7 +8,7 @@ use crate::record::{
 };
 use crate::schema::{self, BLOBS, CHECKPOINTS, COMMANDS, META, SESSIONS};
 use crate::SCHEMA_VERSION;
-use idaptik_core::scenario::{Buttons, Command, RuntimeSnapshot, fold};
+use idaptik_core::scenario::{Buttons, Command, GhostLobbySim, RuntimeSnapshot, fold};
 use redb::{Database, ReadableTable};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -199,7 +199,12 @@ impl Store {
 
     // --- checkpoints --------------------------------------------------------
 
-    /// Store a snapshot as a checkpoint at `seq`.
+    /// Store a snapshot as a checkpoint covering the first `at` commands.
+    ///
+    /// `at` is a **boundary**: `0` is the initial state (no commands applied),
+    /// `n` means commands `0..n-1` are included. It is deliberately not the
+    /// command `seq` space, and it does not advance the session's `last_seq` —
+    /// see [`CheckpointRecord::at`] for why the two were separated.
     ///
     /// The definition is pulled out into the blob table and replaced by its
     /// digest. `held` and `paused` come from the frontend and are **not** part
@@ -211,7 +216,7 @@ impl Store {
     pub fn checkpoint(
         &self,
         id: &SessionId,
-        seq: u64,
+        at: u64,
         epoch: u64,
         snapshot: &RuntimeSnapshot,
         held: Buttons,
@@ -244,7 +249,7 @@ impl Store {
             }
 
             let record = CheckpointRecord {
-                seq,
+                at,
                 epoch,
                 tick: snapshot.tick,
                 held,
@@ -254,17 +259,16 @@ impl Store {
             };
             let bytes = serde_json::to_vec(&record)?;
             let mut checkpoints = txn.open_table(CHECKPOINTS)?;
-            checkpoints.insert((id.as_str(), seq), bytes.as_slice())?;
+            checkpoints.insert((id.as_str(), at), bytes.as_slice())?;
             drop(checkpoints);
 
-            if !rec.checkpoints.contains(&seq) {
-                rec.checkpoints.push(seq);
+            if !rec.checkpoints.contains(&at) {
+                rec.checkpoints.push(at);
                 rec.checkpoints.sort_unstable();
             }
-            match rec.last_seq {
-                Some(last) if last >= seq => {}
-                _ => rec.last_seq = Some(seq),
-            }
+            // `last_seq` belongs to the command log and is advanced only by
+            // `append_commands`. A checkpoint that touched it would make the
+            // initial checkpoint consume `seq 0`.
             if epoch > rec.last_epoch {
                 rec.last_epoch = epoch;
             }
@@ -294,7 +298,15 @@ impl Store {
 
     // --- resume -------------------------------------------------------------
 
-    /// Restore the newest checkpoint and bring `held` up to date.
+    /// Restore the newest checkpoint and **replay everything after it through
+    /// the simulation**.
+    ///
+    /// This is the whole point of the store: the returned
+    /// [`Resume::snapshot`] is the state *after* every logged command, not the
+    /// checkpoint's own state. A resume that returned the checkpoint verbatim
+    /// while setting `next_seq` past the trailing batches would silently drop
+    /// every command recorded since — a `Restart`, a `Pause`, an `Interact`,
+    /// or a whole second of movement.
     ///
     /// Only [`SimKind::GhostLobby`] has a typed payload in this version.
     /// Building sessions can be written and verified already; their typed
@@ -305,45 +317,52 @@ impl Store {
         if rec.sim_kind != SimKind::GhostLobby {
             return Err(PersistError::UnsupportedSimKind(rec.sim_kind));
         }
-        let checkpoint_seq = *rec
+        let checkpoint_at = *rec
             .checkpoints
             .last()
             .ok_or_else(|| PersistError::NoCheckpoint(id.clone()))?;
 
         let txn = self.db.begin_read()?;
         let checkpoints = txn.open_table(CHECKPOINTS)?;
-        let record = match checkpoints.get((id.as_str(), checkpoint_seq))? {
+        let record = match checkpoints.get((id.as_str(), checkpoint_at))? {
             None => return Err(PersistError::NoCheckpoint(id.clone())),
             Some(guard) => serde_json::from_slice::<CheckpointRecord>(guard.value())
                 .map_err(PersistError::Decode)?,
         };
         drop(checkpoints);
 
-        let (snapshot, paused, mut held) = materialise(&txn, record)?;
+        let (base, base_paused, base_held) = materialise(&txn, record)?;
 
-        // Advance `held` through everything logged after the checkpoint. This
-        // goes through `fold` rather than matching on `SetButton`, so the store
-        // and the live tick cannot disagree about what a command means.
+        // Rebuild the live simulation from the checkpoint, then advance it.
+        // `restore` is the same entry point a cold load uses, so the replayed
+        // run is the run — not an approximation of it.
+        let mut sim = GhostLobbySim::restore(base.definition.clone(), base)
+            .map_err(|e| PersistError::Restore(format!("{e:?}")))?;
 
+        // `held` and `paused` are frontend state, absent from the snapshot.
+        let mut held = base_held;
+        let mut paused = base_paused;
+
+        // Commands with `seq >= checkpoint_at` are the ones the checkpoint has
+        // not applied. `at` is a count, so it doubles as the first unapplied
+        // sequence number.
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
-        let range = commands.range(
-            (id.as_str(), checkpoint_seq.saturating_add(1))..=(id.as_str(), u64::MAX),
-        )?;
+        let range = commands.range((id.as_str(), checkpoint_at)..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
                 serde_json::from_slice(v.value()).map_err(PersistError::Decode)?;
-            let _ = fold(&batch.cmds, &mut held);
+            replay_batch(&mut sim, &mut held, &mut paused, &batch);
             replayed += 1;
         }
         drop(commands);
 
         Ok(Resume {
-            snapshot,
+            snapshot: sim.snapshot(),
             held,
             paused,
-            checkpoint_seq,
+            checkpoint_at,
             next_seq: match rec.last_seq {
                 Some(last) => last.saturating_add(1),
                 None => 0,
@@ -356,26 +375,34 @@ impl Store {
     // --- verification -------------------------------------------------------
 
     /// Replay the log independently of the checkpoints and report every
-    /// disagreement.
+    /// disagreement — including disagreement about **simulation state**.
     ///
-    /// This is the check that a snapshot-only resume would fail: `held` is
-    /// rebuilt from the commands and compared against what each checkpoint
-    /// recorded.
+    /// Two passes:
     ///
-    /// Verification assumes a session whose log starts at `seq 0`, which is
-    /// what [`Store::begin_session`] plus [`Store::append_commands`] produce. A
-    /// store assembled some other way is reported as
-    /// [`VerifyIssue::NonZeroStart`] rather than silently trusting a `held` set
-    /// it cannot know.
+    /// 1. **Log-level** — sequence contiguity, epoch monotonicity, decodability,
+    ///    blob integrity, and the held-button set each checkpoint recorded.
+    /// 2. **State-level** — restore the earliest checkpoint into a
+    ///    `GhostLobbySim`, tick the log between checkpoints, and compare the
+    ///    resulting `RuntimeSnapshot` with each later checkpoint.
+    ///
+    /// Pass 2 is what makes the crate's claim honest. Checking only `held`
+    /// would certify a checkpoint whose RNG, actor state or pause flag had
+    /// diverged, and the next resume would then continue from corrupt state.
+    ///
+    /// Verification assumes the log starts at `seq 0`, which is what
+    /// [`Store::begin_session`] plus [`Store::append_commands`] produce. A log
+    /// that starts elsewhere is reported as [`VerifyIssue::NonZeroStart`] and
+    /// the state pass begins from the earliest checkpoint instead.
     pub fn verify(&self, id: &SessionId) -> Result<VerifyReport, PersistError> {
         // Existence check: an unknown session is an error, an empty one is a
         // clean report with zero rows.
-        self.load_session(id)?;
+        let rec = self.load_session(id)?;
         let txn = self.db.begin_read()?;
 
         let mut issues = Vec::new();
 
-        // Load the log.
+        // --- pass 1: the log -------------------------------------------------
+
         let mut batches: BTreeMap<u64, CommandBatch> = BTreeMap::new();
         {
             let commands = txn.open_table(COMMANDS)?;
@@ -395,37 +422,34 @@ impl Store {
             }
         }
 
-        // Load the checkpoints.
         let mut cps: BTreeMap<u64, CheckpointRecord> = BTreeMap::new();
         {
             let checkpoints = txn.open_table(CHECKPOINTS)?;
             let range = checkpoints.range((id.as_str(), 0u64)..=(id.as_str(), u64::MAX))?;
             for entry in range {
                 let (k, v) = entry?;
-                let seq = k.value().1;
+                let at = k.value().1;
                 match serde_json::from_slice::<CheckpointRecord>(v.value()) {
                     Ok(c) => {
-                        cps.insert(seq, c);
+                        cps.insert(at, c);
                     }
                     Err(e) => issues.push(VerifyIssue::UndecodableCheckpoint {
-                        seq,
+                        at,
                         detail: e.to_string(),
                     }),
                 }
             }
         }
 
-        // Blob integrity: every digest a checkpoint names must exist and hash
-        // to its key.
         {
             let blobs = txn.open_table(BLOBS)?;
             let mut seen: BTreeMap<String, u64> = BTreeMap::new();
-            for (seq, cp) in &cps {
-                seen.entry(cp.definition_digest.clone()).or_insert(*seq);
+            for (at, cp) in &cps {
+                seen.entry(cp.definition_digest.clone()).or_insert(*at);
             }
-            for (digest, seq) in seen {
+            for (digest, at) in seen {
                 match blobs.get(digest.as_str())? {
-                    None => issues.push(VerifyIssue::MissingDefinition { seq, digest }),
+                    None => issues.push(VerifyIssue::MissingDefinition { at, digest }),
                     Some(g) => {
                         let computed = digest_hex(g.value());
                         if computed != digest {
@@ -436,18 +460,15 @@ impl Store {
             }
         }
 
-        // Contiguity and epoch monotonicity, walked in `seq` order.
         let mut expected: Option<u64> = None;
         let mut last_epoch: Option<u64> = None;
         for (&seq, batch) in &batches {
-            if let Some(exp) = expected {
-                if seq != exp {
+            match expected {
+                Some(exp) if seq != exp => {
                     issues.push(VerifyIssue::MissingSeq { expected: exp, found: seq });
                 }
-            } else {
-                if seq != 0 {
-                    issues.push(VerifyIssue::NonZeroStart { first: seq });
-                }
+                None if seq != 0 => issues.push(VerifyIssue::NonZeroStart { first: seq }),
+                _ => {}
             }
             expected = Some(seq.saturating_add(1));
             if let Some(prev) = last_epoch {
@@ -462,44 +483,11 @@ impl Store {
             last_epoch = Some(batch.epoch);
         }
 
-        // The substantive check: rebuild `held` from the commands and compare
-        // it with what each checkpoint said.
-        let mut held = Buttons::default();
-        let mut next_cp = cps.iter().peekable();
-        for (&seq, batch) in &batches {
-            let _ = fold(&batch.cmds, &mut held);
-            while let Some(&(cp_seq, cp)) = next_cp.peek() {
-                if *cp_seq > seq {
-                    break;
-                }
-                if cp.held != held {
-                    issues.push(VerifyIssue::HeldMismatch {
-                        seq: *cp_seq,
-                        recorded: cp.held,
-                        replayed: held,
-                    });
-                }
-                next_cp.next();
-            }
-        }
-        // Checkpoints beyond the last batch (a checkpoint with no commands at
-        // that seq) still have to agree with the final held set.
-        for (&cp_seq, cp) in next_cp {
-            if cp.held != held {
-                issues.push(VerifyIssue::HeldMismatch {
-                    seq: cp_seq,
-                    recorded: cp.held,
-                    replayed: held,
-                });
-            }
-        }
-
-        // A checkpoint's tick must not lag the last batch at or below its seq.
-        for (&cp_seq, cp) in &cps {
-            if let Some((_, batch)) = batches.range(..=cp_seq).next_back() {
+        for (&at, cp) in &cps {
+            if let Some((_, batch)) = batches.range(..at).next_back() {
                 if cp.tick < batch.tick {
                     issues.push(VerifyIssue::TickBehindLog {
-                        seq: cp_seq,
+                        at,
                         recorded: cp.tick,
                         logged: batch.tick,
                     });
@@ -507,13 +495,179 @@ impl Store {
             }
         }
 
-        Ok(VerifyReport {
-            session: id.as_str().to_owned(),
-            commands: batches.len(),
-            checkpoints: cps.len(),
-            issues,
-        })
+        // --- pass 2: the simulation ------------------------------------------
+
+        let mut replayed = 0usize;
+        match rec.sim_kind {
+            SimKind::GhostLobby => {
+                if let Some((&first_at, first_cp)) = cps.iter().next() {
+                    let (base, base_paused, base_held) =
+                        materialise(&txn, first_cp.clone())?;
+                    let mut sim = match GhostLobbySim::restore(base.definition.clone(), base) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            issues.push(VerifyIssue::StateUnverified {
+                                reason: format!("checkpoint at {first_at} does not restore: {e:?}"),
+                            });
+                            return Ok(finish(id, batches.len(), cps.len(), 0, issues));
+                        }
+                    };
+                    let mut held = base_held;
+                    let mut paused = base_paused;
+                    // The earliest checkpoint may be at > 0; the prefix cannot
+                    // be checked, which `NonZeroStart` has already said.
+                    let mut next_seq = first_at;
+
+                    for (&at, cp) in cps.iter().filter(|(a, _)| **a > first_at) {
+                        // Advance to this checkpoint's boundary.
+                        for (&seq, batch) in batches.range(next_seq..at) {
+                            replay_batch(&mut sim, &mut held, &mut paused, batch);
+                            replayed += 1;
+                            next_seq = seq.saturating_add(1);
+                        }
+
+                        if cp.definition_digest != first_cp.definition_digest {
+                            issues.push(VerifyIssue::DefinitionMismatch {
+                                at,
+                                expected: first_cp.definition_digest.clone(),
+                                found: cp.definition_digest.clone(),
+                            });
+                            continue;
+                        }
+
+                        if cp.held != held {
+                            issues.push(VerifyIssue::HeldMismatch {
+                                at,
+                                recorded: cp.held,
+                                replayed: held,
+                            });
+                        }
+
+                        // Compare the *whole* snapshot, not a selected few
+                        // fields: the point of this pass is to catch drift the
+                        // caller did not think to enumerate. The per-field walk
+                        // below only names which part differed first.
+                        let actual = sim.snapshot();
+                        match materialise(&txn, cp.clone()) {
+                            Err(e) => issues.push(VerifyIssue::StateUnverified {
+                                reason: format!("checkpoint at {at} does not load: {e}"),
+                            }),
+                            Ok((recorded, _, _)) => {
+                                if actual != recorded {
+                                    let (field, a, r) = first_difference(&actual, &recorded);
+                                    issues.push(VerifyIssue::StateMismatch {
+                                        at,
+                                        field,
+                                        replayed: a,
+                                        recorded: r,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    // Trailing batches after the last checkpoint still have to
+                    // run, so that a held-set disagreement at the last
+                    // checkpoint is not the only thing checked.
+                    for batch in batches.range(next_seq..).map(|(_, b)| b) {
+                        replay_batch(&mut sim, &mut held, &mut paused, batch);
+                        replayed += 1;
+                    }
+                } else if !batches.is_empty() {
+                    issues.push(VerifyIssue::StateUnverified {
+                        reason: "no checkpoint to replay from".to_owned(),
+                    });
+                }
+            }
+            other => issues.push(VerifyIssue::StateUnverified {
+                reason: format!("{other:?} has no typed replay in this build"),
+            }),
+        }
+
+        Ok(finish(id, batches.len(), cps.len(), replayed, issues))
     }
+}
+
+/// Tick one recorded batch through the simulation, exactly as `step_sim` does.
+fn replay_batch(
+    sim: &mut GhostLobbySim,
+    held: &mut Buttons,
+    paused: &mut bool,
+    batch: &CommandBatch,
+) {
+    let input = fold(&batch.cmds, held);
+    // The frontend latches `paused` from the same command it sends to the sim;
+    // mirroring that here keeps the returned latch in step with the tick.
+    for cmd in &batch.cmds {
+        if let Command::Pause { on } = cmd {
+            *paused = *on;
+        }
+    }
+    let _events = sim.tick(&input);
+    // Discard: events are derived from the command stream and are not part of
+    // `Resume`. Draining keeps the sim's own buffer from growing across a long
+    // replay.
+    let _ = sim.drain_events();
+}
+
+fn finish(
+    id: &SessionId,
+    commands: usize,
+    checkpoints: usize,
+    replayed: usize,
+    issues: Vec<VerifyIssue>,
+) -> VerifyReport {
+    VerifyReport {
+        session: id.as_str().to_owned(),
+        commands,
+        checkpoints,
+        replayed,
+        issues,
+    }
+}
+
+/// Name the first field that differs between two snapshots, with both values.
+///
+/// The comparison itself is [`RuntimeSnapshot`]'s derived `PartialEq`; this
+/// only exists so a report says *what* diverged rather than "not equal".
+/// Reporting only the first difference is deliberate: a run that diverged at
+/// the RNG will differ in everything downstream, and a hundred downstream
+/// entries would bury the cause.
+fn first_difference(
+    actual: &RuntimeSnapshot,
+    recorded: &RuntimeSnapshot,
+) -> (String, String, String) {
+    let field = |name: &str, a: String, r: String| (name.to_owned(), a, r);
+    if actual.format != recorded.format {
+        return field("format", actual.format.clone(), recorded.format.clone());
+    }
+    if actual.seed != recorded.seed {
+        return field("seed", actual.seed.to_string(), recorded.seed.to_string());
+    }
+    if actual.tick != recorded.tick {
+        return field("tick", actual.tick.to_string(), recorded.tick.to_string());
+    }
+    if actual.paused != recorded.paused {
+        return field(
+            "paused",
+            actual.paused.to_string(),
+            recorded.paused.to_string(),
+        );
+    }
+    if actual.rng != recorded.rng {
+        return field("rng", format!("{:?}", actual.rng), "differs".to_owned());
+    }
+    if actual.cfg != recorded.cfg {
+        return field("cfg", format!("{:?}", actual.cfg), "differs".to_owned());
+    }
+    if actual.state != recorded.state {
+        return field("state", "differs".to_owned(), "as recorded".to_owned());
+    }
+    if actual.validation != recorded.validation {
+        return field("validation", "differs".to_owned(), "as recorded".to_owned());
+    }
+    // Equal snapshots never reach here; if they do, say so rather than lying.
+    field("unknown", "differs".to_owned(), "differs".to_owned())
 }
 
 /// Read a session inside an already-open table, for the read-modify-write paths.

@@ -261,16 +261,48 @@ which button.
 the log then never started at zero. Its own `NonZeroStart` check caught this,
 and a test failed on it before any of it shipped.
 
+### Review findings, and what they changed
+
+PR #175 merged with three Codex findings still open. All three were real, and
+each is now a named regression test:
+
+**P1 — `resume` did not replay trailing batches into the simulation.** It folded
+the held set and returned the checkpoint's own snapshot while advancing
+`next_seq` past every command logged since. A `Pause`, a `Restart` or a second of
+movement was silently discarded. *Fixed:* `resume` now restores a
+`GhostLobbySim` and ticks each trailing batch through the same entry point as
+`step_sim`. *Test:* `resume_replays_trailing_commands_into_the_simulation`
+asserts on `tick` and player position, which only the real tick can change.
+
+**P2 — `verify` compared held buttons but not simulation state.** A checkpoint
+with diverged RNG, actor state or pause flag was certified valid. *Fixed:*
+`verify` now restores from the earliest checkpoint, replays the log, and compares
+the whole `RuntimeSnapshot`. *Test:* `verify_catches_diverged_simulation_state`
+plants a checkpoint carrying pre-command state at a post-command boundary.
+
+**P2 — an initial checkpoint consumed `seq 0`.** Checkpoint position and command
+high-water mark were the same number, so checkpointing the initial state forced
+the first command to `seq 1`, and `verify` then rejected the session as
+`NonZeroStart`. *Fixed:* `CheckpointRecord.at` is a boundary (count of commands
+applied), stored separately from `SessionRecord.last_seq`. *Test:*
+`an_initial_checkpoint_does_not_consume_seq_zero`.
+
+Each fix was re-broken deliberately and the corresponding test failed, so none of
+the three is a test that cannot fail.
+
 ### What is proven
 
-`cargo test -p idaptik-persist`: **18 passing** (5 unit, 13 integration),
-including the two that matter most:
+`cargo test -p idaptik-persist`: **21 passing** (5 unit, 16 integration),
+including:
 
 * `resume_restores_held_buttons` — a checkpoint taken with `Left|Sprint` held
   resumes with them held;
+* `resume_replays_trailing_commands_into_the_simulation` — a `Pause` and a
+  movement logged after the checkpoint reach the resumed simulation;
 * `verify_can_fail` — a checkpoint whose recorded `held` is not what the log
-  replays to is reported as `HeldMismatch`. A verification that cannot fail is
-  not verification.
+  replays to is reported as `HeldMismatch`;
+* `verify_catches_diverged_simulation_state` — a checkpoint whose state was never
+  produced by the log is reported as `StateMismatch`;
 
 ### What is not proven
 

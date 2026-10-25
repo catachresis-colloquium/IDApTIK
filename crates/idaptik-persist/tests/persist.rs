@@ -123,9 +123,9 @@ fn resume_restores_held_buttons() {
     store
         .append_commands(
             &id,
-            1,
             0,
-            1,
+            0,
+            0,
             &[
                 Command::SetButton {
                     button: Button::Left,
@@ -143,6 +143,7 @@ fn resume_restores_held_buttons() {
     held.set(Button::Left, true);
     held.set(Button::Sprint, true);
 
+    // Boundary: the one batch (seq 0) is applied, so at == 1.
     store
         .checkpoint(&id, 1, 0, &s.snapshot(), held, false)
         .expect("checkpoint");
@@ -154,8 +155,8 @@ fn resume_restores_held_buttons() {
         "Sprint must survive the resume"
     );
     assert_eq!(resumed.held, held);
-    assert_eq!(resumed.checkpoint_seq, 1);
-    assert_eq!(resumed.next_seq, 2);
+    assert_eq!(resumed.checkpoint_at, 1);
+    assert_eq!(resumed.next_seq, 1);
     assert_eq!(resumed.replayed_batches, 0);
 }
 
@@ -181,9 +182,9 @@ fn resume_advances_held_through_later_commands() {
     store
         .append_commands(
             &id,
-            1,
             0,
-            1,
+            0,
+            0,
             &[Command::SetButton {
                 button: Button::Right,
                 down: true,
@@ -246,15 +247,21 @@ fn verify_can_fail() {
         .expect("begin");
 
     let s = sim();
-    // The log holds no button presses at all, so the replayed held set is
+    // An honest base, so the replay has somewhere to start from.
+    store
+        .checkpoint(&id, 0, 0, &s.snapshot(), Buttons::default(), false)
+        .expect("base checkpoint");
+
+    // The log holds no button presses at all, so the replayed held set stays
     // empty; record a checkpoint claiming otherwise.
     store
         .append_commands(&id, 0, 0, 0, &[Command::Jump])
         .expect("append");
     let mut lie = Buttons::default();
     lie.set(Button::Left, true);
+    // `at == 1` claims the one command is applied; the log never pressed Left.
     store
-        .checkpoint(&id, 0, 0, &s.snapshot(), lie, false)
+        .checkpoint(&id, 1, 0, &s.snapshot(), lie, false)
         .expect("checkpoint");
 
     let report = store.verify(&id).expect("verify");
@@ -263,8 +270,8 @@ fn verify_can_fail() {
         report
             .issues
             .iter()
-            .any(|i| matches!(i, VerifyIssue::HeldMismatch { seq: 0, .. })),
-        "expected a HeldMismatch at seq 0, got {:?}",
+            .any(|i| matches!(i, VerifyIssue::HeldMismatch { at: 1, .. })),
+        "expected a HeldMismatch at at=1, got {:?}",
         report.issues
     );
 }
@@ -363,6 +370,175 @@ fn the_definition_is_deduplicated_out_of_the_checkpoint_body() {
     assert_eq!(resumed.snapshot.definition, snap.definition);
     assert_eq!(resumed.snapshot.seed, snap.seed);
     assert_eq!(resumed.snapshot.format, snap.format);
+}
+
+/// Codex review finding (P2): an initial checkpoint must not consume `seq 0`.
+///
+/// `checkpoint(at = 0)` is the state *before* any command. If it advanced the
+/// command-log high-water mark, the first command would have to be `seq 1`, and
+/// `verify` would then reject the whole session as `NonZeroStart`. The two
+/// numbers are separate quantities and are stored separately.
+#[test]
+fn an_initial_checkpoint_does_not_consume_seq_zero() {
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-initial");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+
+    let s = sim();
+    // Checkpoint first, at the initial state, before any command exists.
+    store
+        .checkpoint(&id, 0, 0, &s.snapshot(), Buttons::default(), false)
+        .expect("initial checkpoint");
+
+    // The first command must still be allowed at seq 0.
+    store
+        .append_commands(&id, 0, 0, 0, &[Command::Jump])
+        .expect("seq 0 must be writable after an initial checkpoint");
+
+    let report = store.verify(&id).expect("verify");
+    assert!(
+        !report
+            .issues
+            .iter()
+            .any(|i| matches!(i, VerifyIssue::NonZeroStart { .. })),
+        "an initial checkpoint must not push the log off zero: {:?}",
+        report.issues
+    );
+    assert!(report.ok(), "expected a clean report, got {:?}", report.issues);
+}
+
+/// Codex review finding (P1): `resume` must replay trailing batches into the
+/// simulation, not merely update the held set.
+///
+/// Two batches are logged after the checkpoint: a movement press, which only
+/// `tick` can turn into a position and a tick count, and a pause, which only
+/// the sim's own state machine can latch. A resume that merely folded buttons
+/// would return the checkpoint's state with `next_seq` claiming both were
+/// applied.
+#[test]
+fn resume_replays_trailing_commands_into_the_simulation() {
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-replay");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+
+    let s = sim();
+    let base = s.snapshot();
+    assert!(!base.paused, "the fixture starts unpaused");
+
+    // Checkpoint the initial, unpaused state.
+    store
+        .checkpoint(&id, 0, 0, &base, Buttons::default(), false)
+        .expect("checkpoint");
+
+    // Then move right, and pause, after the checkpoint.
+    store
+        .append_commands(
+            &id,
+            0,
+            0,
+            0,
+            &[Command::SetButton {
+                button: Button::Right,
+                down: true,
+            }],
+        )
+        .expect("append movement");
+    store
+        .append_commands(&id, 1, 0, 1, &[Command::Pause { on: true }])
+        .expect("append pause");
+
+    let resumed = store.resume(&id).expect("resume");
+    assert_eq!(resumed.replayed_batches, 2);
+
+    // `tick` ran: only the simulation increments it, and only on an unpaused,
+    // unended frame.
+    assert!(
+        resumed.snapshot.tick > base.tick,
+        "replaying a movement batch must advance the simulation's tick \
+         (was {}, now {})",
+        base.tick,
+        resumed.snapshot.tick
+    );
+
+    // And the movement actually moved the body, which no fold can do.
+    assert_ne!(
+        resumed.snapshot.state.player.x, base.state.player.x,
+        "the replayed movement must change the player's position"
+    );
+
+    // The pause reached the simulation and the frontend latch alike.
+    assert!(
+        resumed.snapshot.paused,
+        "a Pause after the checkpoint must reach the resumed simulation"
+    );
+    assert!(resumed.paused, "the frontend latch must agree");
+}
+
+/// Codex review finding (P2): `verify` must compare simulation state, not just
+/// held buttons.
+///
+/// A checkpoint whose state was never produced by the log still passes a
+/// held-only check. This records a checkpoint at `at = 1` carrying the *tick 0*
+/// snapshot while the log holds one command, so replaying produces tick 1 and
+/// the disagreement is real.
+#[test]
+fn verify_catches_diverged_simulation_state() {
+    let dir = tmp();
+    let store = Store::open(dir.path()).expect("open");
+    let id = SessionId::new("s-state");
+    store
+        .begin_session(&id, &record(SimKind::GhostLobby, SNAPSHOT_FORMAT))
+        .expect("begin");
+
+    let s = sim();
+    store
+        .checkpoint(&id, 0, 0, &s.snapshot(), Buttons::default(), false)
+        .expect("checkpoint at the initial state");
+
+    store
+        .append_commands(
+            &id,
+            0,
+            0,
+            0,
+            &[Command::SetButton {
+                button: Button::Right,
+                down: true,
+            }],
+        )
+        .expect("append");
+
+    // Claims one command has been applied, but carries the pre-command state.
+    // Held matches, so a held-only verifier would call this clean.
+    let mut held = Buttons::default();
+    held.set(Button::Right, true);
+    store
+        .checkpoint(&id, 1, 0, &s.snapshot(), held, false)
+        .expect("lying checkpoint");
+
+    let report = store.verify(&id).expect("verify");
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| matches!(i, VerifyIssue::StateMismatch { at: 1, .. })),
+        "verify must compare simulation state, not only held buttons: {:?}",
+        report.issues
+    );
+    assert!(
+        !report
+            .issues
+            .iter()
+            .any(|i| matches!(i, VerifyIssue::HeldMismatch { .. })),
+        "held agrees here; the disagreement is state: {:?}",
+        report.issues
+    );
 }
 
 #[test]

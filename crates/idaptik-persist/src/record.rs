@@ -144,7 +144,19 @@ pub struct CommandBatch {
 /// change between snapshot versions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CheckpointRecord {
-    pub seq: u64,
+    /// How many commands this checkpoint has applied — a **boundary**, not a
+    /// command index.
+    ///
+    /// `at == 0` is the state before any command (the initial state).
+    /// `at == n` means commands with `seq` `0..n-1` are included, so replay
+    /// resumes at command `n`.
+    ///
+    /// An earlier draft keyed checkpoints by the same `seq` space as the
+    /// command log, which made "checkpoint the initial state" consume `seq 0`
+    /// and forced the first command to `seq 1` — a log that `verify` then
+    /// rejects as [`VerifyIssue::NonZeroStart`]. Two different quantities were
+    /// sharing one number. They are separate now.
+    pub at: u64,
     pub epoch: u64,
     /// The simulation's tick at checkpoint time. `Restart` rewinds it, so this
     /// is payload, not identity.
@@ -163,21 +175,27 @@ pub struct CheckpointRecord {
 /// What a caller needs to continue a run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resume {
-    /// The newest checkpoint, with its definition spliced back in.
+    /// The newest checkpoint with its definition spliced back in, **advanced
+    /// through every batch logged after it**.
+    ///
+    /// Not the checkpoint's stored state: a resume that returned that would
+    /// silently drop every command recorded since the checkpoint, while
+    /// `next_seq` said they had been applied.
     pub snapshot: RuntimeSnapshot,
     /// Held buttons as of the newest checkpoint, advanced through every logged
     /// command after it.
     pub held: Buttons,
     /// Pause latch as of the newest checkpoint.
     pub paused: bool,
-    /// The checkpoint this resumed from.
-    pub checkpoint_seq: u64,
+    /// The checkpoint this resumed from, as its `at` boundary.
+    pub checkpoint_at: u64,
     /// The next `seq` the caller should write.
     pub next_seq: u64,
     /// The epoch to write on the next batch.
     pub epoch: u64,
-    /// Batches replayed after the checkpoint to rebuild `held`. Zero when the
-    /// checkpoint is the newest thing in the log.
+    /// Batches replayed after the checkpoint. Each one was run through
+    /// `GhostLobbySim::tick`, so [`Resume::snapshot`] is the state **after**
+    /// them, not the checkpoint's own state.
     pub replayed_batches: usize,
 }
 
@@ -193,20 +211,29 @@ pub enum VerifyIssue {
     /// A command batch does not decode.
     UndecodableCommand { seq: u64, detail: String },
     /// A checkpoint does not decode.
-    UndecodableCheckpoint { seq: u64, detail: String },
+    UndecodableCheckpoint { at: u64, detail: String },
     /// A checkpoint names a definition blob that is not in the store.
-    MissingDefinition { seq: u64, digest: String },
+    MissingDefinition { at: u64, digest: String },
     /// A definition blob's bytes do not hash to its key.
     DefinitionDigestMismatch { digest: String, computed: String },
     /// The held-button set recorded at a checkpoint is not the set the log
     /// replays to. This is the check that a snapshot-only resume would fail.
     HeldMismatch {
-        seq: u64,
+        at: u64,
         recorded: Buttons,
         replayed: Buttons,
     },
-    /// A checkpoint's `tick` is behind the last batch at or below its `seq`.
-    TickBehindLog { seq: u64, recorded: u64, logged: u64 },
+    /// A checkpoint's `tick` is behind the last batch at or below its `at`.
+    TickBehindLog { at: u64, recorded: u64, logged: u64 },
+    /// Replaying the log produced a different simulation state from the one the
+    /// checkpoint recorded. The `field` names the first thing that differed.
+    StateMismatch { at: u64, field: String, replayed: String, recorded: String },
+    /// Two checkpoints in one session carry different definitions, so they
+    /// cannot be compared by replay at all.
+    DefinitionMismatch { at: u64, expected: String, found: String },
+    /// Verification could not replay the simulation for this session kind, so
+    /// only the log-level checks ran.
+    StateUnverified { reason: String },
     /// Epoch went backwards between consecutive batches.
     EpochRegressed { seq: u64, from: u64, to: u64 },
 }
@@ -219,6 +246,10 @@ pub struct VerifyReport {
     pub commands: usize,
     /// Checkpoints walked.
     pub checkpoints: usize,
+    /// Commands actually executed during verification's replay. Zero means the
+    /// simulation was not compared, which [`VerifyIssue::StateUnverified`] will
+    /// also say.
+    pub replayed: usize,
     /// Empty means the log and the checkpoints agree.
     pub issues: Vec<VerifyIssue>,
 }

@@ -44,6 +44,8 @@ pub enum PersistError {
     },
     /// A snapshot's own format tag is not the one this build can restore.
     FormatMismatch { found: String, expected: String },
+    /// A stored snapshot could not be rebuilt into a running simulation.
+    Restore(String),
 }
 
 impl fmt::Display for PersistError {
@@ -82,6 +84,7 @@ impl fmt::Display for PersistError {
                 f,
                 "snapshot format {found:?} cannot be restored by a build expecting {expected:?}"
             ),
+            Self::Restore(m) => write!(f, "restore: {m}"),
         }
     }
 }
