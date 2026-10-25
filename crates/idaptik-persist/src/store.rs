@@ -512,7 +512,15 @@ impl Store {
         match rec.sim_kind {
             SimKind::GhostLobby => {
                 if let Some((&first_at, first_cp)) = cps.iter().next() {
-                    let (base, base_paused, base_held) = materialise(&txn, first_cp.clone())?;
+                    let (base, base_paused, base_held) = match materialise(&txn, first_cp.clone()) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            issues.push(VerifyIssue::StateUnverified {
+                                reason: format!("checkpoint at {first_at} does not load: {e}"),
+                            });
+                            return Ok(finish(id, batches.len(), cps.len(), 0, issues));
+                        }
+                    };
                     let mut sim = match GhostLobbySim::restore(base.definition.clone(), base) {
                         Ok(s) => s,
                         Err(e) => {
