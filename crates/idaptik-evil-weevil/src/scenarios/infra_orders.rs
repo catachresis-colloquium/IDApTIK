@@ -34,7 +34,7 @@ use idaptik_core::scenario::infra::{Hearing, ObservationKind, observations};
 use idaptik_core::scenario::power::sim::{PowerIndex, PowerOp};
 use idaptik_core::scenario::signal::sim::Seat;
 use idaptik_net::envelope::Role;
-use idaptik_net::lockstep::LockstepCore;
+use idaptik_net::lockstep::{LockstepCore, ScriptFeed};
 
 const ID: &str = "EW-06-infrastructure-orders-and-observations";
 
@@ -67,7 +67,9 @@ fn inputs() -> Vec<InputSpec> {
         },
         InputSpec {
             step: 4,
-            intent: "commit the infiltrator watermark through tick 3, then advance".into(),
+            intent: "commit the infiltrator horizon through tick 3, sample the hacker \
+                     seat's own schedule, and advance in rounds"
+                .into(),
             expected: "ticks 0-3 execute: the sim applies the order and the guard observes \
                        the diversion"
                 .into(),
@@ -249,36 +251,47 @@ impl Scenario for InfraOrdersScenario {
             .expect("horizon commit accepted");
 
         // Run the ready steps, collecting events; on the tick the synth
-        // plays, read the perception contract where Billy stands.
+        // plays, read the perception contract where Billy stands. Sampling
+        // the seat's own script horizon first is what lets the run proceed:
+        // advance stops at either watermark, and the sampling horizon only
+        // moves in pump_outgoing — the same rounds the observations scenario
+        // runs. Two rounds carry the run past the order's tick.
+        let mut feed = ScriptFeed::new(&script, Role::Hacker);
         let mut events: Vec<Event> = Vec::new();
         let mut obs_at_billy: Option<(f64, Vec<ObservationKind>)> = None;
-        target.advance_with(|sim, fresh| {
-            events.extend(fresh.iter().cloned());
-            let synth_now = fresh.iter().any(|e| {
-                matches!(
-                    e,
-                    Event::Mole {
-                        mole: MoleEvent::SynthSoundPlayed { .. }
-                    }
-                )
+        for _round in 0..3 {
+            let _ = target.pump_outgoing(&mut feed);
+            target.advance_with(|sim, fresh| {
+                events.extend(fresh.iter().cloned());
+                let synth_now = fresh.iter().any(|e| {
+                    matches!(
+                        e,
+                        Event::Mole {
+                            mole: MoleEvent::SynthSoundPlayed { .. }
+                        }
+                    )
+                });
+                if synth_now && obs_at_billy.is_none() {
+                    let st = sim.state();
+                    // Billy's own ears: the archetype's invest_dist/invest_noise,
+                    // the only hearing the infrastructure layer ever uses.
+                    let heard = observations(
+                        sim.definition(),
+                        st,
+                        st.billy.x,
+                        Hearing {
+                            dist: 260.0,
+                            threshold: 0.45,
+                        },
+                        &[],
+                    );
+                    obs_at_billy = Some((st.billy.x, heard.into_iter().map(|o| o.kind).collect()));
+                }
             });
-            if synth_now && obs_at_billy.is_none() {
-                let st = sim.state();
-                // Billy's own ears: the archetype's invest_dist/invest_noise,
-                // the only hearing the infrastructure layer ever uses.
-                let heard = observations(
-                    sim.definition(),
-                    st,
-                    st.billy.x,
-                    Hearing {
-                        dist: 260.0,
-                        threshold: 0.45,
-                    },
-                    &[],
-                );
-                obs_at_billy = Some((st.billy.x, heard.into_iter().map(|o| o.kind).collect()));
+            if obs_at_billy.is_some() {
+                break;
             }
-        });
+        }
 
         let applied = events.iter().any(|e| {
             matches!(
