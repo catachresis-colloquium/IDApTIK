@@ -318,15 +318,15 @@ mod tests {
     use crate::scenario::command::{Command, PivotTarget, RunConfig, TickInput, fold};
     use crate::scenario::event::Event;
     use crate::scenario::floor_graph::door_node_id;
-    use crate::scenario::ids::{FeedId, LoadId, RoomId, SignalId};
-    use crate::scenario::power::{HazardDef, HazardId, HazardLive, LoadKind};
+    use crate::scenario::ids::{FeedId, HazardId, LoadId, RoomId, SignalId};
+    use crate::scenario::mathf::TICK_DT;
     use crate::scenario::power::sim::{
         OffReason, PowerDenyReason, PowerEvent, PowerIndex, PowerOp,
     };
-    use crate::scenario::mathf::TICK_DT;
     use crate::scenario::power::test_floor::{
         BRK_A, BRK_B, DOOR_EXIT, FEED_A, FEED_B, PUMP_LAUNDRY, powered_ghost_lobby,
     };
+    use crate::scenario::power::{HazardDef, HazardLive, LoadKind};
     use crate::scenario::signal::sim::Seat;
     use crate::scenario::state::Place;
 
