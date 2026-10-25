@@ -46,9 +46,11 @@ die()  {
   # Also emit a check-run annotation: without it the failure detail exists
   # only in the run log, which a remote operator (or a sandbox without log
   # egress) cannot read -- a gate that cannot be diagnosed from outside
-  # cannot be cleared from outside. Newlines flattened; the log keeps the
-  # original formatting on stderr.
-  printf '::error::[vendor-winit] %s\n' "$(printf '%s' "$*" | sed -n ':a;N;$!ba;s/\n/ | /gp')"
+  # cannot be cleared from outside. Flatten multiline diagnostics for the
+  # annotation while retaining the original formatting on stderr.
+  local annotation
+  annotation="$(printf '%s' "$*" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
+  printf '::error::[vendor-winit] %s\n' "$annotation"
   exit 1
 }
 
