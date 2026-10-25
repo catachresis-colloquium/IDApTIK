@@ -25,7 +25,9 @@ The proposed cross-repository epistemic state-machine seam is documented in
 │   ├── idaptik-tui/   #   ratatui/crossterm frontend + --headless/--replay/--export verifier
 │   ├── idaptik-bevy/  #   selected Bevy side-on 2.5D frontend (ADR-0008)
 │   ├── idaptik-net/   #   Phoenix Channels client over burble game-session fabric (ADR-0006)
-│   └── idaptik-evil-weevil/  # sans-IO deterministic adversarial testing adapter (ADR-0017)
+│   ├── idaptik-evil-weevil/  # sans-IO deterministic adversarial testing adapter (ADR-0017)
+│   ├── idaptik-weevil/  # thin host adapter over the Evil Weevil native C ABI + headless replay driver
+│   └── idaptik-persist/  # durable session storage: command log, checkpoints, replay-safe resume (redb)
 ├── config/            # Nickel typed config: scenario-schema.ncl + fixtures (incl. bad_*.ncl)
 ├── docs/adr/          # Architecture Decision Records
 ├── fixtures/          # cross-language wire fixtures
@@ -45,8 +47,14 @@ The deterministic game simulation semantics. The core is **engine-agnostic**
   reachability, sessions) that the hack is played against.
 - `scenario/` — definition-as-data scenarios (Ghost Lobby, the Exchange House
   building runtime as floors), the actor archetype + modifier registry, and the
-  tick/command/event/snapshot machinery.
-- `companion/` — Moletaire, the deterministic companion (Rust port).
+  tick/command/event/snapshot machinery. Four building systems sit inside it,
+  deliberately separate:
+  `signal/` (control wiring, ADR-0012), `power/` (sources, feeds, loads,
+  breakers, ADR-0016), `infrastructure/` (water, gas, airflow, ADR-0013) and
+  `infra.rs` (water zones, alarms and their consequences as observations,
+  ADR-0014).
+- `companion/` — Moletaire, the deterministic companion (Rust port). Hosted by
+  the scenario sim since 2026-10-25 (`Command::Mole`, `MoleHostState`).
 
 Determinism is enforced by tests: `replay_determinism`, `snapshot_equivalence`,
 `rng_vectors`, `no_panic_fuzz`, and the negative Nickel fixtures.

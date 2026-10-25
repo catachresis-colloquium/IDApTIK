@@ -2,6 +2,46 @@
 //! declarative definition human-readable and homoiconic, and are resolved to
 //! `Vec` indices **once** at construction ([`IdIndex`]) so the hot tick loop
 //! never hashes strings.
+//!
+//! This module is the canonical definition site for scenario content IDs,
+//! including electrical and water/gas/airflow IDs. Consumers import these
+//! types; they must not introduce replacement structs or string aliases.
+//! A type identifies a domain, not a validated reference: existence and
+//! uniqueness are checked by the owning definition's validator.
+//!
+//! Electrical IDs retain the v1 JSON string representation, but are distinct
+//! Rust types even when their strings match. For example, routing requires a
+//! load and an electrical feed:
+//!
+//! ```
+//! use idaptik_core::scenario::ids::{FeedId, LoadId};
+//! use idaptik_core::scenario::power::sim::PowerCommand;
+//! use idaptik_core::scenario::signal::sim::Seat;
+//! let _ = PowerCommand::Route {
+//!     by: Seat::Hacker,
+//!     load: LoadId::from("camera"),
+//!     feed: FeedId::from("lighting"),
+//! };
+//! ```
+//!
+//! A building circuit is not an electrical feed:
+//!
+//! ```compile_fail
+//! use idaptik_core::scenario::ids::{CircuitId, FeedId};
+//! let _: FeedId = CircuitId::from("lighting");
+//! ```
+//!
+//! Nor may a hazard stand in for a load, or a breaker for a source:
+//!
+//! ```compile_fail
+//! use idaptik_core::scenario::ids::{HazardId, LoadId};
+//! let _: LoadId = HazardId::from("panel");
+//! ```
+//!
+//! ```compile_fail
+//! use idaptik_core::scenario::ids::{BreakerId, PowerSourceId};
+//! let _: PowerSourceId = BreakerId::from("mains");
+//! ```
 
 use crate::scenario::definition::ScenarioDefinition;
 use serde::{Deserialize, Serialize};
@@ -86,25 +126,20 @@ id_newtype!(TraceSourceId, "Stable id of a scent or noise source.");
 
 // --- power ------------------------------------------------------------------
 //
-// The power module (`scenario::power`, `scenario::sim::power`) imports these
-// five from `crate::scenario::ids`, so they have to be *defined* here. They
-// were not: the power work landed its module, its events and its tests while
-// the id types it names were only ever imported. `main` therefore did not
-// compile — `cargo check -p idaptik-core` failed with five `E0432`
-// unresolved-import errors — and no test could run, so the gap could not
-// report itself.
-//
-// The definitions are deliberately the plain `id_newtype!` ones: nothing in
-// the power module needs anything more than a string id, and inventing a
-// richer type here would be a second decision taken in the wrong file.
+// Keep exactly one definition of each electrical ID here. PR #162 introduced
+// them; #167 accidentally removed them while adding infrastructure IDs (#171).
+// Concurrent restorations then duplicated them; #190 removed the duplicates.
+// The compiler rejects missing/duplicate declarations; power_network tests
+// protect nominal separation and the existing wire contract. See
+// docs/verification/issue-171-electrical-ids.md for evidence and merge gates.
 id_newtype!(
     HazardId,
     "Stable id of an authored hazard in a powered room."
 );
-id_newtype!(LoadId, "Stable id of a powered load on a circuit.");
+id_newtype!(LoadId, "Stable id of a powered load on an electrical feed.");
 id_newtype!(
     FeedId,
-    "Stable id of a circuit feed (the thing that cuts it)."
+    "Stable id of an electrical distribution feed, distinct from a building CircuitId."
 );
 id_newtype!(BreakerId, "Stable id of a breaker on a power feed.");
 id_newtype!(

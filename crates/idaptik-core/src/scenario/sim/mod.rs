@@ -35,13 +35,12 @@ use crate::scenario::common::{
 use crate::scenario::constants as c;
 use crate::scenario::definition::{RoomDef, ScenarioDefinition, ValidationError};
 use crate::scenario::event::Event;
-use crate::scenario::guard_brain::{
-    GuardApplyOutcome, GuardBrainKind, GuardContact, GuardDecision, GuardPerception,
-    contact_id,
-};
 use crate::scenario::floor_graph::{
     VACUUM_NODE_ID, camera_node_id, door_node_id, floor_graph, inside_vantage, light_node_id,
     pivot_host,
+};
+use crate::scenario::guard_brain::{
+    GuardApplyOutcome, GuardBrainKind, GuardContact, GuardDecision, GuardPerception, contact_id,
 };
 use crate::scenario::ids::IdIndex;
 use crate::scenario::mathf::{TICK_DT, clamp, js_round, sign_or};
@@ -207,7 +206,13 @@ impl GhostLobbySim {
             guard_brain: GuardBrainKind::default(),
             guard_decision: None,
             last_guard_outcome: None,
-        })
+        };
+        // Rebuild the live companion from its canonical host record in the
+        // snapshot. As `adopt_mole` documents, an absent record or a companion
+        // restore error leaves no live mole and is not a run restore error --
+        // which is why this is a call here rather than a `?` in the signature.
+        sim.adopt_mole();
+        Ok(sim)
     }
 
     /// Restart from `seed`, re-rolling the reset and emitting the start events.
@@ -2251,7 +2256,10 @@ mod tests {
         sim.set_guard_decision(Some(GuardDecision::new("ADVANCE", 0, 0.0, 0.0, 10.0)));
         let _ = sim.tick(&idle_input());
         // The classic FSM never consumes a queued kernel proposal.
-        assert!(sim.has_guard_decision(), "classic brain must leave the proposal queued");
+        assert!(
+            sim.has_guard_decision(),
+            "classic brain must leave the proposal queued"
+        );
         assert_eq!(sim.last_guard_outcome(), None);
         assert_ne!(sim.state().billy.x, before);
     }
@@ -2263,10 +2271,17 @@ mod tests {
         let before = sim.state().billy.x;
         sim.set_guard_decision(Some(GuardDecision::new("ADVANCE", 0, 900.0, 0.0, 60.0)));
         let _ = sim.tick(&idle_input());
-        assert!(!sim.has_guard_decision(), "the sim consumes the proposal it applies");
+        assert!(
+            !sim.has_guard_decision(),
+            "the sim consumes the proposal it applies"
+        );
         let outcome = sim.last_guard_outcome().expect("an outcome was recorded");
         assert!(outcome.accepted, "a valid target is accepted");
-        assert_ne!(sim.state().billy.x, before, "the guard moved under the kernel's proposal");
+        assert_ne!(
+            sim.state().billy.x,
+            before,
+            "the guard moved under the kernel's proposal"
+        );
     }
 
     #[test]
@@ -2279,7 +2294,11 @@ mod tests {
         let outcome = sim.last_guard_outcome().expect("an outcome was recorded");
         assert!(!outcome.accepted, "an unknown target is refused");
         assert_eq!(outcome.reason, "invalid-target");
-        assert_eq!(sim.state().billy.x, before, "a refused proposal moves nothing");
+        assert_eq!(
+            sim.state().billy.x,
+            before,
+            "a refused proposal moves nothing"
+        );
     }
 
     #[test]
@@ -2298,6 +2317,9 @@ mod tests {
             sim.is_live_target(contact_id::VACUUM),
             "the host resolves the decoy's id against its own entity lifecycle"
         );
-        assert!(!sim.is_live_target(9999), "an id no entity owns is not live");
+        assert!(
+            !sim.is_live_target(9999),
+            "an id no entity owns is not live"
+        );
     }
 }

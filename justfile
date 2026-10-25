@@ -232,6 +232,18 @@ evil-weevil-check:
 evil-weevil-relay-check:
     bash scripts/evil_weevil_relay_check.sh
 
+# The runtime smoke gate: builds the real `idaptik-tui` binary and drives it on
+# a pseudo-terminal -- it must boot, paint a frame, quit on Ctrl-C, and hand the
+# terminal back. `test-ghost` already runs the built binary through its TTY-free
+# paths (`crates/idaptik-tui/tests/headless_smoke.rs`); this is the interactive
+# loop a player actually sits in front of, which nothing else launches.
+# `--self-test` goes first and requires the harness to reject four deliberately
+# broken apps, so a regression cannot pass because the gate stopped looking.
+smoke:
+    python3 scripts/runtime_smoke.py --self-test
+    cargo build -p idaptik-tui
+    python3 scripts/runtime_smoke.py --bin target/debug/idaptik-tui
+
 # The ADR-0006 §4 loopback gate: throwaway burble server + seat processes; asserts
 # byte-identical artifacts (vs each other AND the headless reference) for the
 # batch seats AND the live delay-lockstep seats (pause window included), a

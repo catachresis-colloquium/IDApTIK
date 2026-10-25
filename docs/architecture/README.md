@@ -9,11 +9,18 @@ integration boundaries.
 - [IDApTIK cognitive-model working architecture](idaptik-cognitive-model.adoc)
 - [Observer-relative evidence ledger](evidence-ledger-design.adoc)
 - [UMS package contract ownership](ums-package-contract.md)
-- [Infrastructure implementation status](infrastructure-implementation-status.md)
-  — **start here**: what the engine does not do, identifier by identifier
-- [Infrastructure interactions](infrastructure-interactions.md) — **not
-  implemented**: the rule layer, capability set and precedence ladder the
-  shipped `scenario/infrastructure/` module does not have (ADR-0018)
+- [Interacting building infrastructure](building-infrastructure-design.md) — the
+  source-backed inventory of what exists, the identity plan, the layer
+  interaction matrix, the tick contract, and the three test levels (design of
+  record for the plant)
+- [Infrastructure interactions](infrastructure-interactions.md) — the plant as a
+  staged, deterministic rule layer over typed capabilities (ADR-0018)
+- [Infrastructure M0 loader](infrastructure-m0-loader.md) — the loader design
+  written before the loader existed; its validation half was superseded by
+  `scenario/infrastructure/` on `main` (see
+  [the review](../reviews/2026-10-25-pr165-vs-main.md))
+- [Infrastructure M0 acceptance tests](infrastructure-m0-acceptance-tests.md) —
+  the tests written before the loader exists, and where `infra` hangs
 - [Infrastructure rule catalogue](infrastructure-rule-catalogue.md) — the eleven
   specified properties for every electricity/water/gas/tunnel/control interaction
 - [Repository architecture](../ARCHITECTURE.md)

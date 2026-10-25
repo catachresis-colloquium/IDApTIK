@@ -95,7 +95,9 @@
     (component :name "UMS-round-trip" :state tested-sibling-gate :path "sibling Universal Modding Studio repository" :role "Round-trip comparison is tested in the sibling UMS repository; it is not a CI workflow in this repository.")
     (component :name "CAC-trace" :state live-fixture :path "crates/idaptik-core/" :role "Six-stage trace runs in the package round trip; GuardTraceStage mapping to Enaction's Domain remains unvalidated.")
     (component :name "evidence-ledger" :state in-repo-by-decision :path "crates/idaptik-core/" :role "Evidence ledger and VSM supervisor stay in idaptik-core until the extraction trigger in ADR-0010 fires.")
-    (component :name "Moletaire" :state tested-seam :path "crates/idaptik-core/" :role "Deterministic companion module exists but is not wired into GhostLobbySim."))
+    (component :name "Moletaire" :state hosted :path "crates/idaptik-core/" :role "Deterministic companion hosted by the scenario sim since 2026-10-25: Command::Mole orders it, sim/mole.rs drives it, and RuntimeState::mole carries its snapshot." :evidence "crates/idaptik-core/src/scenario/sim/mole.rs and crates/idaptik-core/tests/moletaire.rs")
+    (component :name "idaptik-persist" :state live-tier1 :path "crates/idaptik-persist/" :role "Durable session storage beside the tick: command log, checkpoints, and replay-safe resume in one redb file. Nothing here is on the simulation hot path.")
+    (component :name "idaptik-weevil" :state live-adapter :path "crates/idaptik-weevil/" :role "Thin host adapter over the Evil Weevil native C ABI plus a headless replay driver; the game keeps world truth and applies intents, the kernel owns per-agent memory. Separate from idaptik-evil-weevil, which tests the game's own acceptance rules."))
 
   (status
     :phase Envelope
@@ -141,6 +143,7 @@
     :medium ("Define long-term player-save compatibility and retention beyond per-session authority recovery."))
 
   (verification-notes
+    :electrical-id-contract "Issue #171: scenario/ids.rs is the canonical declaration site; power_network tests cover nominal separation and v1 string compatibility, with compiler-checked examples in the module documentation. The Rust-Integration-Floor ruleset payload is prepared but administrative activation is not claimed; see docs/verification/issue-171-electrical-ids.md."
     :items ("cargo fmt is gated as a fast CI check and inside test-ghost; run it before expensive tests." "cac-kernel-is-fixed-point pins scenario/vsm.rs only; actor/belief.rs, trace.rs, and agents.rs still hold floats and must convert before feeding the ledger." "The cross-repository UMS round-trip gate belongs to the sibling repository; this repo must not claim that its own CI runs it."))
 
   (governance-binding

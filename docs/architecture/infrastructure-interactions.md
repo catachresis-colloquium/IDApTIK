@@ -10,15 +10,21 @@
 >
 > Read this as a **backlog**, not a description of the engine.
 
-Section numbers are left as originally written, including the gaps, so that
-cross-references from `infrastructure-rule-catalogue.md` and the two level
-documents (which cite "§2.4 of the design doc" and friends) still resolve.
+**Status: design of record. Not implemented.** There is no
+`SystemInfrastructure`, no `SignalKind::PlantActuator`, and none of the test
+names below exist in the tree. This document specifies behaviour precisely so
+that the implementation can be written against it and checked. Where it states
+something about the code that *does* exist, the file and function are named;
+where it states something about the layer being designed, the word is *must*.
 
-Removed in the 2026-10-25 split because the shipped module now owns them:
-§2.1 (compartment/link types — the geometry encoding is preserved below),
-§2.6 (runtime state), §3 (units and determinism), §4.3 (worked example),
-§5 (staged deltas), §7 (events and causes), §8 (readouts), §10 (building
-integration), §11 (signal network), §12 (versioning), §15 (test strategy).
+> **Correction (2026-10-25):** a `scenario/infrastructure/` module *now exists*,
+> but it is not this design — it is ADR-0013's water/gas/air runtime
+> (`CompartmentDef`, `OpeningDef`, `WaterNetworkDef`, `AirNetworkDef`,
+> `InfrastructureCommand`), and it is not yet called from the game tick. The
+> reconciliation between the two is argued in
+> [`docs/reviews/2026-10-25-pr165-vs-main.md`](../reviews/2026-10-25-pr165-vs-main.md).
+> What remains unimplemented is precisely this document's layer: capability-typed
+> rules, `AccessReq`, actuator precedence and spoof detection.
 
 
 

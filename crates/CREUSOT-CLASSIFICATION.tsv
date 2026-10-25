@@ -33,6 +33,13 @@
 # file that exists.  A new .rs file therefore cannot enter the tree
 # without someone classifying it.
 #
+# One row per file, never two.  When a later assessment supersedes an
+# earlier one -- a crate settles and its tier changes -- replace the row;
+# do not keep the old one beside it.  Two rows for one path is what broke
+# the gate on 2026-10-25: `comm` cannot match a duplicated ledger line
+# against a single file, so a duplicate reports as both "unledgered file"
+# and "orphan row" at once, and the real drift is hidden behind it.
+#
 # tier	path	reason
 S	crates/idaptik-core/src/scenario/rng.rs	roll_init and InitRoll plus the Mulberry32 re-export; the generator itself moved to idaptik-kernel, where it is proved
 S	crates/idaptik-core/src/scenario/mathf.rs	fixed float helpers; ADR-0004 byte-exactness rests on these
@@ -197,15 +204,6 @@ T	crates/idaptik-bevy/tests/interp_parity.rs	test
 T	crates/idaptik-bevy/tests/net_view_smoke.rs	test
 T	crates/idaptik-bevy/tests/parity.rs	test
 T	crates/idaptik-net/tests/mole_routing.rs	test
-D	crates/idaptik-persist/src/digest.rs	FNV-1a 64 over definition bytes; identity and corruption detection, proved by published test vectors, not by Creusot
-L	crates/idaptik-persist/src/store.rs	the durable log and replay; a wrong answer resumes a run into state it never had, and is silent until the next divergence -- observed by tests/persist.rs
-L	crates/idaptik-persist/src/record.rs	Store-facing records and verify reports; declared in every report shown to the player, round-trip tested
-D	crates/idaptik-persist/src/schema.rs	table names and the schema tag; constants, validated by the schema-mismatch test
-D	crates/idaptik-persist/src/error.rs	error text and the redb conversions; no logic of its own
-P	crates/idaptik-persist/src/lib.rs	crate documentation and re-exports
-T	crates/idaptik-persist/tests/persist.rs	observes the store; verifying it would be circular
-T	crates/idaptik-bevy/tests/button_activation.rs	observes the frontend; verifying it would be circular
-T	crates/idaptik-net/tests/deployment_contract.rs	observes the transport contract; verifying it would be circular
 T	crates/idaptik-tui/tests/headless_smoke.rs	test
 T	crates/idaptik-tui/tests/infra_script.rs	test
 T	crates/idaptik-tui/tests/net_smoke.rs	test
@@ -240,3 +238,25 @@ D	crates/idaptik-persist/src/record.rs	serde records the store keeps (session, c
 D	crates/idaptik-persist/src/schema.rs	redb table definitions and table names; the on-disk vocabulary, not the logic
 D	crates/idaptik-persist/src/store.rs	durability plumbing beside the tick (open, append, checkpoint, resume, verify); deliberately outside the simulation, and every failure path is loud through verify and tests/persist.rs
 T	crates/idaptik-persist/tests/persist.rs	store tests, including verify_can_fail which proves the others can fail
+T	crates/idaptik-weevil/build.rs	build script: locates the native kernel and its generated header; it builds nothing the game ships
+B	crates/idaptik-weevil/src/abi.rs	the Evil Weevil C ABI mirrored from the generated header; protocol and layout safety, held by the header-drift test
+D	crates/idaptik-weevil/src/fx.rs	Q16.16 fixed-point conversions used only to marshal host values across the kernel ABI
+B	crates/idaptik-weevil/src/host.rs	the only unsafe code in the adapter: owns the kernel context and agent slots and makes every FFI call
+B	crates/idaptik-weevil/src/intent.rs	kernel-to-host intent records; the proposed-action half of the ABI, validated by the game before anything is applied
+B	crates/idaptik-weevil/src/observation.rs	host-to-kernel observation records; the perception half of the ABI, and the only thing the kernel is allowed to know
+D	crates/idaptik-weevil/src/profile.rs	versioned guard profiles: declared parameters and their defaults, no behaviour of their own
+L	crates/idaptik-weevil/src/replay.rs	adapter-side replay and decision-cache identity; a wrong answer diverges quietly, so idaptik-weevil/tests/replay_repro.rs pins it rather than Creusot
+T	crates/idaptik-weevil/src/world.rs	a small deterministic corridor host for headless replay: explicitly not the game, and used only to drive one
+D	crates/idaptik-weevil/src/error.rs	typed, total error surface over the kernel status codes; no policy of its own
+D	crates/idaptik-weevil/src/lib.rs	crate root: module wiring and documentation
+T	crates/idaptik-weevil/src/bin/weevil_replay.rs	headless replay driver binary
+T	crates/idaptik-weevil/tests/replay_repro.rs	replay reproducibility test over the adapter; observing it would be circular
+P	crates/idaptik-bevy/src/guard_weevil.rs	the Bevy half of the kernel integration: turns sim perception into observations and the returned intent into the guard action
+D	crates/idaptik-core/src/scenario/guard_brain.rs	the selectable brain seam: plain enums, contact ids and perception/decision records with no kernel dependency
+L	crates/idaptik-core/src/scenario/secondary_spaces/access.rs	actor access rules over routes: actor mask, clearance against the body box, route state and equipment
+L	crates/idaptik-core/src/scenario/secondary_spaces/host.rs	hosts secondary spaces inside the run tick, mirroring sim/signal.rs; inert when a floor declares no secondary spec
+L	crates/idaptik-core/src/scenario/secondary_spaces/mod.rs	secondary-spaces model surface and module wiring
+L	crates/idaptik-core/src/scenario/secondary_spaces/model.rs	authored secondary content and its static traversal rules
+L	crates/idaptik-core/src/scenario/secondary_spaces/topology.rs	spatial queries over the authored secondary network, and navigation invalidation
+D	crates/idaptik-core/src/scenario/secondary_spaces/events.rs	secondary event types and their log renderings
+D	crates/idaptik-core/src/scenario/secondary_spaces/fixture.rs	the authored Ghost Lobby secondary network: content, not physics

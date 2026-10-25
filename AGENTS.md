@@ -12,6 +12,13 @@ Read `coordination.k9`, `IDApTIK_chora.deed`, `README.md`, `GOVERNANCE.md`,
 editing. The deed records descriptive project state; K9 components hold
 contractile policy; `coordination.k9` is the root agent-instructions protocol.
 
+Data-format routing: kyq is the estate gate interface for exactly TOML, Dhall,
+KYAML and I-JSON/JCS. Preserve TOML/Dhall; migrate YAML/YML content to KYAML and
+JSON variants to the estate I-JSON/JCS profile through kyq. Wider projection
+belongs to kyX. See `docs/standards-conformance.md` for the current kyq build
+blocker and explicit transitional enforcement; never count a placeholder as a
+passing gate or describe Kubernetes as kyq's entire scope.
+
 Invariants (see `coordination.k9` and the K9 contractiles):
 
 - Licence layers are deliberate: engine/code is AGPL-3.0-or-later, game
@@ -104,6 +111,28 @@ Two further confusions worth pre-empting:
 - **Snapshots** (`scenario/snapshot.rs`) for save/restore and resync.
 - **Netplay.** `crates/idaptik-net` holds a sans-IO delay-lockstep core behind a
   two-seat byte-identical loopback gate.
+- **The signal network** (`scenario/signal/`, ADR-0012): typed devices with fixed
+  port tables, wires that carry booleans one hop per tick, relay gates, per-seat
+  `SeatProfile` pricing, an `Access` set computed from vantage, and a `budget`.
+  Installer wires are `builtin` and cutting one is refused with
+  `SignalDenyReason::Hardwired`. Do not re-specify "wiring"; extend it.
+- **Electrical power** (`scenario/power/`, ADR-0016): sources, feeds, loads,
+  breakers and backup supply behind one rule —
+  `operating = commanded AND energized AND intact AND not interlocked AND warmed
+  up` — with `OffReason` naming the first failed rung rather than returning a
+  bool. Not driven by any shipped floor yet (issue #192).
+- **Water, gas and airflow** (`scenario/infrastructure/`, ADR-0013) and
+  consequences-as-observations (`scenario/infra.rs`, ADR-0014): integer-only
+  derivations, not a fluid solver; the infrastructure runtime is not yet called
+  from the game tick.
+- **The hosted companion.** Moletaire is no longer a seam: `Command::Mole`,
+  `MoleHostState` on `RuntimeState`, `scenario/sim/mole.rs`.
+- **Durable storage** (`crates/idaptik-persist`): a store *beside* the tick for
+  command log, checkpoints and replay-safe resume. Nothing on the hot path.
+- **Evil Weevil**, in two pieces: `crates/idaptik-evil-weevil` (offline
+  adversarial corpus over the real validators, ADR-0017) and
+  `crates/idaptik-weevil` (host adapter over the kernel's C ABI). See
+  `docs/dev-notes/weevil-integration.md`.
 
 There is no garbage collector — this is Rust/Crusoe. "Avoid GC pauses" is not a design
 goal here; it is free. Bevy is the selected graphical frontend (ADR-0008).
@@ -126,8 +155,10 @@ global toolchain resolves instead (e.g. zig 0.16 rather than the pinned 0.14)
 and the resulting stdlib errors point nowhere near the real cause.
 
 ```
-just test-ghost              # cargo test (core/tui/ffi) + clippy -D warnings + fmt --check
+just test-ghost              # cargo test (core/tui/ffi/net/evil-weevil/persist) + clippy -D warnings + fmt --check
 just config-check            # nickel typecheck
 just config-scenario-check   # Nickel export → Rust validator → every bad_*.ncl rejected
 just loopback-check          # two-seat netplay parity gate
+just evil-weevil-check       # offline adversarial corpus over the real validators (no sockets)
+just machine-readable-check  # DEED + K9 conformance and Nickel runner typechecks
 ```

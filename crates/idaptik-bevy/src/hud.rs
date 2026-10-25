@@ -388,6 +388,12 @@ pub fn update_guard_brain_text(
             }
         })
         .unwrap_or_else(|| "-".to_owned());
-    let error = s.last_error.as_deref().map(|e| format!(" ERR {e}")).unwrap_or_default();
-    text.0 = format!("weevil {profile} v{version}\nsee: {contacts}\nwant: {decision}\nhost: {outcome}{error}");
+    let error = s
+        .last_error
+        .as_deref()
+        .map(|e| format!(" ERR {e}"))
+        .unwrap_or_default();
+    text.0 = format!(
+        "weevil {profile} v{version}\nsee: {contacts}\nwant: {decision}\nhost: {outcome}{error}"
+    );
 }

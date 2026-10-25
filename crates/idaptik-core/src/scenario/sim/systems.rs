@@ -20,8 +20,8 @@ use crate::scenario::common::{
 };
 use crate::scenario::constants as c;
 use crate::scenario::event::Event;
-use crate::scenario::guard_brain::GuardBrainKind;
 use crate::scenario::floor_graph::camera_node_id;
+use crate::scenario::guard_brain::GuardBrainKind;
 use crate::scenario::ids::RoomId;
 use crate::scenario::mathf::{TICK_DT, approach, clamp, dist, powf, sin};
 use crate::scenario::state::Place;

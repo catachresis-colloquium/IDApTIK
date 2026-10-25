@@ -59,7 +59,10 @@ fn the_kernel_remembers_a_bearing_then_falls_back_when_memory_expires() {
         .count();
 
     assert!(investigate > 0, "the guard investigated from memory");
-    assert!(from_memory > 0, "and the decision was flagged as from-memory");
+    assert!(
+        from_memory > 0,
+        "and the decision was flagged as from-memory"
+    );
     assert!(
         advance > 0,
         "and fell back to advancing once the memory aged out"
@@ -83,5 +86,8 @@ fn a_guard_pressed_against_a_closed_door_does_not_pass_through_it() {
             );
         }
     }
-    assert!(blocked > 0, "the corridor has closed doors, so some ticks are blocked");
+    assert!(
+        blocked > 0,
+        "the corridor has closed doors, so some ticks are blocked"
+    );
 }

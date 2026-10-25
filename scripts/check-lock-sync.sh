@@ -33,7 +33,7 @@
 #
 # Same job, two deliberate deviations, both measured rather than preferred:
 #
-# 1. POSIX awk only. burble's script uses gawk's three-argument match() and
+# 1. Comparisons use POSIX awk; YAML parsing uses yq (Y-1). burble's script uses gawk's three-argument match() and
 #    `{n}` regex intervals. Neither is POSIX, and neither exists in mawk, which
 #    is /usr/bin/awk on a default Debian/Ubuntu and in this repository's own
 #    development containers. AGENTS.md's rule is that a check must be runnable
@@ -83,16 +83,31 @@
 # Usage:
 #   scripts/check-lock-sync.sh                # check this repository
 #   scripts/check-lock-sync.sh DIR            # check another workflows dir
-#   scripts/check-lock-sync.sh --self-test    # 13 controls, 12 of them mutants
+#   scripts/check-lock-sync.sh --self-test    # clean controls and failing mutants
 
 set -euo pipefail
+command -v yq >/dev/null || { printf 'yq is required (mise install)\n' >&2; exit 1; }
+yq --version | grep -q 'mikefarah/yq/.*version v4\.' || { printf 'mikefarah/yq v4 is required\n' >&2; exit 1; }
+command -v jq >/dev/null || { printf 'jq is required\n' >&2; exit 1; }
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The checker. One awk program, two passes: the lockfile, then the YAML.
+# The checker. yq reads YAML (Y-1); awk compares the extracted semantic records.
 # POSIX awk only — no match(s,r,arr), no gensub, no {n} intervals, no asort.
 # ─────────────────────────────────────────────────────────────────────────────
+reject_duplicate_yaml_keys() { # $1 YAML file
+  local duplicates
+  # Inspect YAML mapping nodes before JSON conversion can collapse equal keys.
+  duplicates="$(yq -p yaml -o=json -I=0 '
+    .. | select(tag == "!!map") | keys | group_by(.) | .[] |
+    select(length > 1) | .[0]' "$1")" || return 1
+  if [ -n "$duplicates" ]; then
+    printf 'check-lock-sync: duplicate YAML mapping keys in %s: %s\n' "$1" "$duplicates" >&2
+    return 1
+  fi
+}
+
 run_check() { # $1 = workflows dir
   local wf_dir="$1" lock="$1/actions.lock"
   if [ ! -f "$lock" ]; then
@@ -112,7 +127,23 @@ run_check() { # $1 = workflows dir
     printf 'check-lock-sync: 0 workflows examined (denominator zero = no check performed)\n' >&2
     return 1
   fi
-  awk -v lockfile="$lock" '
+  local records
+  records="$(
+    reject_duplicate_yaml_keys "$lock" || exit 1
+    yq -p yaml -o=json -I=0 '.' "$lock" | jq -r '
+      (.workflows // {} | to_entries[] | ["W", .key] | @tsv),
+      (.workflows // {} | to_entries[] | .key as $wf | .value[] | ["L", $wf, .] | @tsv),
+      (.dependencies // {} | to_entries[] | ["D", .key, (.value.commit // "")] | @tsv)' || exit 1
+    for f in "${files[@]}"; do
+      reject_duplicate_yaml_keys "$f" || exit 1
+      local key=".github/workflows/${f##*/}"
+      printf 'F\t%s\n' "$key"
+      yq -p yaml -o=json -I=0 '.' "$f" | jq -r --arg key "$key" '
+        (.jobs[] | select(.uses != null) | ["J", $key, .uses] | @tsv),
+        (.jobs[].steps[]? | select(.uses != null) | ["S", $key, .uses] | @tsv)' || exit 1
+    done
+  )" || { printf 'check-lock-sync: YAML parsing failed\n' >&2; return 1; }
+  awk -F '\t' '
   # ── helpers ───────────────────────────────────────────────────────────────
   # owner/repo[/subpath...]@ref  ->  owner/repo@ref   ("" if not an external ref)
   function norm(r,    at, n, path, ref, parts) {
@@ -133,68 +164,22 @@ run_check() { # $1 = workflows dir
     if (length(ref) != 40) return 0
     return (ref ~ /^[0123456789abcdef]+$/)
   }
-  function strip_quotes(s) { sub(/^["'"'"']/, "", s); sub(/["'"'"']$/, "", s); return s }
-  function unquote_first(s) {                    # leading-space + '\''text'\'' -> text
-    sub(/^[[:space:]]*'"'"'/, "", s); sub(/'"'"'.*$/, "", s); return s
+  # Records are extracted by yq, never inferred from YAML indentation.
+  $1 == "W" { onboarded[$2] = 1; nwf++; next }
+  $1 == "L" {
+    k = $2; r = $3; lock[k, r] = 1; lockn[k]++
+    lockrefs = lockrefs " " k "|" r; nlockrefs++; next
   }
-  function lead_spaces(s,    n) { n = 0; while (substr(s, n + 1, 1) == " ") n++; return n }
-  function keypath(file,    b) { b = file; sub(/.*\//, "", b); return ".github/workflows/" b }
-
-  # ── pass 1: the lockfile ──────────────────────────────────────────────────
-  FILENAME == lockfile {
-    if ($0 ~ /^workflows:[[:space:]]*$/)    { section = "wf";   next }
-    if ($0 ~ /^dependencies:[[:space:]]*$/) { section = "deps"; next }
-    if ($0 ~ /^[A-Za-z_]+:/)                { section = "";     next }
-
-    if (section == "wf") {
-      if ($0 ~ /^    '"'"'/) {
-        cur = unquote_first($0)
-        onboarded[cur] = 1; nwf++
-        if ($0 ~ /\[[[:space:]]*\][[:space:]]*$/) lockn[cur] = 0
-        next
-      }
-      if ($0 ~ /^        - '"'"'/ && cur != "") {
-        r = unquote_first(substr($0, 11))
-        lock[cur, r] = 1; lockn[cur]++; lockrefs = lockrefs " " cur "|" r; nlockrefs++
-        next
-      }
-      next
-    }
-    if (section == "deps") {
-      if ($0 ~ /^    '"'"'/) { dep = unquote_first($0); depseen[dep] = 1; ndeps++; next }
-      if ($0 ~ /^        commit: / && dep != "") {
-        c = $0; sub(/^[[:space:]]*commit:[[:space:]]*'"'"'/, "", c); sub(/'"'"'.*$/, "", c)
-        depcommit[dep] = c
-        next
-      }
-      next
-    }
-    next
-  }
-
-  # ── pass 2: the workflow YAML ─────────────────────────────────────────────
-  FNR == 1 { wf = FILENAME; k = keypath(wf); scanned[k] = 1; nscanned++ }
-  {
-    line = $0
-    if (line ~ /^[[:space:]]*#/) next                 # whole-line comment
-    sub(/[[:space:]]+#.*$/, "", line)                 # trailing comment
-    if (line !~ /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*/) next
-
-    indent = lead_spaces(line)
-    body = substr(line, indent + 1)
-    if (substr(body, 1, 2) == "- ") { body = substr(body, 3); indent += 2 }
-    sub(/^uses:[[:space:]]*/, "", body)
-    raw = strip_quotes(body)
-    sub(/[[:space:]]*$/, "", raw)
-    if (raw == "") next
-
-    if (raw ~ /^\$\//) { dollars[k] = dollars[k] " " raw; next }   # tool corruption
+  $1 == "D" { depseen[$2] = 1; depcommit[$2] = $3; ndeps++; next }
+  $1 == "F" { scanned[$2] = 1; nscanned++; next }
+  $1 == "J" || $1 == "S" {
+    k = $2; raw = $3
+    if (raw ~ /^\$\//) { dollars[k] = dollars[k] " " raw; next }
     n = norm(raw)
-    if (n == "") next                                   # local ./ or $/ action
-
-    if (indent <= 4) {                                  # job-level reusable call
+    if (n == "") next
+    if ($1 == "J") {
       jobrefs[k] = jobrefs[k] " " n; njob++
-    } else {                                            # step-level action
+    } else {
       if (!((k SUBSEP n) in stepseen)) { stepseen[k, n] = 1; steps[k] = steps[k] " " n; nstep++ }
       if (!(n in usedany)) { usedany[n] = k; nusedany++ }
     }
@@ -363,7 +348,7 @@ run_check() { # $1 = workflows dir
     print "resolves to a commit, no unonboarded workflow carries a movable ref, and"
     print "every step-level ref any workflow uses is declared in dependencies:."
   }
-  ' "$lock" "${files[@]}"
+  ' <<< "$records"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -457,6 +442,25 @@ LOCK
   fi
 
   printf 'mutants that must kill the gate:\n'
+  fixture="$(new_case duplicate-uses)"
+  sed -i '/uses: erlef\/setup-beam@v1.24.1/a\        uses: erlef/setup-beam@v1.24.1' "$fixture/ci.yml"
+  expect_fail 'a repeated uses key in a workflow is rejected' \
+    'duplicate YAML mapping keys' "$fixture"
+
+  fixture="$(new_case duplicate-lock-key)"
+  sed -i "/ref: 'v1.24.1'/a\        ref: 'v1.24.1'" "$fixture/actions.lock"
+  expect_fail 'a repeated dependency field in actions.lock is rejected' \
+    'duplicate YAML mapping keys' "$fixture"
+
+  fixture="$(new_case kyaml)"
+  for f in "$fixture"/*.yml "$fixture/actions.lock"; do
+    yq -p yaml -o=kyaml '.' "$f" > "$f.converted"
+    mv "$f.converted" "$f"
+  done
+  expect_pass 'KYAML flow syntax preserves lock coverage' "$fixture"
+  sed -i 's/erlef\/setup-beam@v1.24.1/erlef\/setup-beam@v0.0.0/' "$fixture/ci.yml"
+  expect_fail 'KYAML cannot hide a stale workflow ref' \
+    'step-level refs missing from the lockfile' "$fixture"
 
   fixture="$(new_case bump-without-lock)"
   sed -i 's/erlef\/setup-beam@v1\.24\.1/erlef\/setup-beam@v1.25.0/' "$fixture/ci.yml"

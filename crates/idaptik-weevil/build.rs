@@ -31,19 +31,18 @@ fn main() {
         .ok()
         .map(PathBuf::from)
         .or_else(|| {
-            env::var("EVIL_WEEVIL_ROOT")
-                .ok()
-                .map(|root| {
-                    let mut p = PathBuf::from(root);
-                    p.push("src/interface/ffi/zig-out/lib");
-                    p
-                })
+            env::var("EVIL_WEEVIL_ROOT").ok().map(|root| {
+                let mut p = PathBuf::from(root);
+                p.push("src/interface/ffi/zig-out/lib");
+                p
+            })
         })
-        .unwrap_or_else(|| {
-            PathBuf::from("../../evil-weevil/src/interface/ffi/zig-out/lib")
-        });
+        .unwrap_or_else(|| PathBuf::from("../../evil-weevil/src/interface/ffi/zig-out/lib"));
 
     println!("cargo:rustc-link-search=native={}", dir.display());
     // Echo the resolved path so a failure is legible in the build log.
-    println!("cargo:warning=idaptik-weevil: kernel search path = {}", dir.display());
+    println!(
+        "cargo:warning=idaptik-weevil: kernel search path = {}",
+        dir.display()
+    );
 }
