@@ -258,7 +258,12 @@ const _: () = assert!(offset_of!(EeContext, ticks_run) == 56, "context.ticks_run
 #[link(name = "evil_weevil")]
 extern "C" {
     pub fn ee_init(desc: *const EeInitDesc, ctx: *mut EeContext) -> EeStatus;
-    pub fn ee_tick(ctx: *mut EeContext, snap: *const EeSnapshot, agent: *mut EeAgent, out: *mut EeIntent) -> EeStatus;
+    pub fn ee_tick(
+        ctx: *mut EeContext,
+        snap: *const EeSnapshot,
+        agent: *mut EeAgent,
+        out: *mut EeIntent,
+    ) -> EeStatus;
     pub fn ee_version_info() -> EeVersion;
     pub fn ee_abi_fingerprint() -> u64;
     pub fn ee_status_name(status: EeStatus) -> *const core::ffi::c_char;

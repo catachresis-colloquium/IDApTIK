@@ -56,24 +56,36 @@ impl fmt::Display for WeevilError {
             Self::NotInitialized => write!(f, "weevil: host not initialised"),
             Self::Init(s) => write!(f, "weevil: ee_init refused ({s})"),
             Self::VersionMismatch { host, kernel } => {
-                write!(f, "weevil: ABI major mismatch (host {host}, kernel {kernel})")
+                write!(
+                    f,
+                    "weevil: ABI major mismatch (host {host}, kernel {kernel})"
+                )
             }
             Self::FingerprintMismatch { host, kernel } => write!(
                 f,
                 "weevil: layout fingerprint mismatch (host {host}, kernel {kernel})"
             ),
             Self::CapabilityUnsupported(mask) => {
-                write!(f, "weevil: capability 0x{mask:08x} not supported by the kernel")
+                write!(
+                    f,
+                    "weevil: capability 0x{mask:08x} not supported by the kernel"
+                )
             }
             Self::BufferTooSmall => write!(f, "weevil: init descriptor too small"),
             Self::BadParam => write!(f, "weevil: bad parameter across the seam"),
             Self::PanicCaught => write!(f, "weevil: kernel reported a caught panic"),
             Self::AgentNotFound(id) => write!(f, "weevil: unknown agent id {id}"),
             Self::IdOutOfRange { kind, id } => {
-                write!(f, "weevil: {kind} id {id} does not fit the ABI's u16 id field")
+                write!(
+                    f,
+                    "weevil: {kind} id {id} does not fit the ABI's u16 id field"
+                )
             }
             Self::TooManyAgents { requested, max } => {
-                write!(f, "weevil: {requested} agents requested, context holds {max}")
+                write!(
+                    f,
+                    "weevil: {requested} agents requested, context holds {max}"
+                )
             }
             Self::TooManyContacts { count, max } => {
                 write!(f, "weevil: {count} contacts, ABI holds {max}")

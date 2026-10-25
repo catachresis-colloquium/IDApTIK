@@ -36,11 +36,17 @@ fn run() -> Result<()> {
     while i < args.len() {
         match args[i].as_str() {
             "--ticks" => {
-                ticks = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(ticks);
+                ticks = args
+                    .get(i + 1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(ticks);
                 i += 2;
             }
             "--profile" => {
-                profile_id = args.get(i + 1).cloned().unwrap_or_else(|| profile_id.clone());
+                profile_id = args
+                    .get(i + 1)
+                    .cloned()
+                    .unwrap_or_else(|| profile_id.clone());
                 i += 2;
             }
             "--seed" => {
@@ -94,7 +100,8 @@ fn run() -> Result<()> {
 
     print_summary(&first);
     if let Some(path) = out {
-        let json = serde_json::to_vec_pretty(&first).map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
+        let json = serde_json::to_vec_pretty(&first)
+            .map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
         fs::write(&path, json).map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
         println!("wrote {path}");
     }
@@ -126,9 +133,18 @@ fn print_summary(t: &ReplayTrace) {
             rejected += 1;
         }
     }
-    println!("kernel      : {}.{}.{}", t.header.kernel_version.0, t.header.kernel_version.1, t.header.kernel_version.2);
-    println!("abi         : major {} fingerprint {}", t.header.abi_major, t.header.abi_fingerprint);
-    println!("profile     : {} v{}", t.header.profile_id, t.header.profile_version);
+    println!(
+        "kernel      : {}.{}.{}",
+        t.header.kernel_version.0, t.header.kernel_version.1, t.header.kernel_version.2
+    );
+    println!(
+        "abi         : major {} fingerprint {}",
+        t.header.abi_major, t.header.abi_fingerprint
+    );
+    println!(
+        "profile     : {} v{}",
+        t.header.profile_id, t.header.profile_version
+    );
     println!("scenario    : {}", t.header.scenario_id);
     println!("ticks       : {}", t.len());
     println!("digest      : {}", decision_identity(t));

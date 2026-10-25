@@ -216,14 +216,33 @@ mod tests {
         let obs = Observation {
             agent_id: 3,
             tick: 41,
-            self_pos: Fx2 { x: to_fx(10.0), y: 0 },
+            self_pos: Fx2 {
+                x: to_fx(10.0),
+                y: 0,
+            },
             self_vel: Fx2::ZERO,
             health: FX_ONE,
             ammo: FX_ONE,
             capability_mask: 3,
             contacts: vec![
-                Contact::new(100, ContactSource::Player, Fx2 { x: to_fx(1.0), y: 0 }, to_fx(3.0)),
-                Contact::new(101, ContactSource::Object(7), Fx2 { x: 0, y: to_fx(1.0) }, to_fx(6.0)),
+                Contact::new(
+                    100,
+                    ContactSource::Player,
+                    Fx2 {
+                        x: to_fx(1.0),
+                        y: 0,
+                    },
+                    to_fx(3.0),
+                ),
+                Contact::new(
+                    101,
+                    ContactSource::Object(7),
+                    Fx2 {
+                        x: 0,
+                        y: to_fx(1.0),
+                    },
+                    to_fx(6.0),
+                ),
             ],
             cooldown: 0,
         };

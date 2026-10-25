@@ -66,11 +66,7 @@ pub use world::HostWorld;
 /// This drives the kernel with the deterministic corridor model in
 /// [`world`], recording every observation, proposal, host acceptance and applied
 /// effect. It is the reproducible replay the first milestone ships.
-pub fn run_trace(
-    ticks: u64,
-    profile: &Profile,
-    seed: u64,
-) -> Result<ReplayTrace> {
+pub fn run_trace(ticks: u64, profile: &Profile, seed: u64) -> Result<ReplayTrace> {
     let mut host = WeevilHost::init(
         profile.capabilities,
         profile.max_agents,

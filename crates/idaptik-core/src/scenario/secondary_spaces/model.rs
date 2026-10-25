@@ -29,9 +29,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 macro_rules! secondary_id {
     ($name:ident) => {
-        #[derive(
-            Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
         #[serde(transparent)]
         pub struct $name(pub String);
 
@@ -358,8 +356,7 @@ impl SecondarySpec {
                 .iter()
                 .find(|r| &r.id == &cable.route_id)
                 .map(|r| {
-                    cable.position >= r.geometry.x_range.0
-                        && cable.position <= r.geometry.x_range.1
+                    cable.position >= r.geometry.x_range.0 && cable.position <= r.geometry.x_range.1
                 })
                 .unwrap_or(false);
             if !on_route {
@@ -534,10 +531,7 @@ mod tests {
         // The constants here exist to mirror companion tuning; if someone
         // changes the definition, this test is the place to update both sides
         // deliberately.
-        assert_eq!(
-            ActorBody::MOLETAIRE,
-            ActorBody { w: 20.0, h: 14.0 }
-        );
+        assert_eq!(ActorBody::MOLETAIRE, ActorBody { w: 20.0, h: 14.0 });
     }
 
     #[test]

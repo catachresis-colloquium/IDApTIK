@@ -9,26 +9,73 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum SecondaryEvent {
-    RouteEntered { route_id: RouteId },
-    RouteLeft { route_id: RouteId },
-    RouteReversed { route_id: RouteId },
-    RouteObstructed { route_id: Option<RouteId>, reason: ObstructionReason },
-    EntryRefused { route_id: Option<RouteId>, reason: EntryRefusalReason },
-    GrilleOpened { access_point: AccessPointId },
-    GrilleClosed { access_point: AccessPointId },
-    ConnectionCreated { from: AccessPointId, to: AccessPointId },
-    CableSabotaged { cable_id: CableId, node_id: String },
-    CableDamaged { cable_id: CableId },
-    SabotageRefused { reason: SabotageRefusalReason },
-    FanEncountered { fan: String },
-    ValveEncountered { valve: String, open: bool },
-    WaterEntered { at: f64 },
-    NoiseEmitted { at: f64, loudness: f64 },
-    VibrationDetected { reading: crate::companion::coprocessors::VibrationReading },
-    ScanComplete { objects: u32 },
-    DebrisLeft { at: f64 },
-    EvidenceLeft { at: f64, kind: EvidenceKind },
-    MoleEntrapped { route_id: RouteId },
+    RouteEntered {
+        route_id: RouteId,
+    },
+    RouteLeft {
+        route_id: RouteId,
+    },
+    RouteReversed {
+        route_id: RouteId,
+    },
+    RouteObstructed {
+        route_id: Option<RouteId>,
+        reason: ObstructionReason,
+    },
+    EntryRefused {
+        route_id: Option<RouteId>,
+        reason: EntryRefusalReason,
+    },
+    GrilleOpened {
+        access_point: AccessPointId,
+    },
+    GrilleClosed {
+        access_point: AccessPointId,
+    },
+    ConnectionCreated {
+        from: AccessPointId,
+        to: AccessPointId,
+    },
+    CableSabotaged {
+        cable_id: CableId,
+        node_id: String,
+    },
+    CableDamaged {
+        cable_id: CableId,
+    },
+    SabotageRefused {
+        reason: SabotageRefusalReason,
+    },
+    FanEncountered {
+        fan: String,
+    },
+    ValveEncountered {
+        valve: String,
+        open: bool,
+    },
+    WaterEntered {
+        at: f64,
+    },
+    NoiseEmitted {
+        at: f64,
+        loudness: f64,
+    },
+    VibrationDetected {
+        reading: crate::companion::coprocessors::VibrationReading,
+    },
+    ScanComplete {
+        objects: u32,
+    },
+    DebrisLeft {
+        at: f64,
+    },
+    EvidenceLeft {
+        at: f64,
+        kind: EvidenceKind,
+    },
+    MoleEntrapped {
+        route_id: RouteId,
+    },
 }
 
 impl SecondaryEvent {
@@ -69,12 +116,10 @@ impl SecondaryEvent {
             SecondaryEvent::ConnectionCreated { from, to } => {
                 Some((format!("New opening: {from} <-> {to}."), Info))
             }
-            SecondaryEvent::CableSabotaged { cable_id, node_id } => {
-                Some((
-                    format!("Moletaire chews through cable {cable_id} feeding node {node_id}."),
-                    Bad,
-                ))
-            }
+            SecondaryEvent::CableSabotaged { cable_id, node_id } => Some((
+                format!("Moletaire chews through cable {cable_id} feeding node {node_id}."),
+                Bad,
+            )),
             SecondaryEvent::CableDamaged { cable_id } => {
                 Some((format!("Cut cable ends at {cable_id}."), Warn))
             }
@@ -84,12 +129,13 @@ impl SecondaryEvent {
             SecondaryEvent::FanEncountered { fan } => {
                 Some((format!("A fan spins in the duct ahead ({fan})."), Info))
             }
-            SecondaryEvent::ValveEncountered { valve, open } => {
-                Some((
-                    format!("Valve {valve} is {}.", if *open { "open" } else { "closed" }),
-                    Info,
-                ))
-            }
+            SecondaryEvent::ValveEncountered { valve, open } => Some((
+                format!(
+                    "Valve {valve} is {}.",
+                    if *open { "open" } else { "closed" }
+                ),
+                Info,
+            )),
             SecondaryEvent::WaterEntered { at } => {
                 Some((format!("Standing water in the route at {at}."), Warn))
             }
@@ -102,20 +148,14 @@ impl SecondaryEvent {
             SecondaryEvent::ScanComplete { objects } => {
                 Some((format!("Route scan: {objects} objects ahead."), Info))
             }
-            SecondaryEvent::DebrisLeft { at } => {
-                Some((format!("Debris left at {at}."), Info))
-            }
+            SecondaryEvent::DebrisLeft { at } => Some((format!("Debris left at {at}."), Info)),
             SecondaryEvent::EvidenceLeft { at, kind } => {
                 Some((format!("Evidence: {kind:?} at {at}."), Warn))
             }
-            SecondaryEvent::MoleEntrapped { route_id } => {
-                Some((
-                    format!(
-                        "Moletaire is entrapped in route {route_id}: collapse is irreversible.",
-                    ),
-                    Bad,
-                ))
-            }
+            SecondaryEvent::MoleEntrapped { route_id } => Some((
+                format!("Moletaire is entrapped in route {route_id}: collapse is irreversible.",),
+                Bad,
+            )),
         }
     }
 }
@@ -129,9 +169,15 @@ mod tests {
         let cable = CableId::from("cable-substation-feed");
         let route = RouteId::from("maint-hall-service");
         let events = [
-            SecondaryEvent::RouteEntered { route_id: route.clone() },
-            SecondaryEvent::RouteLeft { route_id: route.clone() },
-            SecondaryEvent::RouteReversed { route_id: route.clone() },
+            SecondaryEvent::RouteEntered {
+                route_id: route.clone(),
+            },
+            SecondaryEvent::RouteLeft {
+                route_id: route.clone(),
+            },
+            SecondaryEvent::RouteReversed {
+                route_id: route.clone(),
+            },
             SecondaryEvent::RouteObstructed {
                 route_id: Some(route.clone()),
                 reason: ObstructionReason::Sealed,
@@ -154,20 +200,33 @@ mod tests {
                 cable_id: cable.clone(),
                 node_id: "substation".into(),
             },
-            SecondaryEvent::CableDamaged { cable_id: cable.clone() },
+            SecondaryEvent::CableDamaged {
+                cable_id: cable.clone(),
+            },
             SecondaryEvent::SabotageRefused {
                 reason: SabotageRefusalReason::NotUnderground,
             },
-            SecondaryEvent::FanEncountered { fan: "fan-1".into() },
-            SecondaryEvent::ValveEncountered { valve: "valve-1".into(), open: true },
+            SecondaryEvent::FanEncountered {
+                fan: "fan-1".into(),
+            },
+            SecondaryEvent::ValveEncountered {
+                valve: "valve-1".into(),
+                open: true,
+            },
             SecondaryEvent::WaterEntered { at: 400.0 },
-            SecondaryEvent::NoiseEmitted { at: 400.0, loudness: 1.0 },
+            SecondaryEvent::NoiseEmitted {
+                at: 400.0,
+                loudness: 1.0,
+            },
             SecondaryEvent::VibrationDetected {
                 reading: crate::companion::coprocessors::VibrationReading::FullProfile,
             },
             SecondaryEvent::ScanComplete { objects: 3 },
             SecondaryEvent::DebrisLeft { at: 400.0 },
-            SecondaryEvent::EvidenceLeft { at: 400.0, kind: EvidenceKind::CutCableEnds },
+            SecondaryEvent::EvidenceLeft {
+                at: 400.0,
+                kind: EvidenceKind::CutCableEnds,
+            },
             SecondaryEvent::MoleEntrapped { route_id: route },
         ];
         for event in events {

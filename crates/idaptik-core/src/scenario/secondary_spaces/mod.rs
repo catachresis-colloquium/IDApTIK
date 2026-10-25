@@ -24,12 +24,12 @@ pub mod host;
 pub mod model;
 pub mod topology;
 
-pub use access::{route_accessibility, RouteAccess};
+pub use access::{RouteAccess, route_accessibility};
 pub use events::SecondaryEvent;
 pub use host::{AccessPointDebug, MoleDebug, RouteDebugEntry, RouteDebugView};
 pub use model::{
-    ActorBody, ActorClass, ActorClassSet, CableId, CableState, Clearance, EvidenceKind,
-    EntryRefusalReason, ObstructionReason, RouteId, RouteState, SabotageRefusalReason,
-    SecondarySpec, SecondaryState, SpaceId,
+    ActorBody, ActorClass, ActorClassSet, CableId, CableState, Clearance, EntryRefusalReason,
+    EvidenceKind, ObstructionReason, RouteId, RouteState, SabotageRefusalReason, SecondarySpec,
+    SecondaryState, SpaceId,
 };
-pub use topology::{discovered_routes, resolve_sabotage_cable, RouteNetwork};
+pub use topology::{RouteNetwork, discovered_routes, resolve_sabotage_cable};
