@@ -2,6 +2,13 @@
 
 Last assessed: **2026-07-28**.
 
+> **Currency note (2026-10-25):** this document describes IDApTIK's place in the
+> four-repository estate, and it has not been re-assessed since July. For state
+> *inside* this repository — components, crates, ADR register, build and test
+> gates — the canonical source is now `IDApTIK_chora.deed`, which is updated
+> with each change. Read this document for the estate picture and that one for
+> the current tree.
+
 Where IDApTIK sits in the four-repository estate, what is enforced rather than
 merely written down, and what is still open. Written to be readable by someone
 arriving with no history.

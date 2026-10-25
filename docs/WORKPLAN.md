@@ -1,6 +1,8 @@
 # IDApTIK workplan
 
-Status: **organised first draft — 2026-07-26**
+Status: **organised first draft — 2026-07-26; refreshed 2026-10-25** (the
+work queue is the cognitive-model line; the building systems that landed
+alongside it are summarised in *Where things stand* below)
 
 This is the work queue. Detailed cognitive-model design is documented here in
 the open, alongside the code that implements it, under `docs/architecture/` and
@@ -27,9 +29,18 @@ a private repository.
       (Supervision is deterministic runtime state; `RunConfig::supervised`
       bends Billy's Assess patrol band toward the evidence-selected coverage
       target. The interactive TUI is always supervised.)
-- [ ] Add a bounded adaptive intervention with an explicit policy check.
+- [x] Add a bounded adaptive intervention with an explicit policy check.
+      (`SupervisionState::director`; sabotage folds into tactic counts, the
+      director proposes, the policy envelope accepts or rejects. Tests:
+      `repeated_confident_tactic_proposes_bounded_intervention`,
+      `policy_rejects_stale_or_over_limit_proposals`,
+      `repeated_sabotage_escalates_through_the_bounded_proposal_path`.)
 - [ ] Expose developer telemetry in TUI/replay output.
-- [ ] Verify that the player can create a rational but false NPC hypothesis.
+      (Still open: the supervision state is not rendered. A truth / readouts /
+      beliefs view is the outstanding half — see the tamper handover §6 M4.)
+- [x] Verify that the player can create a rational but false NPC hypothesis.
+      (`ledger_can_hold_a_rational_but_wrong_usb_hypothesis`,
+      `evidence_fixture_supports_usb_then_note_revision`.)
 
 ## Later: presentation and wider integration
 
@@ -49,7 +60,35 @@ relays events but does not become semantic authority. Private AI details remain
 in the canonical private UMS repository unless a public interface requires
 their disclosure.
 
-## Current stopping point
+## Where things stand (2026-10-25)
+
+The work queue above is the cognitive-model line, and it has not been the only
+line. Since this plan was drafted, the building itself grew four systems and the
+simulation grew a companion host, a storage crate and an adversarial test
+corpus. All of it is in `idaptik-core`, and none of it changes the boundary rule
+below:
+
+- **Signals** (`scenario/signal/`, ADR-0012) — control wiring, per-seat access
+  and pricing, hardwired installer runs.
+- **Electrical power** (`scenario/power/`, ADR-0016) — sources, feeds, loads,
+  breakers, and `OffReason` naming the first failed rung. **Not yet driven by any
+  shipped floor** (issue #192).
+- **Water, gas and air** (`scenario/infrastructure/`, ADR-0013), with
+  consequences-as-observations in `scenario/infra.rs` (ADR-0014). **Not yet
+  called from the game tick.**
+- **Moletaire is hosted** (`Command::Mole`, `sim/mole.rs`), so the companion is
+  no longer a seam waiting for a host.
+- **`crates/idaptik-persist`** holds the command log, checkpoints and
+  replay-safe resume; **`crates/idaptik-evil-weevil`** exercises the acceptance
+  rules offline, and **`crates/idaptik-weevil`** is the guard brain's host
+  adapter.
+
+Two things are still outstanding in the cognitive-model line, both below:
+**developer telemetry** (truth / readouts / beliefs) is the next visible item and
+is not rendered anywhere; and the **Billy-with-a-closed-door limit cycle** is
+still canonical behaviour that nobody has ruled on.
+
+## Current stopping point of the cognitive-model line
 
 The supervised-coverage slice (2026-08-03) moved the supervisor inside the
 deterministic runtime state: in a supervised run the sim folds its own event
@@ -70,6 +109,8 @@ Two facts the next session should know:
   badge timer never accumulates at any Billy speed. Every golden embeds this,
   so it is canonical behaviour for now — but it silently confines patrol
   coverage to one door region, and deserves its own decision (bug or feature).
-- The next unchecked item is the bounded adaptive intervention; the
+- ~~The next unchecked item is the bounded adaptive intervention; the
   `VsmDirector::observe`/`apply` policy envelope already exists and is tested,
-  it just is not driven from sim state yet.
+  it just is not driven from sim state yet.~~ **Done on 2026-10-25:**
+  `SupervisionState` owns the director and drives `observe` → policy → `apply`
+  from the sim's own event fold. The next unchecked item is developer telemetry.
