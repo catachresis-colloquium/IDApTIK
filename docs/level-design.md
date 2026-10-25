@@ -196,8 +196,9 @@ these validated load points.
 
 - **Relay (ADR-0005, landed).** The Elixir `SessionChannel` is **relay-only**: it
   fans byte-preserving `command`/`event` wire enums between the two seats and reads
-  only the routing tag. Determinism (ADR-0004) makes lockstep sound, so no
-  authoritative host process is needed; the relay stays transport-agnostic.
+  only the routing tag. Determinism (ADR-0004) makes lockstep sound for this
+  cooperative vertical slice, so it does not need a host authority; this does
+  not rule out hosted/federated authorities specified in ADR-0013.
 - **Host + transport (ADR-0006, design-accepted, deferred).** The plan wraps the
   Bevy frontend in the **gossamer** desktop shell (a webview host, *not* Tauri) and
   carries the Phoenix socket over **burble** transport for the two-player windowed

@@ -53,9 +53,9 @@ profile supplies propositions, actor roles and transition policy; it does not
 redefine kernel field meaning.
 
 The local half of this boundary is enforced by the `no-authoring-dependency`
-invariant in `.machine_readable/contractiles/Mustfile.a2ml`, which greps this
-repository's own manifests and therefore fails with no sibling repository
-present. The cross-repository half lives in
+invariant in `.machine_readable/contractiles/must/must.k9.ncl`, executed by
+`scripts/must_check.sh` against this repository's own manifests so the gate
+runs without a sibling repository present. The cross-repository half lives in
 `idaptik-ums/scripts/check-architecture-boundaries.sh`.
 
 ## Consequences

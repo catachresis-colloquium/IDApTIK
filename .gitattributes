@@ -69,7 +69,6 @@
 .tool-versions text eol=lf
 Justfile       text eol=lf
 *.just         text eol=lf
-Mustfile       text eol=lf
 Containerfile  text eol=lf
 
 # --- Binary ----------------------------------------------------------------

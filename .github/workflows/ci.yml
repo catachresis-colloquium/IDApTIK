@@ -1,13 +1,14 @@
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
-#   just test-ghost           -> cargo test (core/tui/ffi) + clippy -D warnings + fmt --check
+#   just test-ghost           -> cargo test (core/tui/ffi/net) + clippy -D warnings + fmt --check
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
 #   session loopback          -> relay tests + two-seat determinism/resync
-#   fixture suites            -> shell fixtures (doctor, launcher, vendor gate)
-#   must-check                -> Mustfile physical-state probes
+#   fixture suites            -> shell fixtures (doctor, launcher, vendor, format-migration)
+#   must-check                -> K9 Must component's physical-state probes
+#   machine-readable          -> pinned DEED/K9/Nickel and coordination checks
 #
 # The Rust toolchain (channel + clippy/rustfmt/rust-src + wasm32 target) is pinned
 # by rust-toolchain.toml, which rustup installs automatically on first use.
@@ -65,9 +66,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Shell fixture suites + Mustfile probes. These need nothing but the checkout
-  # and (for the rust-formatted probe) the pinned Rust toolchain, so they run
-  # before anything slow.
+  # Shell fixture suites + K9 Must probes. The pinned Rust toolchain is needed
+  # for rustfmt; this gate runs before the slower compiler/bootstrap jobs.
+  # Preserve the established check-run name for branch-protection compatibility;
+  # "Mustfile probes" is a historical label, while the runner below reads K9.
   fixtures-and-must:
     name: fixtures-and-must (shell suites + Mustfile probes)
     runs-on: ubuntu-latest
@@ -131,7 +133,11 @@ jobs:
       # pass over ten small files, about a second.
       - name: Actions lockfile synchronisation (issue #142 class of failure)
         run: ./scripts/check-lock-sync.sh
-      - name: Mustfile physical-state probes
+      - name: Coordination K9 structural fixtures
+        run: bash tests/coordination_k9_check_test.sh
+      - name: Machine-readable migration layout fixtures
+        run: bash tests/machine_readable_migration_test.sh
+      - name: K9 Must component physical-state probes
         run: bash scripts/must_check.sh
       # The proof-escape scan needs no Idris2 toolchain, so it lives here
       # rather than in abi-model: a `believe_me` is then caught on every
@@ -154,6 +160,20 @@ jobs:
         run: ./scripts/doc_claims_check.sh --self-test
       - name: Documentation-claims scan (digest coverage + step-name claims)
         run: ./scripts/doc_claims_check.sh
+
+  machine-readable-conformance:
+    name: machine-readable (DEED, K9, Nickel, coordination)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Pinned DEED/K9 and coordination conformance
+        run: bash scripts/machine_readable_check.sh
 
 # Idris2 ABI model gate (issue #103): bootstrap Idris 2 0.8.0 with a source
 # built Chez (no system deps beyond libc), then run the model gate.
@@ -331,6 +351,8 @@ jobs:
         run: bash scripts/vendor_bevy_winit_check.sh graph
 
   test-ghost:
+    # Keep the established check-run name for branch-protection compatibility;
+    # this job now includes idaptik-net in addition to its original test set.
     name: test-ghost (core/tui/ffi + clippy + fmt)
     runs-on: ubuntu-latest
     timeout-minutes: 30

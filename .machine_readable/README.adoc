@@ -1,0 +1,21 @@
+= IDApTIK machine-readable contracts
+:source-highlighter: rouge
+:toc:
+
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-FileCopyrightText: 2026 IDApTIK contributors
+
+== Canonical files
+
+* `../IDApTIK_chora.deed` is the one descriptive repo deed.
+* `../0-AI-MANIFEST.deed` supplies DEED filename dispatch and startup pointers.
+* `../coordination.k9` is the separate root agent-coordination protocol.
+* `contractiles/<verb>/<verb>.k9.ncl` is each K9 policy component; its sibling `<verb>.ncl` is the Nickel runner descriptor.
+
+The six contractile verbs are `adjust`, `bust`, `dust`, `intend`, `must`, and `trust`. The normative standards and validation pin are documented in `../docs/standards-conformance.md`.
+
+== Validation
+
+Run `just machine-readable-check` for the pinned DEED and K9 conformance tools, Nickel runner typechecks, and the project-specific coordination structural guard. Run `just must-check` to execute the blocking repository probes.
+
+Project facts are not split into per-topic metadata files. Contractile policy belongs in K9 components, while root `coordination.k9` contains agent-facing invariants and commands.

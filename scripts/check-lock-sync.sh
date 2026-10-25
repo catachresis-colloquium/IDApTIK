@@ -354,7 +354,7 @@ self_test() {
     local out
     if out="$(run_check "$3" 2>&1)"; then
       printf '  FAIL: expected failure: %s\n' "$1" >&2; failures=$((failures + 1))
-    elif ! printf '%s' "$out" | grep -qF "$2"; then
+    elif ! grep -qF -- "$2" <<< "$out"; then
       printf '  FAIL: %s failed for the wrong reason (wanted %q):\n%s\n' "$1" "$2" "$out" >&2
       failures=$((failures + 1))
     else note "$1"; fi

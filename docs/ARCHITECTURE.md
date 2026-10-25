@@ -1,12 +1,16 @@
 # Architecture
 
-IDApTIK is a polyglot game monorepo. **Rust/Crusoe owns gameplay truth** (an
-engine-agnostic, deterministic, event-sourced simulation); **multiplayer
-session relaying lives in burble** (the estate's gaming communication platform,
-estate ruling 2026-08-04); frontends are thin drivers over the same typed
-`Command`/`Event` wire.
+IDApTIK is a polyglot game monorepo. **Rust/Crusoe owns gameplay semantics**
+(an engine-agnostic, deterministic, event-sourced simulation); **multiplayer
+transport/session relaying currently lives in Burble** (the estate's gaming
+communication platform, estate ruling 2026-08-04). Simulation authority is a
+separate deployment choice: peer replicas for cooperative lockstep, or one
+server authority per hosted/federated session. The current client runtime only
+implements the relay-only slice; see
+[ADR-0013](adr/0013-deployment-topologies-and-state-ownership.md) for the
+contract and implementation status.
 
-For the reasoning behind each choice, see the ADRs in [`docs/adr/`](docs/adr/).
+For the reasoning behind each choice, see the ADRs in [`docs/adr/`](adr/).
 The proposed cross-repository epistemic state-machine seam is documented in
 [`architecture/esm-contract-and-repo-boundaries.md`](architecture/esm-contract-and-repo-boundaries.md).
 
@@ -30,8 +34,8 @@ The proposed cross-repository epistemic state-machine seam is documented in
 
 ## The core (`crates/idaptik-core`)
 
-The authoritative simulation. It is **engine-agnostic** (no rendering or I/O),
-**deterministic**, and **event-sourced**: a run is a pure function of
+The deterministic game simulation semantics. The core is **engine-agnostic**
+(no rendering or I/O), **deterministic**, and **event-sourced**: a run is a pure function of
 `(definition, config, seed, command stream)` producing an `Event` log and a
 `Debrief` (ADR-0004). `#![forbid(unsafe_code)]`.
 
@@ -73,32 +77,40 @@ stream. The core never depends on them (ADR-0003 and ADR-0008).
 
 ## Multiplayer (burble game-session fabric)
 
-Multiplayer session relaying lives in the **burble** repository
-(`metadatastician/burble/server/lib/burble_web/channels/game_channel.ex`),
+The current multiplayer path uses the **burble** repository
+(`metadatastic/burble/server/lib/burble_web/channels/game_channel.ex`),
 which is the estate's designated gaming communication platform (estate ruling
 2026-08-04). The `crates/idaptik-net` crate adapts Burble's pinned
-`burble-client` Phoenix implementation to IDApTIK's transport/error seams and
-connects to `game:<id>` channels over `/voice/websocket` (ADR-0006). The relay
-is **transport-agnostic** and holds no gameplay authority
-— it forwards; the core (run on each client) decides (ADR-0005).
+`burble-client` Phoenix implementation and connects to `game:<id>` over
+`/voice/websocket` (ADR-0006). Burble's game channel relays role-checked
+`command`/`event` messages; it does not simulate or persist game outcomes.
+Both seats currently run the deterministic simulation. The player-hosted
+launcher starts a local relay, so this is not direct peer transport and not a
+server-authoritative hosted game. Federated authority, direct peer transport,
+and the optional GSA control plane are specified—but not yet wired—in
+[ADR-0013](adr/0013-deployment-topologies-and-state-ownership.md).
 
 ## Build & toolchain
 
 `just` orchestrates `cargo` (Rust), `mix` (Elixir), and `nickel` (config).
 Rust/Crusoe toolchains are pinned via `mise.toml` and `rust-toolchain.toml`. Key gates:
 
-- `just test-ghost` — `cargo test` (core/tui/ffi) + `cargo clippy -D warnings` +
+- `just test-ghost` — `cargo test` (core/tui/ffi/net) + `cargo clippy -D warnings` +
   `cargo fmt --check`.
 - `just config-scenario-check` — exports the Nickel scenario, round-trips it
   through the Rust validator, and asserts every `bad_*.ncl` fixture is rejected.
 
 ## Design principles
 
-- **One source of truth.** The core is authoritative; everything else observes.
+- **One semantic authority per layer.** The Rust core defines game semantics;
+  a deployment chooses either deterministic peer replicas or one server
+  authority for each session. A relay, management console, or cache does not
+  become simulation authority.
 - **Determinism first.** Same inputs ⇒ same `Event` log ⇒ replayable, testable.
 - **Definition-as-data.** Scenarios, actors, and buildings are data, not code.
 - **Transport-agnostic multiplayer.** Swapping the transport must not change the
-  game (a plain socket substitutes for the real transport in tests).
+  game; current production wiring remains Phoenix/Burble until a direct-peer
+  transport is separately implemented.
 
 ---
 

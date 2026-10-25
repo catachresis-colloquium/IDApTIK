@@ -16,6 +16,8 @@ An asymmetric two-player infiltration game. One of you goes in. The other keeps 
 
 IDApTIK is a game about infiltration, deception, and trust, usually misplaced.
 
+The repository's machine-readable sources have distinct roles: `IDApTIK_chora.deed` records descriptive project state, the six K9 components under `.machine_readable/contractiles/` hold policy, and root `coordination.k9` is the agent-instructions protocol. Run `just machine-readable-check` to validate them against the pinned standards.
+
 One player is the **infiltrator**: moving through the world, dodging obstacles, bypassing security, staying unseen. The other is the **hacker**: watching remotely, opening doors, timing elevators, rewiring electronics, cutting the lights, and generally trying to keep the infiltrator breathing.
 
 Control is not shared. It is asymmetric. The infiltrator moves; the hacker watches. If they do not work together, someone gets caught. The recurring problem is that the hacker's competence and the infiltrator's survival are loosely correlated at best.
@@ -55,7 +57,10 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
 - **Gameplay truth:** Rust/Crusoe — an engine-agnostic core, with **Bevy** as the
   selected graphical frontend over it
   ([ADR-0008](docs/adr/0008-select-bevy-and-retire-fyrox.md)).
-- **Multiplayer / session:** Elixir/OTP — **Bandit** + **Phoenix Channels**, not LiveView ([ADR-0002](docs/adr/0002-multiplayer-transport.md)).
+- **Current relay/session coordination:** Elixir/OTP in Burble — **Bandit** +
+  **Phoenix Channels**, not LiveView ([ADR-0002](docs/adr/0002-multiplayer-transport.md));
+  simulation authority is a separate deployment choice
+  ([ADR-0013](docs/adr/0013-deployment-topologies-and-state-ownership.md)).
 - **FFI / ABI policy:** **Zig unified-api-adapter APIs/FFIs** for the adapter and **Idris2** for ABI
   contracts. The C ABI is still exported directly from Rust/Crusoe, the Idris2 ABI
   model exists (`crates/idaptik-ffi/abi`, gated by `just abi-model-check`), and the Zig
@@ -68,7 +73,11 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
 - **Config:** **Nickel** (typed configuration).
 - **Toolchains:** pinned in `mise.toml` + `rust-toolchain.toml`; `just` runs tasks. On a fresh Debian/Ubuntu/WSL2 clone run `./install.sh` (also `just install`): it installs rustup, the pinned Rust, the mise tools and Bevy's system libraries (asks for `sudo`), builds the Bevy frontend, and ends with the runtime doctor. Otherwise provision with `just setup` (or `just bootstrap` for a fast, prebuilt-only bring-up), and check with `just doctor`.
 
-Still open: persistence/versioning and the long-term Rust↔Elixir wire encoding.
+The deployment contract is recorded in
+[ADR-0013](docs/adr/0013-deployment-topologies-and-state-ownership.md). Direct
+peer transport, a server-authoritative hosted runtime, and federated session
+routing are not implemented yet. Still open: long-term player-save
+compatibility/retention and the Rust↔Elixir wire encoding.
 
 Run `./launcher.sh` for the player-facing menu: choose solo or multiplayer,
 then choose the Infiltrator or Hacker seat for multiplayer. Both paths launch
@@ -145,12 +154,13 @@ Contributions come in under the Developer Certificate of Origin (DCO 1.1); sign 
 ## Status
 
 Envelope-stage vertical slice. The deterministic Ghost Lobby simulation, TUI,
-delay-lockstep netplay, Bevy renderer, and UMS v1 package boundary are
-implemented. IDApTIK's Rust suites, Bevy frontend, Nickel contracts, and the
-Burble-backed two-seat session path and cross-repository UMS round trip are
-CI-gated. The next milestone is a coherent
-player-facing Bevy shell with first art, real-window validation, and documented
-mechanics.
+delay-lockstep client netplay, Bevy renderer, and UMS v1 package boundary are
+implemented. Current netplay is relay-only: both seats simulate locally; direct
+peer transport, hosted server authority, and multi-server failure recovery are
+not shipped. IDApTIK's Rust suites, Bevy frontend, Nickel contracts, the
+Burble-backed two-seat session path, and cross-repository UMS round trip are
+CI-gated. The next milestone is a coherent player-facing Bevy shell with first
+art, real-window validation, and documented mechanics.
 
 ---
 

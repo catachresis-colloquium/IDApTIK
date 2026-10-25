@@ -114,7 +114,7 @@ That asymmetry is the reason `enaction-engine`'s crate is not a mirror of
 **The channel table is data, not branching.** `CHANNELS` declares which visual
 quantities blend and how (`Lerp` / `Snap`). It is inspectable, and a test asserts
 the implementation matches it, so it cannot rot into decoration. This mirrors how
-the rest of the estate treats contracts (Nickel config, a2ml contractiles). The
+the rest of the estate treats contracts (Nickel config and K9 contractiles). The
 trade: the table is currently *checked against* the code rather than *driving*
 it — a generic engine would dispatch on it. Making it drive dispatch here would
 cost a branch per channel per frame to buy flexibility nothing needs yet.

@@ -118,11 +118,23 @@ lock-sync-check:
 pages-wellknown-test:
     bash tests/pages_wellknown_test.sh
 
-# Run every shell fixture suite (no Rust toolchain needed).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check
+# Run every offline shell fixture suite (no Rust toolchain needed).
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check coordination-k9-test machine-readable-migration-test
 
-# Execute the Mustfile physical-state probes (the estate `must check` verb).
-# Critical probes gate; a probe whose tool is missing fails, never skips.
+# Validate DEED, K9 components, Nickel runners, and the coordination protocol
+# against the pinned current standards; the K9 semantic lane requires Nickel.
+machine-readable-check:
+    bash scripts/machine_readable_check.sh
+
+# Offline structural regression suites for the coordination and migration layout.
+coordination-k9-test:
+    bash tests/coordination_k9_check_test.sh
+
+machine-readable-migration-test:
+    bash tests/machine_readable_migration_test.sh
+
+# Execute the K9 Must component's host-side physical-state probes.
+# Critical probes gate; a required tool missing fails, never skips.
 must-check:
     bash scripts/must_check.sh
 
