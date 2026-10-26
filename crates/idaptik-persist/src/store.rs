@@ -379,7 +379,7 @@ impl Store {
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
         let range = commands
-            .range((id.as_str(), checkpoint_at)..=(id.as_str(), u64::MAX))?;
+            .range((id.as_str(), checkpoint_at.saturating_add(1))..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
