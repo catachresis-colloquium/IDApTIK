@@ -374,7 +374,8 @@ impl Store {
 
         // Commands with `seq >= checkpoint_at` are the ones the checkpoint has
         // not applied. `at` is a count, so it doubles as the first unapplied
-        // sequence number.
+        // sequence number: replay resumes at `seq == checkpoint_at` (see
+        // `CheckpointRecord::at`), not one past it.
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
         let range = commands

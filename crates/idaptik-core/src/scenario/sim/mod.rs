@@ -2303,7 +2303,13 @@ mod tests {
 
     #[test]
     fn the_perception_reports_the_decoy_as_a_decoy() {
-        let sim = crisis_sim();
+        let mut sim = crisis_sim();
+        // Perception is room-local and a fresh crisis sim leaves the vacuum
+        // powered down where it parks (the office, far from the crisis
+        // position in the break room), so stand the decoy in Billy's room and
+        // switch it on before asking what the guard perceives.
+        sim.state.vacuum.active = true;
+        sim.state.vacuum.x = 100.0;
         // The vacuum is the controlled deception: real to perception, labelled
         // as a decoy, and separate from the world's truth about it.
         let perc = sim.guard_perception();
