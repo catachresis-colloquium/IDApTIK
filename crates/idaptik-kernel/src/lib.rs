@@ -42,6 +42,7 @@
 #[cfg(creusot)]
 extern crate creusot_std;
 
+pub mod contrast;
 pub mod rng;
 pub mod trace;
 

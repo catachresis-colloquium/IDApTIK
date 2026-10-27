@@ -1,0 +1,15 @@
+[package]
+name = "idaptik-brand"
+description = "The IDApTIK brand tokens as data (tokens.json, I-JSON/JCS) and as constants (generated.rs), with the WCAG contrast gate over them."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The exact integer contrast law lives in the proof kernel; this crate only
+# linearises channels (float work the kernel refuses) and feeds it.
+idaptik-kernel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

@@ -104,7 +104,8 @@ crates/idaptik-net      Phoenix Channels client over burble game-session fabric 
 crates/idaptik-evil-weevil  sans-IO deterministic adversarial testing adapter over the multiplayer acceptance rules (ADR-0017)
 crates/idaptik-weevil   thin host adapter over the Evil Weevil native C ABI, plus its headless replay driver
 crates/idaptik-persist  durable session storage — command log, checkpoints, replay-safe resume (redb)
-config/                    Nickel — typed, schema-checked game/network config
+crates/idaptik-brand    brand tokens: tokens.json (I-JSON/JCS) + generated constants, WCAG contrast gate (docs/design/brand/)
+config/                    Nickel — typed, schema-checked game/network config and brand tokens
 docs/adr/                  architecture decision records
 ```
 

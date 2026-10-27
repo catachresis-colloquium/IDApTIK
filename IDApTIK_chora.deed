@@ -43,7 +43,7 @@
     :toolchain-manager mise
     :rust-toolchain "1.97.1"
     :ci-platform github-actions
-    :last-updated "2026-10-25")
+    :last-updated "2026-10-27")
 
   (ecosystem
     :gameplay-engine "Rust workspace; deterministic simulation and replay are authoritative."
@@ -90,7 +90,8 @@
     (component :name "idaptik-net" :state live-partial :path "crates/idaptik-net/" :role "Burble/Phoenix relay client plus declarative deployment and state-placement contracts.")
     (component :name "idaptik-evil-weevil" :state live-test-adapter :path "crates/idaptik-evil-weevil/" :role "Deterministic, sans-I/O adversarial test corpus for multiplayer acceptance and recovery rules; separate from gameplay AI." :coverage "The corpus runs over the real lockstep, envelope, and sim validators with a read-only fault-versus-hostility observer and local-only enforcement. Scenario EW-06 drives the infrastructure and companion orders and the observation trail; the relay-gap list carries Signal, Mole, and Power.")
     (component :name "idaptik-ffi" :state partial :path "crates/idaptik-ffi/" :role "Rust C ABI, Idris2 ABI model, and Zig adapter/conformance suite; remaining serde-wire work is tracked in issue #103.")
-    (component :name "idaptik-config" :state live :path "config/" :role "Nickel configuration, scenario schema, and negative fixtures.")
+    (component :name "idaptik-config" :state live :path "config/" :role "Nickel configuration, scenario schema, brand tokens and schema, and negative fixtures.")
+    (component :name "idaptik-brand" :state live-tier1 :path "crates/idaptik-brand/" :role "Brand tokens as data (tokens.json in the I-JSON/JCS profile) and as generated constants the Bevy palette wraps; the WCAG contrast gate over every text pair the HUD draws, decided by the proof kernel's integer contrast law." :evidence "config/brand-tokens.ncl, crates/idaptik-brand/tests/legibility.rs, crates/idaptik-kernel/src/contrast.rs and docs/design/brand/README.md")
     (component :name "UMS-package-loader" :state live-v1 :path "crates/idaptik-core/" :role "Versioned package syntax, loader, semantic validation, deterministic execution, snapshot/restore, and replay.")
     (component :name "UMS-round-trip" :state tested-sibling-gate :path "sibling Universal Modding Studio repository" :role "Round-trip comparison is tested in the sibling UMS repository; it is not a CI workflow in this repository.")
     (component :name "CAC-trace" :state live-fixture :path "crates/idaptik-core/" :role "Six-stage trace runs in the package round trip; GuardTraceStage mapping to Enaction's Domain remains unvalidated.")

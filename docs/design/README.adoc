@@ -21,6 +21,12 @@ IDApTIK uses Bevy as its thin graphical frontend over `idaptik-core`
 Gossamer-hosted client design makes Bevy the target for implementing this
 outline without moving package or simulation authority into the renderer.
 
+`brand/` is the brand book (`brand/README.md`): the palette, the seat law,
+the three bundled pixel faces, the type ramp and spacing, every value lifted
+from the code that draws the game and held in `config/brand-tokens.ncl`.
+`brand/inventory.md` lists what the brand still lacks and why. The renders
+beside them come from `just brand-sheet`.
+
 `water-gas-airflow.md` is the design of record for the water, gas and airflow
 systems implemented in `crates/idaptik-core/src/scenario/infrastructure/`
 (ADR-0013). It states what is modelled, what is deliberately qualitative, how

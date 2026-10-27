@@ -51,6 +51,13 @@ S	crates/idaptik-core/src/scenario/command.rs	typed command stream: the replay i
 S	crates/idaptik-core/src/scenario/event.rs	typed event stream: the replay output
 S	crates/idaptik-kernel/src/trace.rs	the trace clock the run races; off-by-one changes outcomes. PROVED: hand-written DeepModel and PartialEq, and advance() carries the anti-stall contract its own doc comment warns about
 S	crates/idaptik-kernel/src/rng.rs	Mulberry32 PRNG; every stochastic decision in a run descends from it. PROVED: next_u32 discharged panic- and overflow-free for all 2^32 states
+D	crates/idaptik-kernel/src/contrast.rs	WCAG contrast as exact integer arithmetic for the brand gate (crates/idaptik-brand); not determinism, but in the kernel so luminance() and meets() carry functional contracts the proof job discharges -- a wrong verdict would look like a pass
+D	crates/idaptik-brand/src/lib.rs	the brand tokens as a typed model over tokens.json, plus the renderer that writes generated.rs; drift between the three is caught by its own round-trip tests
+D	crates/idaptik-brand/src/canonical.rs	I-JSON/JCS canonicaliser for the one token file; refuses what it cannot render exactly, vectors in its tests
+D	crates/idaptik-brand/src/srgb.rs	the one float step of the contrast rule (sRGB linearisation) scaled to the kernel's integers; tested against the transfer function
+D	crates/idaptik-brand/src/generated.rs	GENERATED constants from tokens.json (declared in .gitattributes); a stale copy fails generated_rs_matches_tokens_json
+T	crates/idaptik-brand/tests/legibility.rs	pins the WCAG verdict of every pair the HUD draws, failures included, so the brand book cannot drift from the palette
+T	crates/idaptik-bevy/examples/brand_sheet.rs	draws every colour token and the type ramp with the real frontend; --screenshot renders the brand book's sheets
 L	crates/idaptik-core/src/interp.rs	pose/door interpolation; parity-tested against the Bevy frontend
 L	crates/idaptik-core/src/scenario/common.rs	shared helpers over the scenario types
 L	crates/idaptik-core/src/scenario/outcome.rs	debrief and grading

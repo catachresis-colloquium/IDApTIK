@@ -212,8 +212,8 @@ test:
 # to notice that a run does not replay to the state it claims -- a test gate that
 # skips it is a gate that skips the invariant.
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist --all-targets -- -D warnings
+    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist -p idaptik-brand
+    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist -p idaptik-brand --all-targets -- -D warnings
     cargo fmt --all -- --check
 
 # The Evil Weevil adversarial-testing gate (ADR-0017): offline, sans-IO
@@ -295,7 +295,7 @@ vendor-winit-watch:
 # failure, not a skip: run `just setup` first.
 config-check:
     @command -v nickel >/dev/null 2>&1 || { echo "nickel is not installed: run 'just setup'" >&2; exit 1; }
-    nickel export config/default.ncl >/dev/null && nickel export config/grounded_slice.ncl >/dev/null && nickel export config/ghost_lobby_floor.ncl >/dev/null && just config-scenario-check && echo "config: ok (schema applied)"
+    nickel export config/default.ncl >/dev/null && nickel export config/grounded_slice.ncl >/dev/null && nickel export config/ghost_lobby_floor.ncl >/dev/null && just config-scenario-check && just brand-check && echo "config: ok (schema applied)"
 
 # Check the Nickel-authored scenario against scenario-schema.ncl: the good
 # fixture must export and round-trip through the Rust validator unchanged, and
@@ -322,6 +322,44 @@ config-regen:
     cargo test -p idaptik-core regenerate_ghost_lobby_floor_json -- --ignored
     cargo test -p idaptik-core regenerate_floor_graph_json -- --ignored
     @echo "config: goldens regenerated"
+
+# --- Brand tokens (docs/design/brand/README.md) --------------------------------
+#
+# config/brand-tokens.ncl is the source of truth for every colour, typeface,
+# type size and spacing value the frontend draws with. It is exported to
+# crates/idaptik-brand/tokens.json (I-JSON, JCS bytes) and rendered into
+# crates/idaptik-brand/src/generated.rs; both are committed and both are
+# GENERATED -- never edit them by hand.
+
+# The brand gate: the Nickel typechecks, every bad fixture is rejected, the
+# committed JSON equals a fresh canonicalised export, generated.rs equals a
+# fresh rendering of that JSON, and every text pair the HUD draws has the WCAG
+# verdict the brand book records. A missing nickel is a failure, not a skip.
+brand-check:
+    @command -v nickel >/dev/null 2>&1 || { echo "nickel is not installed: run 'just setup'" >&2; exit 1; }
+    nickel export config/brand-tokens.ncl --format json > /tmp/brand_tokens_raw.json
+    @for f in config/brand-fixtures/bad_*.ncl; do \
+        if nickel export "$f" >/dev/null 2>&1; then \
+            echo "FAIL: $f exported but brand-schema.ncl should reject it"; exit 1; \
+        fi; \
+        echo "rejected as expected: $f"; \
+    done
+    cargo test -q -p idaptik-brand tokens_json_matches_nickel_export -- --ignored
+    cargo test -q -p idaptik-brand
+    @echo "brand: ok (tokens.json and generated.rs match config/brand-tokens.ncl)"
+
+# Re-export the brand tokens and rewrite both committed artefacts. Run after
+# editing config/brand-tokens.ncl, then `just brand-check`.
+brand-regen:
+    nickel export config/brand-tokens.ncl --format json > /tmp/brand_tokens_raw.json
+    cargo test -q -p idaptik-brand regenerate_tokens_json -- --ignored
+    cargo test -q -p idaptik-brand regenerate_generated_rs -- --ignored
+    @echo "brand: tokens.json and generated.rs regenerated"
+
+# Render the brand sheet (every colour token and the type ramp in each bundled
+# face) in a window; `--screenshot PATH` saves a PNG after the first frames.
+brand-sheet *ARGS:
+    cargo run -p idaptik-bevy --example brand_sheet -- {{ARGS}}
 
 # --- Evil Weevil guard brain (vertical slice) --------------------------------
 #

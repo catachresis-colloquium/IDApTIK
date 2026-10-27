@@ -10,6 +10,9 @@ repository.workspace = true
 # On Linux, Bevy needs system libraries (alsa, udev, windowing) to build/run —
 # install them with `just bevy-linux-deps`.
 [dependencies]
+# The brand tokens (colour, type, spacing) as generated constants; the palette
+# below is a thin `Color` view over them.
+idaptik-brand = { workspace = true }
 idaptik-core = { workspace = true }
 idaptik-net = { workspace = true }
 idaptik-tui = { workspace = true }
