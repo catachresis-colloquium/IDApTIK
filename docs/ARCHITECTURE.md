@@ -27,8 +27,10 @@ The proposed cross-repository epistemic state-machine seam is documented in
 │   ├── idaptik-net/   #   Phoenix Channels client over burble game-session fabric (ADR-0006)
 │   ├── idaptik-evil-weevil/  # sans-IO deterministic adversarial testing adapter (ADR-0017)
 │   ├── idaptik-weevil/  # thin host adapter over the Evil Weevil native C ABI + headless replay driver
-│   └── idaptik-persist/  # durable session storage: command log, checkpoints, replay-safe resume (redb)
-├── config/            # Nickel typed config: scenario-schema.ncl + fixtures (incl. bad_*.ncl)
+│   ├── idaptik-persist/  # durable session storage: command log, checkpoints, replay-safe resume (redb)
+│   └── idaptik-brand/   # brand tokens as data (tokens.json) and constants (generated.rs); WCAG gate
+├── config/            # Nickel typed config: scenario-schema.ncl + fixtures (incl. bad_*.ncl), brand-tokens.ncl
+├── docs/design/brand/ # the brand book, inventory and brand-sheet renders
 ├── docs/adr/          # Architecture Decision Records
 ├── fixtures/          # cross-language wire fixtures
 ├── scripts/           # bootstrap.sh, doctor.sh, install-idris2.sh

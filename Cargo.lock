@@ -3601,12 +3601,22 @@ dependencies = [
  "bevy",
  "bevy_winit",
  "clap",
+ "idaptik-brand",
  "idaptik-core",
  "idaptik-net",
  "idaptik-tui",
  "idaptik-weevil",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "idaptik-brand"
+version = "0.1.0"
+dependencies = [
+ "idaptik-kernel",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

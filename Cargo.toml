@@ -9,6 +9,7 @@
 resolver = "2"
 members = [
     "crates/idaptik-kernel",
+    "crates/idaptik-brand",
     "crates/idaptik-core",
     "crates/idaptik-ffi",
     "crates/idaptik-tui",
@@ -28,6 +29,7 @@ repository = "https://github.com/metadatastician/IDApTIK"
 
 [workspace.dependencies]
 idaptik-kernel = { path = "crates/idaptik-kernel", version = "0.1.0" }
+idaptik-brand = { path = "crates/idaptik-brand", version = "0.1.0" }
 idaptik-core = { path = "crates/idaptik-core", version = "0.1.0" }
 idaptik-tui = { path = "crates/idaptik-tui", version = "0.1.0" }
 idaptik-weevil = { path = "crates/idaptik-weevil", version = "0.1.0" }

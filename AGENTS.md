@@ -41,7 +41,10 @@ Invariants (see `coordination.k9` and the K9 contractiles):
 - Contributions come in under DCO 1.1 — sign commits with `git commit -s`
   (see `CONTRIBUTING.md`).
 
-Do not edit generated files directly; none are currently declared. Do not
+Do not edit generated files directly. Two are declared (in `.gitattributes`):
+`crates/idaptik-brand/tokens.json` and `crates/idaptik-brand/src/generated.rs`,
+both rendered from `config/brand-tokens.ncl` by `just brand-regen` and checked
+by `just brand-check`. Change the Nickel, regenerate, commit all three. Do not
 change licences, upstream coined names, or evidence-status labels (in
 `docs/PROJECT-ASSURANCE-PROFILE.adoc`) as a side effect of an unrelated change.
 
