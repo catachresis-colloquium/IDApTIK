@@ -106,14 +106,18 @@ Don't:
 
 ### 2.3 Worked examples
 
-The HUD status line is `bone` type on the `pitch` clear colour, with meters as
-`cobalt`/`dust`/`neon` bars on a `slate` track: three accents, each alone on
-its own bar, none touching another (`hud.rs`). A locked door is a
+The HUD status line is `bone` type on the `pitch` clear colour, with five
+meters as flat bars on a `slate` track: support `phosphor`, bandwidth
+`cobalt`, alert `alarm`, isolation `dust`, trace `neon`, each alone on its own
+bar (`hud.rs`). The bandwidth bar is the one that does not read: `cobalt` on
+`slate` is under even the 3:1 glyph bar (§5, flagged). A locked door is a
 `door_locked` slab in a `slab` frame; when the hacker unlocks it the slab
 turns `door_unlocked`, the cobalt family saying "passage" without a word. The
-hacker's wiring view is `phosphor` labels at `px10` on a `pitch` screen
-(`wiring.rs`), and the only other colour that may appear there is `alarm` on
-a camera that is watching.
+hacker's screens are `phosphor` on the deck's dark glass (`screen.rs`,
+`wiring.rs`): device labels, ports, dimmed room names. `signal` marks the
+infiltrator's estimate and `alarm` marks threat: the guard's estimate, a
+camera that is watching, and devices that read `LOCKED` or `NO POWER`. Those
+alarm labels are text, and alarm red fails 4.5:1 as text (§5, flagged).
 
 ## 3. Type
 
@@ -122,7 +126,10 @@ a camera that is watching.
 Three pixel faces are bundled (`crates/idaptik-bevy/assets/fonts/`), each
 under the SIL Open Font License 1.1 with the licence text beside it. One is
 installed as Bevy's default font at startup (`fonts::install_ui_font`), so
-every text in the game uses it without naming it.
+every text in the game uses it without naming it. The faces are the `font`
+tokens: `fonts::UiFont` reads each face's grid from the generated constants,
+and its tests hold the default face, the `IDAPTIK_UI_FONT` names and the
+embedded font files to the tokens.
 
 | Token | Family | File | Grid | Role |
 |---|---|---|---|---|
@@ -157,6 +164,11 @@ eye.
 
 ## 4. Space, radius, grid
 
+These values are **recorded, not yet read**: `hud.rs` and `deck.rs` still
+write them as literals, so editing a `space` token changes the sheet and the
+book but not the game. Moving the HUD onto the tokens is an inventory item.
+The same holds for the `size` ramp above.
+
 | Token | px | Where |
 |---|---|---|
 | `hairline` | 1 | Deck card border. |
@@ -190,29 +202,60 @@ contracts) over channels linearised in `idaptik_brand::srgb`, and every row is
 pinned by `crates/idaptik-brand/tests/legibility.rs`. Change the palette and
 the test tells you which row moved.
 
+Text is held to 4.5:1 everywhere: the game's text is drawn at 16 px, short
+of WCAG's 24 px "large" size, except the role-select title. Bars, LEDs and
+shapes are held to 3:1. "Recorded" means the book rules on the pair but the
+frontend does not draw it today.
+
 | Foreground on background | Ratio | Text (4.5:1) | Glyph (3:1) | Drawn today as |
 |---|---|---|---|---|
-| `bone` on `pitch` | 17.15 | pass | pass | HUD status, meters, log |
-| `neon` on `pitch` | 17.21 | pass | pass | end-of-run overlay text |
-| `phosphor` on `pitch` | 13.79 | pass | pass | wiring labels, help line |
-| `signal` on `pitch` | 13.48 | pass | pass | the infiltrator's labels |
-| `dust` on `pitch` | 6.00 | pass | pass | key hints |
-| `bone` on `slate` | 13.23 | pass | pass | meter label on its track |
-| `bone` on `slab` | 10.54 | pass | pass | type on a frame or prop |
-| `bone` on `room_fill` / `room_fill_lit` | 15.55 / 14.25 | pass | pass | type over a room |
-| `phosphor` on `room_fill` | 12.50 | pass | pass | a screen inside a room |
-| `dust` on `slate` | 4.63 | pass | pass | isolation meter bar |
-| **`alarm` on `pitch`** | **4.35** | **fail** | pass | never as text; LEDs and wash only |
-| **`dust` on `slab`** | **3.69** | **fail** | pass | not drawn; recorded so nobody starts |
-| **`cobalt` on `pitch`** | **3.34** | **fail** | pass | bandwidth bar (a glyph, fine) |
-| `rain` on `pitch` | 3.72 | fail | pass | a surface, not text |
-| `slab` on `pitch` | 1.63 | fail | fail | a surface, not text |
-| `room_stroke` on `pitch` | 2.22 | fail | fail | a surface, not text |
+| `bone` on `pitch` | 17.15 | pass | pass | HUD status, meter labels, log (`hud.rs`) |
+| `neon` on `pitch` | 17.21 | pass | pass | end-of-run overlay text (`hud.rs`) |
+| `dust` on `pitch` | 6.00 | pass | pass | key hints (`hud.rs`) |
+| `phosphor` / `signal` on `pitch` | 13.79 / 13.48 | pass | pass | recorded |
+| **`alarm` on `pitch`** | **4.35** | **fail** | pass | **live text:** `LOCKED` / `NO POWER` labels, `GUARD` estimate (`screen.rs`) |
+| `cobalt` on `pitch` | 3.34 | fail | pass | recorded |
+| `phosphor` on deck glass | 13.53 | pass | pass | device labels (`screen.rs`) |
+| `signal` on deck glass | 13.23 | pass | pass | the infiltrator's estimate (`screen.rs`) |
+| dimmed `phosphor` on deck glass | 4.72 or better | pass | pass | room names, 55 % alpha (`screen.rs`) |
+| **`alarm` on deck glass** | **4.27** | **fail** | pass | **live text:** as on `pitch` (`screen.rs`) |
+| deck glass on `phosphor` | 13.53 | pass | pass | the verb on the deck card (`deck.rs`) |
+| `phosphor` on `slate` | 10.63 | pass | pass | support meter fill (`hud.rs`) |
+| **`cobalt` on `slate`** | **2.58** | fail | **fail** | **bandwidth meter fill** (`hud.rs`) |
+| `alarm` on `slate` | 3.35 | fail | pass | alert meter fill (`hud.rs`) |
+| `dust` on `slate` | 4.63 | pass | pass | isolation meter fill (`hud.rs`) |
+| `neon` on `slate` | 13.27 | pass | pass | trace meter fill (`hud.rs`) |
+| `bone` on `slate` / `slab` | 13.23 / 10.54 | pass | pass | recorded |
+| `dust` on `slab` | 3.69 | fail | pass | recorded: never set dust type on slab |
+| `bone` on `room_fill` / `room_fill_lit` | 15.55 / 14.25 | pass | pass | recorded |
+| `phosphor` on `room_fill` | 12.50 | pass | pass | recorded |
+| `rain` on `pitch` | 3.72 | fail | pass | rain streaks, a surface (`art.rs`) |
+| `slab` on `pitch` | 1.63 | fail | fail | door frames, a surface (`scene.rs`) |
+| `room_stroke` on `pitch` | 2.22 | fail | fail | recorded: room outline, a surface |
 
-Three flags, none of them a change: alarm red, dust-on-slab and cobalt are
-glyph colours, not text colours, and the game draws them as glyphs. The rule
-for a new text site is one line: **type is `bone`, `neon`, `phosphor`,
-`signal` or `dust`, on `pitch`, `slate`, `slab` or a room fill.**
+The deck glass is `screen::DECK_GLASS`, `#07110d`, an off-palette literal.
+Its rows are pinned in `idaptik-bevy`'s palette tests, which can read it; the
+rest are pinned in `crates/idaptik-brand/tests/legibility.rs`.
+
+**Two live failures, flagged and not changed** (handoff rule 3), both open
+decisions in `inventory.md`:
+
+- **Alarm red as text.** The `LOCKED` / `NO POWER` labels and the `GUARD`
+  estimate are alarm red at 16 px: 4.35:1 on night, 4.27:1 on the deck glass.
+- **The bandwidth bar.** `cobalt` on the `slate` track is 2.58:1, below the
+  glyph bar, so the bar's fill level is hard to read.
+
+**Approved text pairs.** A new text site uses one of these and nothing else:
+
+| Text colour | On |
+|---|---|
+| `bone` | `pitch`, `slate`, `slab`, `room_fill`, `room_fill_lit`, deck glass |
+| `neon` | `pitch`, `slate` |
+| `phosphor` | `pitch`, `room_fill`, deck glass |
+| `signal` | `pitch`, deck glass |
+| `dust` | `pitch`, deck glass; **not** `slab` (3.69:1) |
+
+`alarm` and `cobalt` are never text colours.
 
 ## 6. The pixel-art palette
 
@@ -227,14 +270,26 @@ were cut.
 
 ## 7. Changing the brand
 
-1. Edit `config/brand-tokens.ncl`. A wrong hex, a duplicate name or a theme
-   that drifts from its value fails the typecheck
-   (`config/brand-fixtures/bad_*.ncl` are the proofs that it can fail).
+What an edit to `config/brand-tokens.ncl` reaches today:
+
+| Token family | Reaches the game? |
+|---|---|
+| `colour` | **Yes.** `palette.rs` is a view over the generated constants. |
+| `font` | **Yes**, for each face's grid. The default face, names and files are held to the tokens by `fonts.rs` tests, so a change there fails until `fonts.rs` follows. |
+| `size`, `space`, `radius`, `grid` | **No.** Recorded inventory; the HUD still uses literals (§4). |
+
+To change it:
+
+1. Edit `config/brand-tokens.ncl`. A wrong hex, a duplicate or reserved name,
+   a theme that drifts from its value, or anything but exactly one default
+   font fails the typecheck. `config/brand-fixtures/good_minimal.ncl` must
+   export, and each `bad_*.ncl` must not.
 2. `just brand-regen` rewrites `tokens.json` (I-JSON, JCS bytes, one trailing
    LF) and `generated.rs`.
-3. `just brand-check` (also run by `just config-check` and, through
-   `test-ghost`, by CI) re-exports, re-renders, compares, and re-runs the
-   legibility verdicts. If a verdict moved, update §5 and the test together.
+3. `just brand-check` re-exports, re-renders, compares and re-runs the
+   legibility verdicts. It also runs inside `just config-check` and in CI's
+   `config-scenario-check` job. If a verdict moved, update §5 and the tests
+   together.
 4. `just brand-sheet` to look at it; `--screenshot PATH` to refresh the
    images below.
 

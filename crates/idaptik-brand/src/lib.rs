@@ -182,12 +182,15 @@ impl Brand {
                 t.grid_px
             );
         }
-        let default = self
-            .font
-            .tokens
-            .iter()
-            .find(|t| t.default)
-            .expect("one font is the default");
+        // brand-schema.ncl guarantees exactly one default; refuse to render a
+        // guess if a hand-edited tokens.json ever says otherwise.
+        let defaults: Vec<&FontToken> = self.font.tokens.iter().filter(|t| t.default).collect();
+        let [default] = defaults[..] else {
+            panic!(
+                "exactly one font must be the default, found {}",
+                defaults.len()
+            );
+        };
         out.push_str("    /// The default face's family name.\n");
         let _ = writeln!(
             out,
@@ -243,8 +246,15 @@ mod tests {
     const GENERATED_RS: &str = include_str!("generated.rs");
     const GENERATED_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/generated.rs");
     const TOKENS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tokens.json");
-    /// Where `just brand-check` / `just brand-regen` leave the Nickel export.
-    const NICKEL_EXPORT: &str = "/tmp/brand_tokens_raw.json";
+    /// The Nickel export `just brand-check` / `just brand-regen` wrote, at the
+    /// per-checkout path they pass in `IDAPTIK_BRAND_EXPORT`. No fallback: a
+    /// fixed shared path could be another checkout's (or user's) file.
+    fn nickel_export() -> String {
+        let path = std::env::var("IDAPTIK_BRAND_EXPORT").expect(
+            "IDAPTIK_BRAND_EXPORT is unset; run this via `just brand-check` or `just brand-regen`",
+        );
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("nickel export {path}: {e}"))
+    }
 
     #[test]
     fn tokens_json_is_canonical() {
@@ -293,6 +303,24 @@ mod tests {
     }
 
     #[test]
+    fn exactly_one_font_is_the_default() {
+        let b = Brand::load();
+        let n = b.font.tokens.iter().filter(|t| t.default).count();
+        assert_eq!(n, 1, "brand-schema.ncl requires exactly one default font");
+    }
+
+    #[test]
+    #[should_panic(expected = "exactly one font must be the default, found 2")]
+    fn the_generator_refuses_two_default_fonts() {
+        let mut b = Brand::load();
+        for t in &mut b.font.tokens {
+            t.default = true;
+        }
+        b.font.tokens.truncate(2);
+        let _ = b.render_generated();
+    }
+
+    #[test]
     fn hex_parser_rejects_what_the_schema_rejects() {
         assert_eq!(parse_hex("#0c0c0e"), Some(0x0c0c0e));
         assert_eq!(parse_hex("#0C0C0E"), None, "uppercase is not canonical");
@@ -304,9 +332,9 @@ mod tests {
     /// `just brand-check`: the committed golden equals a fresh Nickel export,
     /// canonicalised. Ignored by default because it needs that export on disk.
     #[test]
-    #[ignore = "needs the Nickel export at /tmp/brand_tokens_raw.json (just brand-check)"]
+    #[ignore = "needs the Nickel export named by IDAPTIK_BRAND_EXPORT (just brand-check)"]
     fn tokens_json_matches_nickel_export() {
-        let raw = std::fs::read_to_string(NICKEL_EXPORT).expect("nickel export");
+        let raw = nickel_export();
         let v: serde_json::Value = serde_json::from_str(&raw).expect("parse nickel json");
         let want = canonical::to_jcs(&v).expect("subset") + "\n";
         assert_eq!(
@@ -319,7 +347,7 @@ mod tests {
     #[test]
     #[ignore = "regenerates the committed golden; run via just brand-regen"]
     fn regenerate_tokens_json() {
-        let raw = std::fs::read_to_string(NICKEL_EXPORT).expect("nickel export");
+        let raw = nickel_export();
         let v: serde_json::Value = serde_json::from_str(&raw).expect("parse nickel json");
         // Round-trip through the typed model first, so a field the model does
         // not know fails here rather than landing in the golden.
