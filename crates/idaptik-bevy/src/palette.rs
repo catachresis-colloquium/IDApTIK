@@ -65,6 +65,15 @@ pub const DOOR_UNLOCKED: Color = hex(tok::DOOR_UNLOCKED);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use idaptik_brand::srgb::{self, BODY, LARGE};
+
+    /// A colour as the 8-bit sRGB bytes it renders to, `0xRRGGBB`.
+    fn bytes(c: Color) -> u32 {
+        let s = c.to_srgba();
+        (u32::from((s.red * 255.0).round() as u8) << 16)
+            | (u32::from((s.green * 255.0).round() as u8) << 8)
+            | u32::from((s.blue * 255.0).round() as u8)
+    }
 
     #[test]
     fn hex_round_trips_through_bevy_srgb_bytes() {
@@ -72,11 +81,97 @@ mod tests {
         // gives the exact bytes the token names, for every token, not just
         // the ones this file names.
         for &(name, _, _, rgb) in tok::ALL {
-            let s = hex(rgb).to_srgba();
-            let back = (u32::from((s.red * 255.0).round() as u8) << 16)
-                | (u32::from((s.green * 255.0).round() as u8) << 8)
-                | u32::from((s.blue * 255.0).round() as u8);
-            assert_eq!(back, rgb, "{name}");
+            assert_eq!(bytes(hex(rgb)), rgb, "{name}");
+        }
+    }
+
+    #[test]
+    fn deck_glass_text_has_the_verdicts_the_book_records() {
+        // The hacker's screens draw on `screen::DECK_GLASS`, an off-palette
+        // literal (inventory.md), so these pairs are pinned here, where that
+        // constant is readable, rather than in idaptik-brand's legibility test.
+        let glass = bytes(crate::screen::DECK_GLASS);
+        assert_eq!(
+            glass, 0x07110d,
+            "DECK_GLASS moved; re-check every row below"
+        );
+
+        // The room names are phosphor at 55 % alpha over the glass. The blend
+        // space decides the result (4.72:1 in sRGB bytes, 7.89:1 in linear);
+        // pin the worse one, the sRGB-space blend, so the verdict holds either way.
+        let dim = {
+            let (p, g) = (bytes(PHOSPHOR), glass);
+            let ch = |shift: u32| {
+                let (a, b) = (
+                    f64::from((p >> shift) & 0xff),
+                    f64::from((g >> shift) & 0xff),
+                );
+                ((0.55 * a + 0.45 * b).round() as u32) << shift
+            };
+            ch(16) | ch(8) | ch(0)
+        };
+
+        // (what, foreground, background, meets 4.5:1, meets 3:1)
+        let rows: [(&str, u32, u32, bool, bool); 7] = [
+            (
+                "phosphor device labels, screen.rs",
+                bytes(PHOSPHOR),
+                glass,
+                true,
+                true,
+            ),
+            (
+                "signal INF estimate, screen.rs",
+                bytes(SIGNAL),
+                glass,
+                true,
+                true,
+            ),
+            (
+                "dimmed phosphor room names, screen.rs",
+                dim,
+                glass,
+                true,
+                true,
+            ),
+            // FLAGGED, live: LOCKED / NO POWER labels and the GUARD estimate
+            // (4.27:1). Open decision in inventory.md; not changed (rule 3).
+            (
+                "alarm LOCKED / NO POWER / GUARD text, screen.rs",
+                bytes(ALARM),
+                glass,
+                false,
+                true,
+            ),
+            (
+                "glass-coloured verb on the phosphor card, deck.rs",
+                glass,
+                bytes(PHOSPHOR),
+                true,
+                true,
+            ),
+            (
+                "dust as text on the glass (recorded)",
+                bytes(DUST),
+                glass,
+                true,
+                true,
+            ),
+            (
+                "bone as text on the glass (recorded)",
+                bytes(BONE),
+                glass,
+                true,
+                true,
+            ),
+        ];
+        for (what, fg, bg, body, glyph) in rows {
+            let r = srgb::ratio(fg, bg);
+            assert_eq!(srgb::meets(fg, bg, BODY), body, "{what}: {r:.2}:1 at 4.5:1");
+            assert_eq!(srgb::meets(fg, bg, LARGE), glyph, "{what}: {r:.2}:1 at 3:1");
+            for t in [4.5, 3.0] {
+                assert!((r - t).abs() > 1e-3, "{what}: {r} sits on {t}");
+            }
         }
     }
 

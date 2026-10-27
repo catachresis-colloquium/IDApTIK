@@ -5,6 +5,8 @@
 #   just evil-weevil-check    -> ADR-0017 deterministic adversarial corpus (offline, no sockets)
 #   just config-scenario-check -> Nickel export round-trips through the Rust
 #                                 validator AND every bad_*.ncl fixture is rejected
+#   just brand-check          -> brand tokens: Nickel export vs committed
+#                                 tokens.json/generated.rs, bad fixtures rejected
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
 #   session loopback          -> relay tests + two-seat determinism/resync
 #   fixture suites            -> offline shell, toolchain, coordination, and migration fixtures
@@ -755,3 +757,9 @@ jobs:
           cargo install nickel-lang-cli --version 1.16.0 --locked
       - name: just config-scenario-check
         run: just config-scenario-check
+      # The brand gate needs this job's nickel: it re-exports
+      # config/brand-tokens.ncl and fails if the committed tokens.json or
+      # generated.rs drifted from it, and requires every bad brand fixture to be
+      # rejected. `cargo test` alone (in test-ghost) cannot see that drift.
+      - name: just brand-check
+        run: just brand-check

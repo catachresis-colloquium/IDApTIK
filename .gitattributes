@@ -105,13 +105,6 @@ bun.lockb         binary -diff linguist-generated=true
 pnpm-lock.yaml    text eol=lf -diff linguist-generated=true
 package-lock.json text eol=lf -diff linguist-generated=true
 
-# --- Generated brand artefacts (just brand-regen) ---------------------------
-# Both are rendered from config/brand-tokens.ncl and checked against it by
-# `just brand-check`; a hand edit is overwritten by the next regeneration.
-# They stay diffable (no -diff): a reviewer must see which token moved.
-crates/idaptik-brand/tokens.json       text eol=lf linguist-generated=true
-crates/idaptik-brand/src/generated.rs  text eol=lf linguist-generated=true
-
 # --- Legacy / retired toolchains (byte hygiene only) -----------------------
 # ReScript is retired (LANGUAGE-POLICY 1.2); Nix was retired 2026-06-01. These
 # lines keep surviving files normalised and keep retired tech out of the
@@ -131,6 +124,13 @@ flake.lock text eol=lf -diff linguist-generated=true
 # The justfile in this repository is lowercase, so canon's `Justfile` rule does
 # not match it on a case-sensitive filesystem.
 justfile text eol=lf
+
+# --- Generated brand artefacts (just brand-regen) ---------------------------
+# Both are rendered from config/brand-tokens.ncl and checked against it by
+# `just brand-check`; a hand edit is overwritten by the next regeneration.
+# They stay diffable (no -diff): a reviewer must see which token moved.
+crates/idaptik-brand/tokens.json       text eol=lf linguist-generated=true
+crates/idaptik-brand/src/generated.rs  text eol=lf linguist-generated=true
 
 # ── WHY THE RETIRED `server/mix.lock` LINE IS GONE ──────────────────────────
 # This file carried `server/mix.lock text eol=lf -diff` until 2026-09-27. Issue

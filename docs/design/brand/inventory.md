@@ -57,13 +57,44 @@ None of the following was changed on this branch.
 
 | Finding | Where | Suggested closing move |
 |---|---|---|
-| **Alarm red fails 4.5:1 as text on night** (4.35:1). It passes 3:1, so it is fine as a glyph, LED or wash, and the HUD never draws it as text today. | `legibility.rs` pins the verdict | Keep it off body copy, or adopt a lighter text-red token if one is ever needed. |
+| **Alarm red is live text and fails 4.5:1.** `screen.rs` draws the `LOCKED` / `NO POWER` device labels and the `GUARD` estimate in `alarm` at 16 px: 4.35:1 on night, 4.27:1 on the deck glass. (The first version of this book said alarm was never drawn as text; Codex review on #206 caught it.) | `screen.rs`; pinned in `legibility.rs` and `palette.rs` tests | **Open decision**, see below. |
 | **Dust on slab is 3.69:1**: legible as a glyph, not as text. | `legibility.rs` | Never set dust type on a slab surface; use bone. |
-| **Cobalt on night is 3.34:1**: a bar colour, not a text colour. | `legibility.rs` | As above. |
+| **The bandwidth bar does not read.** Its `cobalt` fill sits on the `slate` meter track at 2.58:1, under even the 3:1 glyph bar. (First reported against `pitch`, 3.34:1; CodeRabbit review on #206 pointed at the real track.) | `hud.rs`; pinned in `legibility.rs` | **Open decision**, see below. |
 | **The type ramp collapses in the default face.** VT323 snaps to a 16 px grid, so seven of the eight requested sizes (10–22 px) all draw at 16 px and only 24 px steps up to 32 px. On the 8 px faces the ramp is 8 / 16 / 24. | `fonts::UiFont::snap`, tabulated in the brand book | Either request grid-aligned sizes in the code (so what is typed is what is drawn) or accept a two-step ramp as the brand. |
-| **Off-palette literals.** `sprites.rs` colours devices by kind with a Material-design set (`#2196f3`, `#ff9800`, `#d32f2f`, `#9c27b0`, `#f44336`, `#4caf50`, `#ffeb3b`, `#795548`, `#757575`, `#fff59d`, `#616161`), pure green LEDs and console text (`0,1,0`), and ad-hoc greys; `net_view.rs` and `netplay/ui/role_select.rs` use their own greys, white and tints; `backdrop.rs` has two tint constants; `scene.rs` has three door colours (`DOOR_SHUT`, `DOOR_ROUTING`, `DOOR_OPEN`) beside the two palette ones. | those files | Migrate each to a token (new tokens where a role is real, e.g. a device-kind family), then add a test that `idaptik-bevy` names no `Color::srgb*` literal outside `palette.rs`. Not done here: it changes what the game draws, which is a design decision, not a token extraction. |
+| **Off-palette literals.** `sprites.rs` colours devices by kind with a Material-design set (`#2196f3`, `#ff9800`, `#d32f2f`, `#9c27b0`, `#f44336`, `#4caf50`, `#ffeb3b`, `#795548`, `#757575`, `#fff59d`, `#616161`), pure green LEDs and console text (`0,1,0`), and ad-hoc greys; `net_view.rs` and `netplay/ui/role_select.rs` use their own greys, white and tints; `backdrop.rs` has two tint constants; `scene.rs` has three door colours (`DOOR_SHUT`, `DOOR_ROUTING`, `DOOR_OPEN`) beside the two palette ones; `screen.rs` has `DECK_GLASS` (`#07110d`), the background of every hacker screen. | those files | Migrate each to a token (new tokens where a role is real, e.g. a device-kind family), then add a test that `idaptik-bevy` names no `Color::srgb*` literal outside `palette.rs`. Not done here: it changes what the game draws, which is a design decision, not a token extraction. |
 | **The landing-page outline uses a different palette** (teal/cyan ground `#071014`, `--cyan #58e0da`, `--amber #e5b95d`, Inter and a mono stack). | `docs/design/idaptik-landing-page.html` | Decide whether the web surface follows the game palette (then `tokens.css` closes it) or stays its own; today they do not match. |
 | **The sprites' "38-colour palette" is 36 (sprites) and 30 (backdrops) as measured.** | `assets/sprites/README.md` | Commit the measured palette with a gate (above) and correct the README from the gate's count. |
+
+## Open decisions (yours to make; nothing was changed)
+
+Handoff rule 3 says flag contrast failures rather than silently change the
+brand, so both live failures are pinned as they are. Each option below is a
+real change to what the game draws; pick one and the tests and §5 of the book
+move with it.
+
+**1. Alarm red as screen text** (`LOCKED`, `NO POWER`, `GUARD`).
+
+| Option | Change | Trade-off |
+|---|---|---|
+| A. Label in `bone`, mark in `alarm` | Text turns `bone`; a red square or LED glyph beside it carries the threat (3:1 is enough for a glyph). | Keeps the seat law and passes 4.5:1. Recommended. |
+| B. Add a text-red token | A lighter red lifted to at least 4.5:1 on night and glass. | A new colour: rule 1 forbids inventing one without a source, so it needs your sign-off. |
+| C. Accept and document | Keep alarm text; record the exception. | Fails WCAG for the hacker's most urgent labels. |
+
+**2. The bandwidth bar** (`cobalt` on `slate`, 2.58:1).
+
+| Option | Change | Trade-off |
+|---|---|---|
+| A. Darker track | The meter track becomes `pitch` or `ink2` (cobalt is 3.34:1 on `pitch`). | All five meters change background. One-line change in `hud.rs`. |
+| B. Edge the fill | A 1 px `bone` or `neon` edge on the cobalt fill. | Keeps the track; adds a stroke to the flat-bar style. |
+| C. Different fill | Bandwidth takes `neon` or `bone`. | Loses cobalt's "civic, open" meaning on the HUD. |
+
+## Tokens recorded but not yet read by the game
+
+`size`, `space`, `radius` and `grid` are generated but `hud.rs` and `deck.rs`
+still use literals. Closing this means replacing each `Val::Px(...)` and font
+size with the generated constant, which changes no pixel today and makes
+every later edit to the tokens reach the game. `colour` and `font` are wired
+already.
 
 ## What is deliberately not here
 

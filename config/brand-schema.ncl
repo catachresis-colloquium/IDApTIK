@@ -11,13 +11,22 @@
 #   - a token name is a lowercase identifier, so it can be upper-cased into a
 #     Rust constant by `crates/idaptik-brand` without any renaming rule;
 #   - names are unique within a family, so the generated constants cannot
-#     collide;
+#     collide; `all` and `default` are reserved (the generator emits `ALL` in
+#     every module and `DEFAULT` in the font module), and a font name may not
+#     end in `_file` or `_grid_px` (the generator derives `<NAME>_FILE` and
+#     `<NAME>_GRID_PX` from each font name);
+#   - exactly one font is the default, so `font::DEFAULT` is never a guess;
 #   - pixel values are non-negative integers (the art is on a pixel grid).
 #
 # Records are closed: an unknown field is rejected, which catches typos.
 
+let reserved = ["all", "default"] in
 let is_hex = fun v => std.is_string v && std.string.is_match "^#[0-9a-f]{6}$" v in
-let is_ident = fun v => std.is_string v && std.string.is_match "^[a-z][a-z0-9_]*$" v in
+let is_ident = fun v =>
+  std.is_string v
+  && std.string.is_match "^[a-z][a-z0-9_]*$" v
+  && !(std.array.elem v reserved)
+in
 let is_px = fun v => std.is_number v && std.number.is_integer v && v >= 0 in
 
 # Whether an array of strings contains a duplicate (same helper as
@@ -44,7 +53,7 @@ in
     = std.contract.from_predicate is_hex,
 
   Ident
-    | doc "A token name: lowercase letters, digits and underscores."
+    | doc "A token name: lowercase letters, digits and underscores; not `all` or `default`."
     = std.contract.from_predicate is_ident,
 
   Px
@@ -96,12 +105,24 @@ in
 
   Family = fun Token => std.contract.Sequence [{ tokens | Array Token }, UniqueNames],
 
+  FontFamily
+    | doc "The typefaces: exactly one default, and no name that collides with a derived constant."
+    = std.contract.Sequence [
+      Family FontToken,
+      std.contract.from_predicate (fun family =>
+        std.array.length (std.array.filter (fun t => t.default) family.tokens) == 1
+      ),
+      std.contract.from_predicate (fun family =>
+        std.array.all (fun t => !(std.string.is_match "_(file|grid_px)$" t.name)) family.tokens
+      ),
+    ],
+
   Brand
     | doc "The whole token set, one family per kind."
     = {
       schema_version | String,
       colour | Family ColourToken,
-      font | Family FontToken,
+      font | FontFamily,
       size | Family PxToken,
       space | Family PxToken,
       radius | Family PxToken,

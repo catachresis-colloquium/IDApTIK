@@ -325,41 +325,55 @@ config-regen:
 
 # --- Brand tokens (docs/design/brand/README.md) --------------------------------
 #
-# config/brand-tokens.ncl is the source of truth for every colour, typeface,
-# type size and spacing value the frontend draws with. It is exported to
+# config/brand-tokens.ncl records every colour, typeface, type size and
+# spacing value the frontend draws with. It is exported to
 # crates/idaptik-brand/tokens.json (I-JSON, JCS bytes) and rendered into
 # crates/idaptik-brand/src/generated.rs; both are committed and both are
-# GENERATED -- never edit them by hand.
+# GENERATED -- never edit them by hand. The colour and font tokens drive the
+# game (idaptik-bevy's palette.rs and fonts.rs read the generated constants);
+# the size, space, radius and grid tokens are a recorded inventory the HUD
+# does not read yet (see docs/design/brand/inventory.md).
 
-# The brand gate: the Nickel typechecks, every bad fixture is rejected, the
-# committed JSON equals a fresh canonicalised export, generated.rs equals a
-# fresh rendering of that JSON, and every text pair the HUD draws has the WCAG
-# verdict the brand book records. A missing nickel is a failure, not a skip.
+# Where the Nickel export lands: inside this checkout's target/, never a path
+# shared with other users or checkouts. The ignored idaptik-brand tests read it
+# from IDAPTIK_BRAND_EXPORT and fail if it is unset.
+brand_export := justfile_directory() / "target" / "brand" / "brand_tokens_raw.json"
+
+# The brand gate: the Nickel typechecks, the good fixture is accepted and every
+# bad fixture is rejected, the committed JSON equals a fresh canonicalised
+# export, generated.rs equals a fresh rendering of that JSON, and every pair the
+# frontend draws has the WCAG verdict the brand book records. A missing nickel
+# is a failure, not a skip. CI runs this in the config-scenario-check job.
 brand-check:
     @command -v nickel >/dev/null 2>&1 || { echo "nickel is not installed: run 'just setup'" >&2; exit 1; }
-    nickel export config/brand-tokens.ncl --format json > /tmp/brand_tokens_raw.json
+    mkdir -p "$(dirname '{{brand_export}}')"
+    nickel export config/brand-tokens.ncl --format json > '{{brand_export}}'
+    nickel export config/brand-fixtures/good_minimal.ncl >/dev/null
     @for f in config/brand-fixtures/bad_*.ncl; do \
         if nickel export "$f" >/dev/null 2>&1; then \
             echo "FAIL: $f exported but brand-schema.ncl should reject it"; exit 1; \
         fi; \
         echo "rejected as expected: $f"; \
     done
-    cargo test -q -p idaptik-brand tokens_json_matches_nickel_export -- --ignored
+    IDAPTIK_BRAND_EXPORT='{{brand_export}}' cargo test -q -p idaptik-brand tokens_json_matches_nickel_export -- --ignored
     cargo test -q -p idaptik-brand
     @echo "brand: ok (tokens.json and generated.rs match config/brand-tokens.ncl)"
 
 # Re-export the brand tokens and rewrite both committed artefacts. Run after
 # editing config/brand-tokens.ncl, then `just brand-check`.
 brand-regen:
-    nickel export config/brand-tokens.ncl --format json > /tmp/brand_tokens_raw.json
-    cargo test -q -p idaptik-brand regenerate_tokens_json -- --ignored
+    mkdir -p "$(dirname '{{brand_export}}')"
+    nickel export config/brand-tokens.ncl --format json > '{{brand_export}}'
+    IDAPTIK_BRAND_EXPORT='{{brand_export}}' cargo test -q -p idaptik-brand regenerate_tokens_json -- --ignored
     cargo test -q -p idaptik-brand regenerate_generated_rs -- --ignored
     @echo "brand: tokens.json and generated.rs regenerated"
 
 # Render the brand sheet (every colour token and the type ramp in each bundled
 # face) in a window; `--screenshot PATH` saves a PNG after the first frames.
+# Arguments are forwarded one for one, so a path with spaces stays one argument.
+[positional-arguments]
 brand-sheet *ARGS:
-    cargo run -p idaptik-bevy --example brand_sheet -- {{ARGS}}
+    cargo run -p idaptik-bevy --example brand_sheet -- "$@"
 
 # --- Evil Weevil guard brain (vertical slice) --------------------------------
 #
