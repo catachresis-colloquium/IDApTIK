@@ -40,7 +40,7 @@ libm = "0.2"
 # Durable session storage (crates/idaptik-persist). Pure Rust, single file,
 # MIT/Apache-2.0 — both licences already allowed in deny.toml, so this adds no
 # supply-chain exception.
-redb = "2.6"
+redb = "4.4"
 ratatui = "0.30"
 crossterm = "0.29"
 clap = { version = "4", features = ["derive"] }
