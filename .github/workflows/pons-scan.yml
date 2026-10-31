@@ -31,7 +31,9 @@ jobs:
     steps:
       - name: Check out exact project source without credentials
         env:
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # PRs scan GitHub's integration commit; dispatch scans its selected ref.
+          # Never check out a PR-head expression in a dispatch-capable workflow.
+          SOURCE_SHA: ${{ github.sha }}
           SOURCE_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail

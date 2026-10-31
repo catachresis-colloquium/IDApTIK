@@ -59,3 +59,32 @@ Once provisioned, build and test pons with the upstream lockfile, execute the
 complete-inventory scans, and reproduce the kernel proof controls before any
 migration. Until then, keep the executable-scan and local-reproduction gates
 blocked in the ultraplan.
+
+## First remote execution (PR #212)
+
+The user authorised GitHub Actions execution. The first implementation commit,
+`11a1363`, produced these successful runs:
+
+- Pons build, upstream workspace tests, scanner controls, complete inventory scan
+  and report retention: https://github.com/catachresis-colloquium/IDApTIK/actions/runs/41238472293
+  Job duration: 2m41s; retained artifact: `pons-rust-evidence`, 56,088 bytes.
+- Creusot ledger and proof jobs:
+  https://github.com/catachresis-colloquium/IDApTIK/actions/runs/41238472179
+  Proof-job duration: 2m2s.
+
+These are fresh remote execution verdicts reported by GitHub, not local runs.
+Artifact download was attempted but blocked at GitHub's Azure blob storage
+redirect. No detailed finding count or prover-obligation count has yet been
+independently extracted in this sandbox. The full JSON/SARIF evidence is available
+from the Pons run's artifact and readable summary in GitHub.
+
+CodeQL flagged the initial workflow's PR-head checkout expression in combination
+with manual dispatch. The follow-up changes the checkout to `github.sha`: the
+integration commit for pull requests, selected ref for manual dispatch. Rerun
+results must be checked for that follow-up; the initial green runs do not certify
+later source changes. No cache is configured in the Pons job.
+
+Cost boundary: the repository is public and uses standard hosted Ubuntu runners,
+without larger runners or a matrix. GitHub billing API access returned 403, so no
+account-specific budget or balance is asserted. Pons has a 25-minute job timeout
+and seven-day artifact retention. Existing project PR workflows also run.
