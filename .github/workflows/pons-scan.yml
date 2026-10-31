@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Initial evidence run: standard public-repository Linux runner, no matrix.
+# YAML follows the transitional workflow format policy in standards-conformance.md.
+name: Pons Rust Inventory
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'scripts/pons_scan.sh'
+      - '.github/workflows/pons-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pons-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PONS_REF: 84f58f910de7020b79450f2c2643599fe7760f73
+  RUSTUP_TOOLCHAIN: 1.97.1
+  CARGO_TERM_COLOR: never
+
+jobs:
+  scan:
+    name: Pons first-party Rust evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact project source without credentials
+        env:
+          # PRs scan GitHub's integration commit; dispatch scans its selected ref.
+          # Never check out a PR-head expression in a dispatch-capable workflow.
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git init -q .
+          git remote add origin "https://github.com/${SOURCE_REPOSITORY}.git"
+          git fetch --no-tags --depth 1 origin "$SOURCE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Provision pinned Rust and scanner source
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          tool="$RUNNER_TEMP/pons-source"
+          git init -q "$tool"
+          git -C "$tool" remote add origin https://github.com/hyperpolymath/pons-asinorum.git
+          git -C "$tool" fetch --no-tags --depth 1 origin "$PONS_REF"
+          git -C "$tool" checkout --detach FETCH_HEAD
+          test "$(git -C "$tool" rev-parse HEAD)" = "$PONS_REF"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/pons-target" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/pons-target/release" >> "$GITHUB_PATH"
+
+      - name: Test and build pinned scanner with its lockfile
+        working-directory: ${{ runner.temp }}/pons-source
+        run: |
+          set -euo pipefail
+          cargo test --workspace --locked
+          cargo build --release --locked -p pons-cli
+
+      - name: Record provenance and scan complete Rust inventory
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pons-evidence"
+          mkdir -p "$out"
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            rustc --version --verbose
+            cargo --version
+            pons --version
+            sha256sum "$(command -v pons)"
+            printf 'PONS_REF=%s\n' "$PONS_REF"
+          } > "$out/provenance.txt"
+          pons catalogue > "$out/catalogue.txt"
+          ./scripts/pons_scan.sh "$out"
+
+      - name: Publish readable evidence summary
+        if: always()
+        run: |
+          {
+            echo '## Pons Rust inventory'
+            echo 'Heuristic evidence, not a correctness proof. Findings require review.'
+            echo '```text'
+            if test -f "$RUNNER_TEMP/pons-evidence/summary.txt"; then
+              cat "$RUNNER_TEMP/pons-evidence/summary.txt"
+            else
+              echo 'Scan did not complete. Inspect failed steps; no clean result is claimed.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain reports, inventory, controls and source hashes
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pons-rust-evidence
+          path: |
+            ${{ runner.temp }}/pons-evidence/*.json
+            ${{ runner.temp }}/pons-evidence/*.sarif
+            ${{ runner.temp }}/pons-evidence/*.txt
+            ${{ runner.temp }}/pons-evidence/*.tsv
+          retention-days: 7
+          if-no-files-found: warn
