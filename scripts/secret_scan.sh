@@ -267,11 +267,21 @@ if [ "$n_todo" -gt 0 ]; then
         die "scanner failed with rc=$scanner_rc -- not a clean result"
         ;;
     esac
-    [ -f "$report" ] || die "scanner produced no report at $report"
-    findings="$(jq 'length' "$report" 2>/dev/null)" || die "cannot parse $report"
-    case "$findings" in
-    '' | *[!0-9]*) die "report is not a JSON array of findings" ;;
-    esac
+    # gitleaks 8.18.4 writes the report ONLY when it has something to write --
+    # an empty history produces no file at all. A missing report after a clean
+    # exit is therefore zero findings, not a broken gate; a missing report after
+    # exit 1 is unattributable, and is treated as such.
+    if [ ! -f "$report" ]; then
+        if [ "$scanner_rc" = 1 ]; then
+            die "scanner reported findings but wrote no report at $report"
+        fi
+        findings=0
+    else
+        findings="$(jq 'length' "$report" 2>/dev/null)" || die "cannot parse $report"
+        case "$findings" in
+        '' | *[!0-9]*) die "report is not a JSON array of findings" ;;
+        esac
+    fi
 fi
 
 # Paths with a finding are NOT recorded as clean, so they re-report on every run
