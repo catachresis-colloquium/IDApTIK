@@ -161,3 +161,51 @@ fn the_corpus_keeps_the_source_specific_observation_checks() {
         assert!(check.passed, "{}: {}", check.name, check.detail);
     }
 }
+
+#[test]
+fn the_scene_evidence_records_one_source_and_one_same_tick_announcement() {
+    let result = InfraOrdersScenario.run();
+    let detail = |name: &str| {
+        let check = result
+            .checks
+            .iter()
+            .find(|check| check.name == name)
+            .unwrap_or_else(|| panic!("EW-06 dropped check {name}"));
+        assert!(check.passed, "{}: {}", check.name, check.detail);
+        check.detail.as_str()
+    };
+
+    // The event carries only kind and room. The recorded count is necessary
+    // to distinguish the diversion from an unrelated same-room sound.
+    assert!(
+        detail("diversion-announcement-source-unambiguous")
+            .starts_with("1 audible UnusualNoise observations in the diversion's room")
+    );
+    assert!(
+        detail("guard-observed-the-diversion")
+            .starts_with("1 matching GuardObserved(UnusualNoise) events on command tick 81")
+    );
+    assert!(
+        detail("only-the-scene-diversion-announced")
+            .starts_with("1 UnusualNoise announcements through the scene synth")
+    );
+
+    // The recorded source must be the same one in the hearing and
+    // perception evidence, rather than a different noise with the same tag.
+    let hearing = detail("diversion-source-within-billys-hearing");
+    let perception = detail("perception-contract-lists-the-noise");
+    let field = |text: &str, prefix: &str| -> String {
+        text.split_once(prefix)
+            .unwrap_or_else(|| panic!("missing {prefix} in {text}"))
+            .1
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(
+        field(hearing, "diversion.x="),
+        field(perception, "source x=")
+    );
+    assert_eq!(field(hearing, "intensity="), field(perception, "intensity="));
+}
