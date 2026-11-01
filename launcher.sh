@@ -262,9 +262,13 @@ start_game() {
         hacker) peer_role="infiltrator" ;;
         *) die "invalid host readiness record: $ready_role" ;;
       esac
-      printf '\n\033[1;32m● READY FOR JOINERS\033[0m\n'
-      say "joiner address: $ready_host:$ready_port"
-      say "give the other player: ./launcher.sh --join $ready_host:$ready_port --role $peer_role"
+      if [ "$ready_host" != "127.0.0.1" ]; then
+        die "test-mode relay must not advertise a network-reachable join address"
+      fi
+      printf '\n\033[1;32m● READY FOR LOCAL JOINER ONLY\033[0m\n'
+      say "local joiner address: $ready_host:$ready_port"
+      say "on this computer only: ./launcher.sh --join $ready_host:$ready_port --role $peer_role"
+      say "remote play requires a separately secured host profile; do not forward this port"
       ;;
     join) printf '\n\033[1;32m● READY — JOINING HOST NOW\033[0m\n' ;;
     solo) printf '\n\033[1;32m● READY — OPENING SOLO GUI\033[0m\n' ;;

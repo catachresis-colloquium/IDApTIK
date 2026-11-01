@@ -140,16 +140,15 @@ relay_up() { curl -fsS "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; }
 
 start_relay() {
   if relay_up; then
-    say "relay already answering on :$PORT — reusing it."
-    progress PASS "Relay is already answering on port $PORT"
-    return 0
+    die "port $PORT is already answering; refusing to reuse an unverified relay (stop it explicitly)"
   fi
   mkdir -p "$LOG_DIR"
   say "starting the relay on :$PORT (log: $LOG_FILE)…"
   progress STEP "Starting the Phoenix/Bandit relay on port $PORT"
-  # Burble's test environment is its offline-capable local profile. Set the
-  # launcher-selected bind/port before delegating to Phoenix's normal server
-  # task, preserving Burble's application startup order.
+  # This is Burble's test-only, fixed-secret profile. Bind LOOPBACK only:
+  # its guest/role join is not secure remote-session admission. Never re-expose
+  # it on LAN, tailnet or a public interface. Secure remote hosting needs a
+  # separate authorised service contract, not an environment-variable opt-out.
   burble_mix deps.get >/dev/null
   burble_mix compile >/dev/null
   # Backgrounded as an *exec chain* so $! is the relay process itself. A
@@ -159,7 +158,7 @@ start_relay() {
   ( exec "$MISE_BIN" exec -C "$REPO_DIR" -- bash -c \
       'cd "$1" && shift && exec "$@"' _ "$BURBLE_DIR/server" \
       env MIX_ENV=test PHX_SERVER=true IDAPTIK_PORT="$PORT" mix run --no-start -e \
-      'port = System.fetch_env!("IDAPTIK_PORT") |> String.to_integer(); endpoint = Application.get_env(:burble, BurbleWeb.Endpoint, []); Application.put_env(:burble, BurbleWeb.Endpoint, Keyword.merge(endpoint, server: true, http: [ip: {0, 0, 0, 0}, port: port]), persistent: true); Mix.Tasks.Phx.Server.run([])' ) \
+      'port = System.fetch_env!("IDAPTIK_PORT") |> String.to_integer(); endpoint = Application.get_env(:burble, BurbleWeb.Endpoint, []); Application.put_env(:burble, BurbleWeb.Endpoint, Keyword.merge(endpoint, server: true, http: [ip: {127, 0, 0, 1}, port: port]), persistent: true); Mix.Tasks.Phx.Server.run([])' ) \
     >>"$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
   # Seconds to wait for the relay to answer before diagnosing (default 60).
@@ -191,51 +190,15 @@ stop_relay() {
 }
 
 share_addresses() {
+  # Legacy test relay: local two-client development only. No public/tailnet
+  # invitation and no router/portproxy instructions until authenticated host
+  # admission and exclusive seat ownership are implemented and tested.
+  HOST_SHARE_ADDRESS="127.0.0.1"
   say ""
-  say "── tell the other player ──────────────────────────────────"
-  local shared=0
-  HOST_SHARE_ADDRESS=""
-
-  if command -v tailscale >/dev/null 2>&1; then
-    local ts
-    ts="$(tailscale ip -4 2>/dev/null | head -1 || true)"
-    if [ -n "$ts" ]; then
-      say "  tailnet address for ./launcher.sh: $ts"
-      HOST_SHARE_ADDRESS="$ts"
-      shared=1
-    fi
-  fi
-
-  local lan
-  lan="$(ip -4 route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1 || true)"
-
-  if [ -n "$lan" ] && wsl_natted "$lan"; then
-    # WSL2's default (NAT) networking puts this machine behind an adapter only
-    # Windows can see through, so the address is unreachable from anywhere else
-    # — and forwarding the router port cannot help, because the router cannot
-    # see past Windows either. WSL2 *mirrored* networking shares the host's real
-    # LAN address and is fine, which is why this keys on the address, not on
-    # merely running under WSL.
-    say "  WARNING: WSL2 NAT detected. $lan is a virtual adapter behind Windows"
-    say "  and is NOT reachable from another machine, even on the same network."
-    if [ "$shared" -eq 0 ]; then
-      say "    Fix (once, both machines): install Tailscale, then re-run host —"
-      say "      curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up"
-      say "    Alternative: forward TCP $PORT on the router AND add a Windows"
-      say "    portproxy to $lan (netsh interface portproxy)."
-    fi
-  elif [ -n "$lan" ]; then
-    say "  LAN address for ./launcher.sh: $lan"
-    HOST_SHARE_ADDRESS="$lan"
-    shared=1
-  fi
-
-  # Always leave a route out: a host with no detectable address still needs to
-  # know the fallback, and so does one whose LAN address works locally but not
-  # from outside.
-  if [ "$shared" -eq 0 ] || [ -n "$lan" ]; then
-    say "  (internet without a tunnel: forward TCP $PORT, share your public IP)"
-  fi
+  say "── local multiplayer only ─────────────────────────────────"
+  say "  This test-profile Burble relay is bound to 127.0.0.1."
+  say "  A second client may join from THIS computer only."
+  say "  Remote LAN, Tailscale and public hosting are not supported by this profile."
   say "───────────────────────────────────────────────────────────"
   say ""
 }
@@ -344,7 +307,7 @@ mode_host() {
   start_relay
   share_addresses
   [ -n "${HOST_SHARE_ADDRESS:-}" ] || die "no peer-reachable host address is available"
-  progress PASS "Peer route is ready at $HOST_SHARE_ADDRESS:$PORT"
+  progress PASS "Local-only test relay is ready at $HOST_SHARE_ADDRESS:$PORT"
   say "waiting in the lobby for the other seat… (relay keeps running after you quit;"
   say "'./launcher.sh --stop' ends it)"
   progress PASS "Host seat is launching for session $session as $role"
