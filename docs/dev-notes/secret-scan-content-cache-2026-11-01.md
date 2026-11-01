@@ -94,6 +94,28 @@ of files.
 The cold number is also the *whole history of this repository*, which is a
 one-time cost per cache epoch, not a per-push one.
 
+First real run in CI, which is the only place the real binary exists
+(`d279555`, cold cache, 1773 blobs -- the runner's full history is bigger than
+this sandbox's clone):
+
+| step | wall |
+|------|------|
+| control, 12 cases against real gitleaks | 1 s |
+| scan of 1773 blobs | 14 s |
+
+and it found exactly one secret: `aws-access-token` in
+`tests/secret_scan_self_test.sh:107` -- the control's own planted test vector,
+committed as a literal. The gate was working correctly on its own fixture.
+
+That is fixed in two moves, and the distinction matters:
+
+- the control now **assembles** the value at run time from two halves, so the
+  literal never enters the source again;
+- the one historical occurrence is allowlisted by **exact value**
+  (`^AKIAZ7Q2XK9MPL4RTUVW$`), not by pattern. It cannot blind the scanner to
+  anything else, and the control now plants a different value precisely because
+  a control that plants an allowlisted string proves nothing.
+
 ## The control suite
 
 `tests/secret_scan_self_test.sh` (12 cases, offline, ~2 s) is what makes the
@@ -136,11 +158,13 @@ step *inside* the secret workflow before the real scan.
   cannot be done here, and an unmeasured rule that fires on this repository's
   own fixtures would turn the required gate red. Left as a follow-up with that
   requirement stated.
-- **`.gitleaks.toml` was not touched.** Its allowlist entries are measured
-  against a real binary (the file says so); removing or adding one without that
-  measurement is exactly the change its own design rule forbids. One comment
-  inside it described the reusable's staging step, which no longer exists, and
-  has been corrected; the entry it justifies is now inert and retained.
+- **`.gitleaks.toml` allowlists are otherwise untouched.** Every pre-existing
+  entry was measured against a real binary (the file says so) and none was
+  changed. Two edits were made and both are documented in place: one comment
+  that described the reusable's staging step (which no longer exists) now says
+  so, and one entry was **added** for the single historical test vector above,
+  anchored to the whole value. Adding it *was* measured -- the CI run is the
+  measurement: the same tree went from one finding to none.
 - **The real scanner has not been executed here.** Release downloads are blocked
   in this environment (the same reason the site's `yq` had to be shimmed). The
   engine is exercised against a binary that speaks the same CLI and report

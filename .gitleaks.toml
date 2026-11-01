@@ -89,6 +89,20 @@ regexes = [
   # and will not match this.
   '''^[a-z]{2,6}_(test|demo|fake|sample|example|dummy|placeholder)_[a-z0-9_]{2,40}$''',
 
+  # TEST VECTOR, NOT A CREDENTIAL -- added 2026-11-01.
+  #
+  # The secret-scan control (tests/secret_scan_self_test.sh) plants a fake
+  # `aws-access-token` to prove the gate can fail. Commit 79b1180 wrote that
+  # value into the script as one literal, so the value entered this
+  # repository's history and the history-complete scan reported it -- the gate
+  # working exactly as designed, on its own fixture.
+  #
+  # This entry is the NARROWEST possible: it matches the one 20-character
+  # string and nothing else. It cannot blind the scanner to any credential, it
+  # is not a pattern class, and it does not weaken the `aws-access-token` rule.
+  # The script now assembles the value at run time so it cannot recur.
+  '''^AKIAZ7Q2XK9MPL4RTUVW$''',
+
   # --- public-by-definition / non-secret identifiers ------------------------
   # OpenPGP 40-hex fingerprints. A fingerprint *identifies* a key; it is
   # published deliberately and discloses nothing. Secret key *material* is

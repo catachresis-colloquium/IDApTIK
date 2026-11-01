@@ -103,8 +103,21 @@ else
 fi
 
 # 3. A planted secret is caught -- the gate can fail.
+#
+# The value is ASSEMBLED here, never written as one literal. This script is
+# itself committed, so a literal would put a gitleaks-matching string into the
+# repository's history and the gate would then -- correctly -- fail on its own
+# control. It did exactly that on the first real run: the scan reported
+# `aws-access-token` in this file. The historical occurrence is allowlisted by
+# exact value in .gitleaks.toml; nothing is allowlisted as a pattern.
 secret_file="$repo/credentials.md"
-printf 'aws_key = "AKIAZ7Q2XK9MPL4RTUVW"\n' >"$secret_file"
+# The suffix must NOT be the value allowlisted in .gitleaks.toml (that one is a
+# historical test vector from commit 79b1180, kept so the history scan is quiet).
+# A control that plants an allowlisted value proves nothing: the gate would be
+# silent whether or not it works.
+planted_prefix="AKIA"
+planted_suffix="QW4XK9MPL7RTUVZ2"
+printf 'aws_key = "%s%s"\n' "$planted_prefix" "$planted_suffix" >"$secret_file"
 git -C "$repo" add -A
 git -C "$repo" commit -q -m "planted"
 rc="$(run)"
