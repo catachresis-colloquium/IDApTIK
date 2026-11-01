@@ -240,14 +240,18 @@ jobs:
 
       # A translation error is currently unreadable from a pull request: the
       # step fails, the run carries a bare "Process completed with exit code 1",
-      # and the job log lives on storage the reviewer cannot open. The Pons and
-      # arena-feedback workflows already publish their evidence this way, so a
-      # red proof reads like a red proof instead of a shrug. Runs on success
-      # too, because "no output" is itself the thing a maintainer needs to see
-      # when a prover dies silently.
+      # and the job log lives on storage a reviewer cannot open. A gate that
+      # reports red without a reason is nearly as expensive as no gate.
+      #
+      # Two channels, both already used elsewhere in this repository: the step
+      # summary for the run UI, and ::error:: annotations -- which the checks
+      # API returns to anything that can read a pull request -- for the lines
+      # that explain the verdict. Annotations are capped, so the error lines
+      # come first and the tail is the fallback.
       - name: Publish the prover's own output for every outcome
         if: always()
         run: |
+          set -uo pipefail
           {
             echo '## Creusot'
             for log in coma.log prove.log mutant-coma.log mutant.log restored.log; do
@@ -258,16 +262,26 @@ jobs:
                 echo '```'
               fi
             done
-            if ! test -f coma.log; then
-              echo 'The kernel never reached a translator run. Inspect the preceding steps.'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            test -f coma.log || echo 'The kernel never reached a translator run.'
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
-      # Criterion (c) asks for the evidence to be retained as a build artefact.
-      # `verif/` is committed as well -- that is the durable half, reviewable in
-      # the pull request instead of expiring with the run -- but the RUN's own
-      # output is not in git, and the denominator lives there. Both halves, and
-      # `if: always()` so a red proof uploads the log that explains it.
+          announce() {
+            log="$1"
+            test -f "$log" || return 0
+            picked="$(grep -E '(^| )error(\[|:)' "$log" | head -n 6)"
+            if test -z "$picked"; then
+              picked="$(tail -n 6 "$log")"
+            fi
+            while IFS= read -r line; do
+              test -n "$line" || continue
+              echo "::error::${log}: ${line:0:900}"
+            done <<< "$picked"
+          }
+          announce coma.log
+          announce mutant-coma.log
+          test -f coma.log || echo '::error::the kernel never reached a translator run'
+          exit 0
+
       - name: Retain the proof evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
