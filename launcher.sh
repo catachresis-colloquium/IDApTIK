@@ -143,6 +143,13 @@ report_renderer() { # $1 = pid
   while [ "$waited" -lt "$limit" ]; do
     if line="$(renderer_line)"; then
       print_renderer "$line"
+      if [ "${IDAPTIK_CLIENT_PLATFORM:-linux}" != "windows" ]; then
+        sleep 1
+        kill -0 "$pid" 2>/dev/null || return 1
+        case "$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')" in
+          ''|Z*) return 1 ;;
+        esac
+      fi
       return 0
     fi
     kill -0 "$pid" 2>/dev/null || return 1
