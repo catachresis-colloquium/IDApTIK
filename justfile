@@ -155,10 +155,20 @@ toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 
 # Run every offline shell fixture suite (Rust and Elixir gates remain separate).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test pons-scan-test pons-summary-test
 
 must-check-test:
     bash tests/must_check_test.sh
+
+# Offline fixtures for scripts/pons_scan.sh: staged-inventory selection and the
+# deterministic scanner double. Added by PR #212 at mode 100644 and invoked by
+# nothing, which is what tests/ci_security_config_test.sh flags.
+pons-scan-test:
+    bash tests/pons_scan_test.sh
+
+# Offline fixtures for the Pons workflow's evidence-summary step.
+pons-summary-test:
+    bash tests/pons_summary_test.sh
 
 # Validate DEED, K9 components, Nickel runners, and coordination against pinned standards.
 machine-readable-check:
