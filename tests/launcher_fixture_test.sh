@@ -178,24 +178,48 @@ EOF
 
 cat > "$STUBS/cargo" <<'EOF'
 #!/usr/bin/env bash
-# stub cargo: reports a version; "build" materializes the stub seat binary.
+# stub cargo: reports a version; "build" materializes the stub client at the
+# path the caller asked for (debug for the launcher, release for the runtime,
+# and a target triple directory for the Windows-native client).
 if [ "${1:-}" = "--version" ]; then
   echo "cargo 1.97.1 (stub)"
   exit 0
 fi
 if [ "${1:-}" = "build" ]; then
-  mkdir -p target/release
-  cat > target/release/idaptik-bevy <<'SEAT'
+  shift
+  triple=""
+  profile="debug"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --target) triple="$2"; shift 2 ;;
+      --release) profile="release"; shift ;;
+      *) shift ;;
+    esac
+  done
+  out="target/$profile"
+  [ -z "$triple" ] || out="target/$triple/$profile"
+  bin="$out/idaptik-bevy"
+  [ -z "$triple" ] || bin="$bin.exe"
+  mkdir -p "$out"
+  cat > "$bin" <<'SEAT'
 #!/usr/bin/env bash
-# fixture seat stub: record the seat invocation, then stay alive (as the
-# bevy-named process, like the real client) until killed.
-printf '%s\n' "$*" >> "$SEAT_ARGS_FILE"
+# fixture client stub: record the invocation, print the adapter line Bevy
+# prints when it selects one, then stay alive until killed.
+printf '%s %s\n' "$0" "$*" >> "${SEAT_ARGS_FILE:-/dev/null}"
+printf '%s\n' "${IDAPTIK_FIXTURE_ADAPTER:-AdapterInfo { name: \"Fixture GPU (stub)\", vendor: 0, device: 0, device_type: DiscreteGpu, driver: \"stub\", driver_info: \"stub\", backend: Vulkan }}"
+# Announce this client the way a real Windows process appears to tasklist.
+# Interop detaches a Windows GUI process, so the multiplayer runtime expects
+# this command to return while the client keeps running; emulate that.
+if [ -n "${IDAPTIK_FIXTURE_WINDOWS_CLIENT_FLAG:-}" ]; then
+  touch "$IDAPTIK_FIXTURE_WINDOWS_CLIENT_FLAG"
+  if [ "${IDAPTIK_FIXTURE_WINDOWS_DETACH:-}" = "1" ]; then exit 0; fi
+fi
 sleep 600 &
 seat_child=$!
 trap 'kill "$seat_child" 2>/dev/null' TERM
 wait "$seat_child"
 SEAT
-  chmod +x target/release/idaptik-bevy
+  chmod +x "$bin"
   exit 0
 fi
 exit 0
@@ -247,6 +271,16 @@ for arg in "$@"; do
   esac
 done
 exit 0
+EOF
+
+cat > "$STUBS/wslpath" <<'EOF'
+#!/usr/bin/env bash
+# stub wslpath: enough path translation for the Windows seat fixture.
+case "${1:-}" in
+  -w) shift; printf 'C:%s\n' "$1" ;;
+  -u) shift; printf '%s\n' "$1" ;;
+  *) printf '%s\n' "$*" ;;
+esac
 EOF
 
 cat > "$STUBS/ip" <<'EOF'
@@ -486,6 +520,237 @@ if [ ! -e "$LAUNCHER_PID_FILE" ] && [ ! -e "$RELAY_PID_FILE" ] && [ ! -e "$READY
 else
   broke "stale records survived --stop"
 fi
+
+# --- solo client fixtures (renderer evidence) --------------------------------
+
+say 'solo client fixtures (renderer evidence from the client log):'
+
+rm -f "$READY_FILE" "$LAUNCHER_PID_FILE" "$RELAY_PID_FILE"
+solo_out="$SANDBOX/solo.log"
+run_env --bg "$LAUNCHER" --solo >"$solo_out" 2>&1 &
+solo_launcher=$!
+if wait_for "$solo_out" "game process: PID"; then
+  note "ok (clean): the solo flow reaches READY"
+else
+  broke "solo flow never reached readiness:
+$(tail -40 "$solo_out")
+--- game.log ---
+$(tail -20 "$LOG_FILE" 2>/dev/null || true)"
+fi
+if grep -qF 'renderer: Fixture GPU (stub) (Vulkan)' "$solo_out"; then
+  note "ok (clean): the launcher reports the adapter Bevy selected"
+else
+  broke "renderer evidence missing:
+$(cat "$solo_out" 2>/dev/null || true)"
+fi
+if grep -qF '● READY — OPENING SOLO GUI' "$solo_out"; then
+  note "ok (clean): the solo readiness banner is shown"
+else
+  broke "solo readiness banner missing"
+fi
+kill "$solo_launcher" 2>/dev/null || true
+wait "$solo_launcher" 2>/dev/null || true
+run_env "$LAUNCHER" --stop >/dev/null 2>&1 || true
+
+# A software adapter must be named as such, not reported like any other GPU.
+rm -f "$READY_FILE"
+software_out="$SANDBOX/solo-software.log"
+run_env --bg \
+  IDAPTIK_FIXTURE_ADAPTER='AdapterInfo { name: "llvmpipe (LLVM 19.1.7, 256 bits)", vendor: 0, device: 0, device_type: Cpu, driver: "llvmpipe", driver_info: "Mesa", backend: Vulkan }' \
+  "$LAUNCHER" --solo >"$software_out" 2>&1 &
+software_launcher=$!
+if wait_for "$software_out" "game process: PID"; then
+  note "ok (clean): a software-adapter solo run still reaches READY"
+else
+  broke "software-adapter solo run never reached readiness:
+$(tail -40 "$software_out")"
+fi
+grep -qF 'renderer: llvmpipe (LLVM 19.1.7, 256 bits) (Vulkan)' "$software_out" &&
+  note "ok (clean): the software adapter is named" ||
+  broke "software adapter not named:
+$(cat "$software_out" 2>/dev/null || true)"
+grep -q 'SOFTWARE rendering' "$software_out" &&
+  note "ok (fires): software rendering is warned about, not silently accepted" ||
+  broke "software rendering was not warned about"
+kill "$software_launcher" 2>/dev/null || true
+wait "$software_launcher" 2>/dev/null || true
+run_env "$LAUNCHER" --stop >/dev/null 2>&1 || true
+
+status_after="$(run_env "$LAUNCHER" --status 2>&1)" || true
+if grep -qF 'renderer: llvmpipe (LLVM 19.1.7, 256 bits) (Vulkan)' <<<"$status_after" &&
+  grep -q 'SOFTWARE rendering' <<<"$status_after"; then
+  note "ok (clean): --status reports the last run's adapter with no game running"
+else
+  broke "--status lost the last renderer:
+$status_after"
+fi
+
+# --- WSL2 native-Windows-client fixtures -------------------------------------
+
+say 'Windows-client fixtures (interop discovered without cmd.exe on PATH):'
+
+WINSYS="$SANDBOX/winsys32"
+mkdir -p "$WINSYS"
+cat > "$WINSYS/cmd.exe" <<'CMD'
+#!/usr/bin/env bash
+# fixture cmd.exe: interop probes succeed. tasklist reports one Windows client
+# (PID 4242) only while the stub client has marked itself running, so the
+# runtime's "already running" guard and its tracking loop both behave.
+flag="${IDAPTIK_FIXTURE_WINDOWS_CLIENT_FLAG:-}"
+for arg in "$@"; do
+  case "$arg" in
+    tasklist)
+      if [ -n "$flag" ] && [ -e "$flag" ]; then
+        printf '"idaptik-bevy.exe","4242"\r\n'
+      else
+        printf 'INFO: No tasks are running which match the specified criteria.\r\n'
+      fi
+      exit 0
+      ;;
+    taskkill) [ -z "$flag" ] || rm -f "$flag"; exit 0 ;;
+  esac
+done
+exit 0
+CMD
+chmod +x "$WINSYS/cmd.exe"
+mkdir -p "$SANDBOX/wslg" "$SANDBOX/shared_memory"
+printf '%s\n' 'rdp_allocate_shared_memory: Failed to open "/mnt/shared_memory/id" with error: Input/output error' \
+  > "$SANDBOX/wslg/weston.log"
+
+# Explicit request: the flag alone must select the Windows client.
+dry="$(run_env \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --solo --windows-client 2>&1)" ||
+  broke "--solo --windows-client dry run exited nonzero:
+$dry"
+grep -q 'IDAPTIK_CLIENT_PLATFORM=windows' <<<"$dry" &&
+  note "ok (clean): --windows-client selects the Windows client explicitly" ||
+  broke "--windows-client did not select the Windows client:
+$dry"
+grep -q -- 'launcher.sh __run-solo' <<<"$dry" &&
+  note "ok (clean): the Windows request still launches the solo client" ||
+  broke "--windows-client broke solo command formation:
+$dry"
+
+# The modifier can precede the mode or occur between its arguments. The
+# alias must preserve the requested host/join command and its role.
+dry="$(run_env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --wsl-windows --host --role hacker 2>&1)" ||
+  broke "Windows host dry run exited nonzero:
+$dry"
+if grep -qF 'DRY RUN: IDAPTIK_CLIENT_PLATFORM=windows' <<<"$dry" &&
+   grep -qF 'multiplayer-runtime.sh host --role hacker' <<<"$dry"; then
+  note "ok (clean): the Windows alias composes with host and its role"
+else
+  broke "Windows host command malformed:
+$dry"
+fi
+touch "$RELAY_UP_FLAG"
+dry="$(run_env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --join 192.0.2.42:4123 --windows-client --role infiltrator 2>&1)" ||
+  broke "Windows join dry run exited nonzero:
+$dry"
+if grep -qF 'DRY RUN: IDAPTIK_CLIENT_PLATFORM=windows' <<<"$dry" &&
+   grep -qF 'multiplayer-runtime.sh join 192.0.2.42:4123 --role infiltrator' <<<"$dry"; then
+  note "ok (clean): the Windows modifier composes with join and its role"
+else
+  broke "Windows join command malformed:
+$dry"
+fi
+rm -f "$RELAY_UP_FLAG"
+
+# Automatic path: broken WSLg Copy Mode plus discovered interop, with no
+# cmd.exe anywhere on PATH.
+dry="$(run_env \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_DIAG_WSLG_DIR="$SANDBOX/wslg" \
+  IDAPTIK_DIAG_SHARED_MEMORY="$SANDBOX/shared_memory" \
+  IDAPTIK_DIAG_WESTON_LOG="$SANDBOX/wslg/weston.log" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --solo 2>&1)" ||
+  broke "WSLg fallback dry run exited nonzero:
+$dry"
+grep -q 'WSLg Copy Mode is broken; using the native Windows Bevy client instead' <<<"$dry" &&
+  note "ok (clean): broken WSLg selects the Windows client without cmd.exe on PATH" ||
+  broke "the WSLg fallback no longer fires:
+$dry"
+grep -q 'IDAPTIK_CLIENT_PLATFORM=windows' <<<"$dry" &&
+  note "ok (clean): the automatic fallback resolves to the Windows client" ||
+  broke "the fallback did not select the Windows client"
+
+# End to end: the requested client is built at the target-triple path and run.
+rm -f "$READY_FILE" "$LAUNCHER_PID_FILE"
+: > "$SEAT_ARGS"
+windows_out="$SANDBOX/solo-windows.log"
+run_env --bg IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  "$LAUNCHER" --solo --windows-client >"$windows_out" 2>&1 &
+windows_launcher=$!
+if wait_for "$windows_out" "game process: PID"; then
+  note "ok (clean): the Windows-native solo client builds and starts"
+else
+  broke "Windows-native solo flow never reached readiness:
+$(tail -40 "$windows_out")
+--- game.log ---
+$(tail -20 "$LOG_FILE" 2>/dev/null || true)"
+fi
+if grep -q 'x86_64-pc-windows-gnu' "$SEAT_ARGS"; then
+  note "ok (clean): the target-triple binary is the one executed"
+else
+  broke "the Windows client was not the executed binary:
+$(cat "$SEAT_ARGS" 2>/dev/null || true)"
+fi
+grep -qF 'renderer: Fixture GPU (stub) (Vulkan)' "$windows_out" &&
+  note "ok (clean): the Windows client's adapter is reported too" ||
+  broke "no renderer evidence for the Windows client:
+$(cat "$windows_out" 2>/dev/null || true)"
+kill "$windows_launcher" 2>/dev/null || true
+wait "$windows_launcher" 2>/dev/null || true
+run_env "$LAUNCHER" --stop >/dev/null 2>&1 || true
+
+# Multiplayer Windows seat: the runtime tracks the client through tasklist, so
+# a cmd.exe that is not on PATH must still be found and used.
+rm -f "$SANDBOX/win-seat.log"
+: > "$SEAT_ARGS"
+run_env --bg \
+  IDAPTIK_CLIENT_PLATFORM=windows IDAPTIK_INTERNAL_RUNTIME=1 IDAPTIK_PREFLIGHT_DONE=1 \
+  IDAPTIK_READY_FILE="$SANDBOX/win-ready" \
+  IDAPTIK_FIXTURE_WINDOWS_CLIENT_FLAG="$SANDBOX/windows-client.flag" \
+  IDAPTIK_FIXTURE_WINDOWS_DETACH=1 \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  "$RUNTIME" join 192.0.2.42 --role hacker >"$SANDBOX/win-seat.log" 2>&1 &
+win_seat=$!
+if wait_for "$SANDBOX/win-seat.log" "Windows client: PID 4242"; then
+  note "ok (clean): the Windows multiplayer seat is tracked without cmd.exe on PATH"
+else
+  broke "the Windows seat never reported a tracked PID:
+$(tail -30 "$SANDBOX/win-seat.log" 2>/dev/null || true)"
+fi
+if grep -q 'x86_64-pc-windows-gnu/release/idaptik-bevy.exe' "$SEAT_ARGS"; then
+  note "ok (clean): the Windows seat runs the target-triple release binary"
+else
+  broke "the Windows seat did not run the expected binary:
+$(cat "$SEAT_ARGS" 2>/dev/null || true)"
+fi
+kill "$win_seat" 2>/dev/null || true
+wait "$win_seat" 2>/dev/null || true
+
+expect_fail "--windows-client outside WSL2 is refused" "runs only under WSL2" \
+  run_env IDAPTIK_DIAG_IS_WSL=0 IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --solo --windows-client
+
+mkdir -p "$SANDBOX/winsys-empty"
+expect_fail "a machine without interop gets the reason, not a broken build" \
+  "no cmd.exe under /mnt/c/Windows/System32" \
+  run_env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$SANDBOX/winsys-empty" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --solo --windows-client
+
+# Interop disabled in /etc/wsl.conf leaves cmd.exe readable but unrunnable;
+# existence alone must not count as working.
+mkdir -p "$SANDBOX/winsys-broken"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$SANDBOX/winsys-broken/cmd.exe"
+chmod +x "$SANDBOX/winsys-broken/cmd.exe"
+expect_fail "an unrunnable interop surface is not counted as interop" \
+  "cmd.exe exists but did not run" \
+  run_env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$SANDBOX/winsys-broken" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --solo --windows-client
 
 # --- rejection and missing-tool fixtures --------------------------------------
 

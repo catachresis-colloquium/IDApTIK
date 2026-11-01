@@ -8,7 +8,7 @@ APP_NAME="idaptik"
 APP_DISPLAY="IDApTIK"
 APP_DESC="Asymmetric two-player infiltration game"
 APP_CATEGORIES="Game;Network;"
-VERSION="0.4.2"
+VERSION="0.5.0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP_NAME"
@@ -36,6 +36,16 @@ READY_FILE="$STATE_DIR/startup.ready"
 PORT="${IDAPTIK_PORT:-4000}"
 MULTIPLAYER_RUNTIME="$REPO_DIR/scripts/multiplayer-runtime.sh"
 RUNTIME_DOCTOR="$REPO_DIR/scripts/runtime-doctor.sh"
+WINDOWS_INTEROP_LIB="$REPO_DIR/scripts/windows-interop.sh"
+
+# Windows interop discovery is shared with the runtime doctor and the
+# installer, so "can we run the Windows client?" has one answer. The library
+# only defines functions, so a missing one is harmless until a launch mode
+# needs it; require_repo refuses to launch without it.
+if [ -r "$WINDOWS_INTEROP_LIB" ]; then
+  # shellcheck source=scripts/windows-interop.sh
+  . "$WINDOWS_INTEROP_LIB"
+fi
 
 say()  { printf '[%s] %s\n' "$APP_NAME" "$*"; }
 warn() { printf '[%s] WARN: %s\n' "$APP_NAME" "$*" >&2; }
@@ -63,33 +73,26 @@ platform() {
   printf '%s-%s' "$os" "$arch"
 }
 
-is_wsl() {
-  if [ -n "${IDAPTIK_DIAG_IS_WSL:-}" ]; then
-    [ "$IDAPTIK_DIAG_IS_WSL" = "1" ]
-  else
-    grep -qi microsoft "${IDAPTIK_DIAG_PROC_VERSION:-/proc/version}" 2>/dev/null
-  fi
-}
+is_wsl() { hp_is_wsl; }
 
-wslg_copy_mode_active() {
-  local wslg_dir="${IDAPTIK_DIAG_WSLG_DIR:-/mnt/wslg}"
-  local shared_memory="${IDAPTIK_DIAG_SHARED_MEMORY:-/mnt/shared_memory}"
-  local weston_log="${IDAPTIK_DIAG_WESTON_LOG:-$wslg_dir/weston.log}"
-  [ ! -d "$shared_memory" ] || {
-    [ -r "$weston_log" ] &&
-      grep -qE 'rdp_allocate_shared_memory: Failed to open' "$weston_log"
-  }
-}
+wslg_copy_mode_active() { hp_wslg_copy_mode_broken; }
 
-windows_interop_available() {
-  if [ -n "${IDAPTIK_DIAG_WINDOWS_INTEROP:-}" ]; then
-    [ "$IDAPTIK_DIAG_WINDOWS_INTEROP" = "1" ]
-  else
-    command -v cmd.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1
-  fi
-}
+windows_interop_available() { hp_windows_interop; }
 
+# Validate an explicit Windows selection or select it automatically when WSLg
+# Copy Mode is broken and interop works. Other explicit selections are retained.
+# An invalid Windows request terminates the launcher.
 select_client_platform() {
+  # An explicit request wins, but is still validated: the Windows client is a
+  # Windows executable, so it needs WSL2 and working interop no matter who
+  # asked for it.
+  if [ "${IDAPTIK_CLIENT_PLATFORM:-}" = "windows" ]; then
+    is_wsl ||
+      die "the native Windows client runs only under WSL2; this host is $(platform). Drop --windows-client."
+    windows_interop_available ||
+      die "the native Windows client needs Windows interop: $(hp_windows_interop_reason)"
+    return 0
+  fi
   [ -z "${IDAPTIK_CLIENT_PLATFORM:-}" ] || return 0
   if is_wsl && wslg_copy_mode_active && windows_interop_available; then
     export IDAPTIK_CLIENT_PLATFORM=windows
@@ -99,6 +102,80 @@ select_client_platform() {
 
 build_sha() {
   git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown'
+}
+
+# --- renderer evidence -------------------------------------------------------
+
+# The launcher used to report success without ever saying which adapter the
+# client got, so Vulkan-on-llvmpipe looked exactly like the discrete GPU until
+# the frame rate gave it away. Bevy logs the AdapterInfo it selected at INFO;
+# read that back rather than inferring anything from the build succeeding.
+# Print the first matching line from $1 (default $LOG_FILE); return 1 if the
+# log is unreadable or contains no match.
+renderer_line() {
+  local log="${1:-$LOG_FILE}"
+  [ -r "$log" ] || return 1
+  grep -a -m1 'AdapterInfo' "$log" 2>/dev/null || return 1
+}
+
+# Print the quoted adapter name from an AdapterInfo line, if present.
+renderer_name() {
+  sed -n 's/.*name: *"\([^"]*\)".*/\1/p' <<<"$1" | head -1
+}
+
+# Print the backend from an AdapterInfo line, if present.
+renderer_backend() {
+  sed -n 's/.*backend: *\([A-Za-z0-9_-]*\).*/\1/p' <<<"$1" | head -1
+}
+
+print_renderer() { # $1 = AdapterInfo line
+  local name backend
+  name="$(renderer_name "$1")"
+  backend="$(renderer_backend "$1")"
+  case "$name" in
+    *llvmpipe*|*softpipe*|*swiftshader*|*SwiftShader*|*WARP*|*"Basic Render"*)
+      warn "renderer: ${name:-unknown}${backend:+ ($backend)} — SOFTWARE rendering; expect low frame rates" ;;
+    '')
+      say "renderer: ${1#*AdapterInfo}" ;;
+    *)
+      say "renderer: $name${backend:+ ($backend)}" ;;
+  esac
+}
+
+# Wait up to IDAPTIK_RENDERER_WAIT seconds (default 6) for an adapter line.
+# Return 1 if the given process is no longer alive while waiting or, for a
+# non-Windows client, during the one-second check after the line appears.
+# A timeout without a line is reported and returns success.
+report_renderer() { # $1 = pid
+  local pid="$1" waited=0 limit="${IDAPTIK_RENDERER_WAIT:-6}" line
+  while [ "$waited" -lt "$limit" ]; do
+    if line="$(renderer_line)"; then
+      print_renderer "$line"
+      if [ "${IDAPTIK_CLIENT_PLATFORM:-linux}" != "windows" ]; then
+        sleep 1
+        kill -0 "$pid" 2>/dev/null || return 1
+        case "$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')" in
+          ''|Z*) return 1 ;;
+        esac
+      fi
+      return 0
+    fi
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 1
+    waited=$((waited + 1))
+  done
+  say "renderer: not reported within ${limit}s (set IDAPTIK_RENDERER_WAIT to wait longer); see $LOG_FILE"
+  return 0
+}
+
+# Report the first adapter line in the last client log, or say none is available.
+show_last_renderer() {
+  local line
+  if line="$(renderer_line)"; then
+    print_renderer "$line"
+  else
+    say "renderer: no adapter line in $LOG_FILE yet"
+  fi
 }
 
 pid_is_game() {
@@ -118,6 +195,7 @@ require_repo() {
   [ -f "$REPO_DIR/Cargo.toml" ] || die "repository not found at $REPO_DIR (set IDAPTIK_REPO_DIR or rerun --integ from the repository)"
   [ -x "$MULTIPLAYER_RUNTIME" ] || die "internal multiplayer runtime missing or not executable: $MULTIPLAYER_RUNTIME"
   [ -x "$RUNTIME_DOCTOR" ] || die "runtime diagnostics missing or not executable: $RUNTIME_DOCTOR"
+  [ -r "$WINDOWS_INTEROP_LIB" ] || die "shared launch library missing: $WINDOWS_INTEROP_LIB (incomplete checkout)"
 }
 
 runtime_preflight() {
@@ -204,7 +282,10 @@ start_game() {
   say "startup log: $LOG_FILE"
 
   if [ "${IDAPTIK_LAUNCHER_DRY_RUN:-0}" = "1" ]; then
-    printf '[%s] DRY RUN:' "$APP_NAME"
+    # Name the client platform in the dry run: "solo" does not tell you
+    # whether that is the Linux client or the Windows one across interop.
+    printf '[%s] DRY RUN: IDAPTIK_CLIENT_PLATFORM=%s' \
+      "$APP_NAME" "${IDAPTIK_CLIENT_PLATFORM:-linux}"
     printf ' %q' "$@"
     printf '\n'
     return 0
@@ -250,6 +331,7 @@ start_game() {
     rm -f "$PID_FILE" "$READY_FILE"
     printf '  ✗ Game process exited during the final readiness check.\n' >&2
     tail -n 30 "$LOG_FILE" >&2 || true
+    client_failed_hint
     die "readiness was withdrawn; joiners must not start"
   fi
   local ready_kind ready_host ready_port _ready_session ready_role peer_role
@@ -269,7 +351,30 @@ start_game() {
     join) printf '\n\033[1;32m● READY — JOINING HOST NOW\033[0m\n' ;;
     solo) printf '\n\033[1;32m● READY — OPENING SOLO GUI\033[0m\n' ;;
   esac
+  if [ "$profile" = "solo" ]; then
+    # Readiness says the client started; it does not say what drew the frame.
+    if ! report_renderer "$pid"; then
+      rm -f "$PID_FILE" "$READY_FILE"
+      printf '  ✗ The client exited before choosing a renderer.\n' >&2
+      tail -n 30 "$LOG_FILE" >&2 || true
+      client_failed_hint
+      die "the solo client died during surface setup; nothing is running"
+    fi
+  fi
   say "game process: PID $pid"
+}
+
+# The known WSLg presentation failure (Fallback system failed to choose present
+# mode; DRI2 driver load errors) kills the window within a second of opening.
+# Naming the route that works beats repeating the same launch.
+client_failed_hint() {
+  if is_wsl && [ "${IDAPTIK_CLIENT_PLATFORM:-linux}" != "windows" ] &&
+    windows_interop_available; then
+    printf '  hint: a WSLg client that dies this early is usually the GL/Vulkan\n' >&2
+    printf '        presentation failure, not a game bug. Bypass WSLg with the\n' >&2
+    printf '        native Windows client:\n' >&2
+    printf '          %s --solo --windows-client\n' "$0" >&2
+  fi
 }
 
 start_solo() {
@@ -404,6 +509,10 @@ mode_status() {
     say "game: stopped"
     [ ! -e "$READY_FILE" ] || say "readiness: stale record present (run --stop before relaunching)"
   fi
+  # Report the adapter the last client actually chose, running or not: this is
+  # the question "am I on the GPU or on llvmpipe?" that a build success cannot
+  # answer.
+  show_last_renderer
   if [ -x "$MULTIPLAYER_RUNTIME" ]; then
     IDAPTIK_INTERNAL_RUNTIME=1 "$MULTIPLAYER_RUNTIME" __relay-status && status=0 || true
   else
@@ -413,10 +522,16 @@ mode_status() {
 }
 
 mode_flowdiags() {
-  local flow="$REPO_DIR/docs/player-launch-flow.html"
+  local flow="$REPO_DIR/docs/player-launch-flow.html" explorer=""
   [ -r "$flow" ] || die "diagnostic flowchart is missing: $flow"
-  if grep -qi microsoft /proc/version 2>/dev/null && command -v explorer.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
-    nohup explorer.exe "$(wslpath -w "$flow")" >/dev/null 2>&1 &
+  if declare -F hp_windows_tool >/dev/null 2>&1; then
+    explorer="$(hp_windows_tool explorer.exe 2>/dev/null || true)"
+  fi
+  # Under WSL the Windows browser is used because it keeps working when WSLg
+  # windows are broken; resolving explorer.exe through interop rather than
+  # PATH is what makes that true on a default WSL PATH.
+  if is_wsl && [ -n "$explorer" ] && command -v wslpath >/dev/null 2>&1; then
+    nohup "$explorer" "$(wslpath -w "$flow")" >/dev/null 2>&1 &
     say "opened the diagnostic flowchart in the Windows browser"
   elif command -v xdg-open >/dev/null 2>&1; then
     nohup xdg-open "$flow" >/dev/null 2>&1 &
@@ -628,6 +743,23 @@ Player modes:
   --join HOST [--role ROLE] Join HOST in the Bevy GUI
                             ROLE is infiltrator or hacker
 
+Client selection (WSL2):
+  --windows-client          Build and run the native Windows Bevy client
+                            instead of the WSLg one. Combine with --solo,
+                            --host, --join or --auto. This bypasses WSLg
+                            entirely; the relay stays in WSL. Windows interop
+                            is discovered at /mnt/c/Windows/System32, so
+                            cmd.exe does not need to be on PATH.
+                            Prerequisites: run 'just windows-client-deps'.
+  (automatic)               WSLg Copy Mode failure already selects the
+                            Windows client when interop is available.
+
+Renderer evidence:
+  After a solo launch the launcher prints the adapter Bevy selected
+  (for example: renderer: NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)),
+  and warns loudly when it is a software adapter (llvmpipe/softpipe/WARP).
+  --status reports the same line from the last run's log.
+
 Readiness choreography:
   A host may invite the other player only after ● READY FOR JOINERS.
   A joiner starts Bevy only after its build and exact relay probe pass.
@@ -686,6 +818,19 @@ parse_role() {
     *) die "role must be 'infiltrator' or 'hacker', got '$role'" ;;
   esac
 }
+
+# `--windows-client` is a modifier, not a mode: strip it wherever it appears so
+# it composes with --solo, --host, --join and --auto. Kept as a flag rather than
+# a documented environment variable because the working WSL2 route used to
+# require exporting IDAPTIK_CLIENT_PLATFORM=windows by hand.
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --windows-client|--wsl-windows) export IDAPTIK_CLIENT_PLATFORM=windows ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+if [ "${#ARGS[@]}" -gt 0 ]; then set -- "${ARGS[@]}"; else set --; fi
 
 MODE="${1:---auto}"
 [ $# -gt 0 ] && shift || true

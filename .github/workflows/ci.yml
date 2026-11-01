@@ -121,6 +121,20 @@ jobs:
         run: bash tests/abi_authority_pin_test.sh
       - name: CI security configuration fixtures (was invoked by nothing)
         run: bash tests/ci_security_config_test.sh
+      # PR #212 added both suites at mode 100644 and wired them into nothing,
+      # which is exactly the defect tests/ci_security_config_test.sh exists to
+      # catch -- and it turned main's fixtures-and-must red. They are offline
+      # (a Git inventory, a scanner double and the workflow's own step text),
+      # so they run here rather than beside the Pons bootstrap.
+      # The secret gate's control, run here as well as in the scan itself: it is
+      # offline and takes under two seconds, and a gate whose control only runs
+      # when the gate is green is a control that never fires on a broken change.
+      - name: Secret-gate control (a planted secret must fail the scan)
+        run: bash tests/secret_scan_self_test.sh
+      - name: Pons scan and summary fixtures (was invoked by nothing)
+        run: |
+          bash tests/pons_scan_test.sh
+          bash tests/pons_summary_test.sh
       # The .well-known/ publish step in pages.yml runs under dash inside a
       # Nix-based container with no bash and no guaranteed coreutils. PR #147
       # widened that step, reached for basename(1) and head(1), and failed on

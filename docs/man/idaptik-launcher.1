@@ -1,5 +1,5 @@
 .\" SPDX-License-Identifier: CC-BY-SA-4.0
-.TH IDAPTIK-LAUNCHER 1 "August 2026" "IDApTIK 0.4.2" "Player Commands"
+.TH IDAPTIK-LAUNCHER 1 "November 2026" "IDApTIK 0.5.0" "Player Commands"
 .SH NAME
 idaptik-launcher \- diagnose, repair, build, and launch IDApTIK solo or multiplayer
 .SH SYNOPSIS
@@ -29,6 +29,16 @@ host:port pair, or ws:// / wss:// URL.
 .TP
 .BR --auto , " --browser" , " --web"
 Open the interactive menu.  This is the default.
+.TP
+.B --windows-client
+A modifier for --solo, --host, --join and --auto: build and run the native
+Windows Bevy client instead of the WSLg one.  Windows interop is discovered at
+/mnt/c/Windows/System32 (or the drvfs root reported by wslpath), so cmd.exe does
+not need to be on PATH, and interop is proved by executing cmd.exe rather than
+by trusting that the file exists.  Provision it with
+.B just windows-client-deps
+(the x86_64-pc-windows-gnu target and the MinGW cross-linker).  The relay and
+Tailscale endpoint stay in WSL.
 .SH DIAGNOSTICS AND REPAIR
 .TP
 .B --doctor
@@ -64,6 +74,21 @@ Install desktop/start-menu integration.
 .TP
 .B --disinteg
 Remove integration while preserving configuration and logs.
+.SH RENDERER EVIDENCE
+Readiness means the client process started; it does not say what draws the
+frame.  After a solo launch the launcher reads the AdapterInfo line Bevy logs
+when it selects an adapter and prints it, for example:
+.PP
+.nf
+renderer: NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)
+.fi
+.PP
+A software adapter (llvmpipe, softpipe, SwiftShader, WARP) is reported as
+WARNING and named as software, because a successful build on the CPU renderer
+looks identical to a successful build on the GPU until the frame rate gives it
+away.  --status prints the same line from the last run's log.  The doctor
+reports both the OpenGL renderer (glxinfo) and the adapter Bevy actually
+selected; these can disagree.
 .SH READINESS CONTRACT
 The host's READY FOR JOINERS message means runtime diagnostics passed, the GUI
 build completed, the relay answered its health probe, a peer-reachable address
@@ -77,7 +102,9 @@ rdp_allocate_shared_memory error or missing /mnt/shared_memory.  When Windows
 interop, the x86_64-pc-windows-gnu Rust target, and the MinGW linker are
 available, it bypasses WSLg with a native Windows Bevy client while retaining
 the Phoenix relay and Tailscale endpoint in WSL.  Otherwise it stops before
-launch.  In Windows PowerShell as Administrator run:
+launch.  The same client can be requested explicitly with --windows-client when
+WSLg opens a window that dies during surface or present-mode negotiation; the
+launcher prints that command when it sees the client die that early.  In Windows PowerShell as Administrator run:
 .PP
 .nf
 wsl --update
@@ -105,6 +132,14 @@ Override the repository located by an integrated launcher.
 .TP
 .B IDAPTIK_STARTUP_TIMEOUT
 Maximum seconds to wait for readiness; default 1800.
+.TP
+.B IDAPTIK_RENDERER_WAIT
+Seconds a solo launch waits for Bevy's adapter line before reporting that the
+log has none yet; default 6.
+.TP
+.B IDAPTIK_CLIENT_PLATFORM
+linux or windows.  --windows-client sets it; an explicit value wins over the
+WSLg Copy Mode fallback, but is still validated against WSL2/interop.
 .SH FILES
 .TP
 .I ~/.local/state/idaptik/game.log

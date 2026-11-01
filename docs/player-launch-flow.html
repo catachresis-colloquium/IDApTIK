@@ -48,7 +48,8 @@ wsl --shutdown</pre>Reopen Debian. Restart Windows if it remains.</div>
   <h2>Friendly fault map</h2>
   <section class="split">
     <div class="node warn"><strong>Penguin icon; WSLg window will not open</strong><br>The launcher should select the Windows-native client. If it reports missing Windows target/linker/interop prerequisites, repair those or use the Windows update/shutdown recovery above.</div>
-    <div class="node warn"><strong>Software renderer / llvmpipe</strong><br>The game may run slowly. Update the Windows GPU driver; verify <code>/dev/dxg</code>.</div>
+    <div class="node warn"><strong>WSLg window opens, then dies immediately</strong><br>That early exit is surface/present-mode negotiation, not a game bug. Run <code>./launcher.sh --solo --windows-client</code> to bypass WSLg with the native Windows client; provision it once with <code>just windows-client-deps</code>. Interop does not need <code>cmd.exe</code> on <code>PATH</code>.</div>
+    <div class="node warn"><strong>Software renderer / llvmpipe</strong><br>The game may run slowly. The launcher prints the adapter Bevy chose and warns when it is software; <code>./launcher.sh --status</code> repeats it. Update the Windows GPU driver and verify <code>/dev/dxg</code>.</div>
     <div class="node warn"><strong>No audio device</strong><br>Non-blocking. WSLg audio is unavailable; gameplay and networking can continue.</div>
     <div class="node fail"><strong>Dependency missing</strong><br>Run <code>./launcher.sh --repair</code>, then <code>./launcher.sh --doctor</code>.</div>
     <div class="node fail"><strong>Tailscale unavailable</strong><br>Choose safe repair. Follow its install/login prompt. Both players must be on the intended tailnet.</div>

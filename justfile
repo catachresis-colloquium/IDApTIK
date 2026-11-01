@@ -106,7 +106,9 @@ runtime-doctor-test:
 
 # Launcher/multiplayer-runtime fixture coverage: host/join URL formation,
 # spaces in checkout paths, environment overrides, readiness timeout, stale
-# PID, relay early exit, and cleanup (issue #102).
+# PID, relay early exit, and cleanup (issue #102); plus Windows-interop
+# discovery without cmd.exe on PATH, the --windows-client route, and renderer
+# evidence from the client log (software adapters must be named as such).
 launcher-fixture-test:
     bash tests/launcher_fixture_test.sh
 
@@ -153,10 +155,33 @@ toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 
 # Run every offline shell fixture suite (Rust and Elixir gates remain separate).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test pons-scan-test pons-summary-test secret-scan-test
 
 must-check-test:
     bash tests/must_check_test.sh
+
+# The secret gate's control: plant a secret, delete it, warm the cache, change
+# the rules -- and require the verdict to change in every case. Offline, using
+# tests/fixtures/fake-gitleaks.sh unless IDAPTIK_SECRET_SCANNER is set.
+secret-scan-test:
+    bash tests/secret_scan_self_test.sh
+
+# Scan this repository's whole history for secrets. Content-addressed: only
+# blobs not already proven clean under the current scanner+rules are scanned,
+# so a warm run is a fraction of a second. Needs `gitleaks` or
+# IDAPTIK_SECRET_SCANNER; the ledger lives in .cache/secret-scan.
+secret-scan:
+    ./scripts/secret_scan.sh --cache .cache/secret-scan
+
+# Offline fixtures for scripts/pons_scan.sh: staged-inventory selection and the
+# deterministic scanner double. Added by PR #212 at mode 100644 and invoked by
+# nothing, which is what tests/ci_security_config_test.sh flags.
+pons-scan-test:
+    bash tests/pons_scan_test.sh
+
+# Offline fixtures for the Pons workflow's evidence-summary step.
+pons-summary-test:
+    bash tests/pons_summary_test.sh
 
 # Validate DEED, K9 components, Nickel runners, and coordination against pinned standards.
 machine-readable-check:

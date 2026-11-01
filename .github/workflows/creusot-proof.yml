@@ -34,10 +34,23 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Pinned identically to developer/tools, which is where this was measured.
-  # A tag would be a moving target under sha_pinning_required; the commit is not.
-  CREUSOT_REF: 318615be3b8bbc60d1f6d52469ba5c0bdebed4f1
-  CREUSOT_VERSION: v0.13.0
+  # MEASURED, then corrected. #212 pinned the Creusot that developer/tools had
+  # been measured with, v0.13.0, while `crates/idaptik-kernel` depends on
+  # creusot-std 0.14.0. Creusot refuses that pairing by design:
+  #
+  #     Error: creusot-std is newer than Creusot.
+  #         creusot     0.13.0
+  #         creusot-std 0.14.0
+  #
+  # so "Translate the kernel" failed on every run since. The crate is the
+  # thing the proofs are written against, and the kernel's dependency is
+  # already in Cargo.lock; the toolchain is what moves. v0.14.0 is the release
+  # that pairs with creusot-std 0.14.0, and it declares nightly-2026-08-03
+  # below. A tag would be a moving target under sha_pinning_required; the
+  # commit is not. The superseded pin was
+  # 318615be3b8bbc60d1f6d52469ba5c0bdebed4f1 (v0.13.0).
+  CREUSOT_REF: 65349025c67e69fcd7479f1f420fa5904f69bc27
+  CREUSOT_VERSION: v0.14.0
 
 jobs:
   ledgers:
@@ -71,9 +84,9 @@ jobs:
       # pinned Creusot ref declares, not a choice made here.
       - name: Install Creusot's rustc
         run: |
-          rustup toolchain install nightly-2026-06-22 \
+          rustup toolchain install nightly-2026-08-03 \
             --component rustfmt --component rustc-dev --component llvm-tools
-          rustup default nightly-2026-06-22
+          rustup default nightly-2026-08-03
 
       # The why3/prover bootstrap is the expensive part (opam switch + four
       # provers). Keyed on the Creusot ref, so a pin bump rebuilds and nothing
@@ -117,7 +130,8 @@ jobs:
           # so setting that variable drops the GUI and the entire GTK stack with
           # it. why3, why3find and the four provers -- everything a headless
           # proof actually uses -- are unaffected. This is how Creusot's own CI
-          # builds, and it is the ONE difference from the developer/tools
+          # builds, and it is the ONE difference from a developer install that
+          # wants the GUI
           # install, which has the IDE because a human might want it.
           opam var in-creusot-ci=true --global
           # Belt and braces: should any other package carry a system dependency,
@@ -238,11 +252,62 @@ jobs:
       - name: The kernel's own tests
         run: cargo test -p idaptik-kernel --lib
 
-      # Criterion (c) asks for the evidence to be retained as a build artefact.
-      # `verif/` is committed as well -- that is the durable half, reviewable in
-      # the pull request instead of expiring with the run -- but the RUN's own
-      # output is not in git, and the denominator lives there. Both halves, and
-      # `if: always()` so a red proof uploads the log that explains it.
+      # A translation error is currently unreadable from a pull request: the
+      # step fails, the run carries a bare "Process completed with exit code 1",
+      # and the job log lives on storage a reviewer cannot open. A gate that
+      # reports red without a reason is nearly as expensive as no gate.
+      #
+      # Two channels, both already used elsewhere in this repository: a step
+      # summary for the run UI, and ::error:: annotations, which the checks API
+      # returns to anything that can read a pull request. They are separate
+      # steps because the summary is wanted on success too (an empty one is
+      # itself evidence) while an error annotation on a green run would be a
+      # lie.
+      - name: Publish the prover's own output for every outcome
+        if: always()
+        run: |
+          set +e
+          {
+            echo '## Creusot'
+            for log in coma.log prove.log mutant-coma.log mutant.log restored.log; do
+              if test -f "$log"; then
+                echo "### ${log%.log}"
+                echo '```text'
+                tail -40 "$log"
+                echo '```'
+              fi
+            done
+            test -f coma.log || echo 'The kernel never reached a translator run.'
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit 0
+
+      # Runners execute `run:` under `bash -e -o pipefail`, where an empty grep
+      # or a SIGPIPE'd `head` aborts the step before it reports anything --
+      # precisely the failure this step exists to remove. So: opt out of `-e`,
+      # make every selection failure-tolerant, and end on an explicit success.
+      - name: Annotate the proof failure with the prover's own words
+        if: failure()
+        run: |
+          set +e
+          announce() {
+            log="$1"
+            test -f "$log" || return 0
+            picked="$(grep -E '(^| )error(\[|:)' "$log" | head -n 6 || true)"
+            if test -z "$picked"; then
+              picked="$(tail -n 6 "$log" || true)"
+            fi
+            while IFS= read -r line; do
+              test -n "$line" || continue
+              echo "::error::${log}: ${line:0:900}"
+            done <<< "$picked"
+          }
+          announce coma.log
+          announce prove.log
+          announce mutant-coma.log
+          announce mutant.log
+          test -f coma.log || echo '::error::the kernel never reached a translator run'
+          exit 0
+
       - name: Retain the proof evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

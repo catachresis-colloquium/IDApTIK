@@ -93,6 +93,13 @@ HTML decision flow, and `./launcher.sh --man` displays the complete manual.
 Hosts invite peers only after the green `READY FOR JOINERS` result; joiners get
 their own build/reachability checklist and green joining result.
 
+On WSL2, `./launcher.sh --solo --windows-client` builds and runs the native
+Windows client instead of the WSLg one; use it when a WSLg window dies during
+surface/present-mode negotiation. Interop is discovered under
+`/mnt/c/Windows/System32`, so `cmd.exe` need not be on `PATH`. After a solo
+launch the launcher prints the adapter Bevy actually selected and flags a
+software renderer (llvmpipe) instead of reporting a bare success.
+
 ## Layout
 
 ```

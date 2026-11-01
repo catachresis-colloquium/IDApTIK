@@ -98,18 +98,15 @@ else
 fi
 
 # 4b. Windows-native client (WSL2 only) ----------------------------------------
-# Mirrors launcher.sh select_client_platform: when WSLg Copy Mode is broken and
-# Windows interop works, the launcher builds and runs the Windows client, so the
-# installer must provision, build and verify that same client.
-wslg_copy_mode_active() {
-  [ ! -d /mnt/shared_memory ] || {
-    [ -r /mnt/wslg/weston.log ] &&
-      grep -qE 'rdp_allocate_shared_memory: Failed to open' /mnt/wslg/weston.log
-  }
-}
+# Uses the same interop discovery as launcher.sh and the runtime doctor
+# (scripts/windows-interop.sh), so the installer provisions exactly the client
+# the launcher will pick. `command -v cmd.exe` is deliberately not used: WSL
+# does not put C:\Windows\System32 on PATH, and machines with working interop
+# were being told they had none.
+# shellcheck source=scripts/windows-interop.sh
+. scripts/windows-interop.sh
 client=linux
-if grep -qi microsoft /proc/version 2>/dev/null && wslg_copy_mode_active &&
-  command -v cmd.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
+if hp_is_wsl && hp_wslg_copy_mode_broken && hp_windows_interop; then
   client=windows
   export IDAPTIK_CLIENT_PLATFORM=windows
   log "WSLg Copy Mode is broken; the launcher will use the native Windows client"

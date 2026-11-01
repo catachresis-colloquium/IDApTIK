@@ -205,6 +205,31 @@ C ≥ 500, else D.
 (session). Throttled events: cooldown/bandwidth denials (1.2 s),
 `SupportFraying` (4.2 s), `BillyBadgedDoor` (8 s).
 
+## Teaching layer (frontend-only)
+
+The simulation never explains itself to a new player: the opening log line says
+what the rooms contain, not why anyone is there. `crates/idaptik-tui/src/tutorial.rs`
+supplies the framing, as `LogLine`s on `Channel::Tutorial` — the channel the
+determinism diff and the supervision fold already ignore (see
+`scenario/vsm.rs`). It follows the loop the mission is meant to teach:
+
+| beat | cue | trigger |
+|------|-----|---------|
+| purpose | the brief: the contact note is the prize, the office drive is the decoy, plus each objective's own label | run start, and again after a restart (the log is cleared) |
+| opportunity | "Billy is inside and reading the room" | first `CrisisBegan` |
+| response | which story Billy settled on, named in plain words | first `BillyBeliefFormed` |
+| exploit | the misdirect is live / the misdirect is blown | first `ObjectivesUpdated` with a decided misdirect |
+| retry | the run ended, in player terms, and how to restart | first `MissionFailed` |
+
+Every cue is driven by an event the player can also read in the log, so the
+tutorial never leaks hidden state: it points at evidence, it does not reveal
+what Billy knows. Each cue fires at most once per run and the set re-arms on
+`Restarted`.
+
+The Bevy frontend does not use this module yet; it renders the same log lines
+and would show the cues as soon as `app`-equivalent ingestion calls
+`tutorial::brief` / `Tutor::observe`.
+
 ## Headless script API (`__IDAPTIK_TEST__` as data)
 
 `idaptik-tui` runs scripts with no TTY:

@@ -9,6 +9,18 @@
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Windows interop discovery is shared with the launcher and the installer.
+# Sourcing it is what stops the doctor from claiming a working WSL2 machine has
+# no interop merely because cmd.exe is not on PATH.
+if [ -r "$REPO_DIR/scripts/windows-interop.sh" ]; then
+  # shellcheck source=scripts/windows-interop.sh
+  . "$REPO_DIR/scripts/windows-interop.sh"
+else
+  printf 'error: shared launch library missing: %s/scripts/windows-interop.sh (incomplete checkout)\n' "$REPO_DIR" >&2
+  exit 1
+fi
+
 MODE="${1:-report}"
 [ $# -gt 0 ] && shift || true
 PROFILE="${1:-all}"
@@ -26,20 +38,35 @@ info() { [ "$QUIET" -eq 1 ] || printf '  · [INFO] %-20s %s\n' "$1" "$2"; }
 warn() { WARNINGS=$((WARNINGS + 1)); [ "$QUIET" -eq 1 ] || printf '  ! [WARN] %-20s %s\n' "$1" "$2"; }
 fail() { FAILURES=$((FAILURES + 1)); printf '  ✗ [FAIL] %-20s %s\n' "$1" "$2" >&2; }
 
-is_wsl() {
-  if [ -n "${IDAPTIK_DIAG_IS_WSL:-}" ]; then
-    [ "$IDAPTIK_DIAG_IS_WSL" = "1" ]
-  else
-    grep -qi microsoft "${IDAPTIK_DIAG_PROC_VERSION:-/proc/version}" 2>/dev/null
-  fi
-}
+is_wsl() { hp_is_wsl; }
 
-windows_interop_available() {
-  if [ -n "${IDAPTIK_DIAG_WINDOWS_INTEROP:-}" ]; then
-    [ "$IDAPTIK_DIAG_WINDOWS_INTEROP" = "1" ]
-  else
-    command -v cmd.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1
+windows_interop_available() { hp_windows_interop; }
+
+# The adapter Bevy chose on the last run, read from its own log. glxinfo below
+# reports the *OpenGL* renderer, which is not necessarily what wgpu picked —
+# the observed failure this machine hit was WSLg Vulkan on llvmpipe while the
+# GL probe reported D3D12/NVIDIA. Report both rather than conflating them.
+game_log="${IDAPTIK_DIAG_GAME_LOG:-${XDG_STATE_HOME:-$HOME/.local/state}/idaptik/game.log}"
+
+check_bevy_renderer() {
+  local line name backend
+  if [ ! -r "$game_log" ]; then
+    info "bevy renderer" "no client log yet at $game_log"
+    return
   fi
+  line="$(grep -a -m1 'AdapterInfo' "$game_log" 2>/dev/null || true)"
+  if [ -z "$line" ]; then
+    info "bevy renderer" "the last client run logged no adapter line (see $game_log)"
+    return
+  fi
+  name="$(sed -n 's/.*name: *"\([^"]*\)".*/\1/p' <<<"$line" | head -1)"
+  backend="$(sed -n 's/.*backend: *\([A-Za-z0-9_-]*\).*/\1/p' <<<"$line" | head -1)"
+  case "$name" in
+    *llvmpipe*|*softpipe*|*swiftshader*|*SwiftShader*|*WARP*|*"Basic Render"*)
+      warn "bevy renderer" "${name}${backend:+ ($backend)} — software rendering; the GPU was not selected" ;;
+    '') info "bevy renderer" "$line" ;;
+    *) pass "bevy renderer" "$name${backend:+ ($backend)}" ;;
+  esac
 }
 
 display_value="${IDAPTIK_DIAG_DISPLAY-${DISPLAY:-}}"
@@ -105,15 +132,24 @@ check_tools() {
   fi
 
   if [ "$client_platform" = "windows" ]; then
-    if rustup target list --installed 2>/dev/null | grep -qx 'x86_64-pc-windows-gnu'; then
+    # rustup usually resolves on PATH, but under mise the pinned toolchain may
+    # only be reachable through `mise exec`; check both before declaring a
+    # 6-minute cross-build impossible.
+    local installed=""
+    if command -v rustup >/dev/null 2>&1; then
+      installed="$(rustup target list --installed 2>/dev/null || true)"
+    else
+      installed="$(cd "$REPO_DIR" && "$mise_bin" exec -- rustup target list --installed 2>/dev/null || true)"
+    fi
+    if grep -qx 'x86_64-pc-windows-gnu' <<<"$installed"; then
       pass "Windows target" "x86_64-pc-windows-gnu is installed"
     else
-      fail "Windows target" "missing; run 'rustup target add x86_64-pc-windows-gnu'"
+      fail "Windows target" "missing; run 'mise exec -- rustup target add x86_64-pc-windows-gnu' (or: just windows-client-deps)"
     fi
     if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
       pass "Windows linker" "MinGW cross-linker resolves"
     else
-      fail "Windows linker" "x86_64-w64-mingw32-gcc is missing"
+      fail "Windows linker" "x86_64-w64-mingw32-gcc is missing; run 'just windows-client-deps' (installs gcc-mingw-w64-x86-64)"
     fi
   fi
 
@@ -142,8 +178,9 @@ check_display() {
       pass display "native Windows Bevy client selected; WSLg is bypassed"
       info wslg "Copy Mode does not affect the Windows-native client"
     else
-      fail "Windows interop" "cmd.exe or wslpath is unavailable; cannot launch the Windows client"
+      fail "Windows interop" "cannot start the Windows client: $(hp_windows_interop_reason)"
     fi
+    check_bevy_renderer
     return
   fi
 
@@ -199,13 +236,14 @@ check_display() {
     local renderer
     renderer="$(glxinfo -B 2>/dev/null | sed -n 's/^[[:space:]]*OpenGL renderer string:[[:space:]]*//p' | head -1 || true)"
     case "$renderer" in
-      *llvmpipe*|*softpipe*) warn "graphics coprocessor" "${renderer:-software renderer}; playable but potentially slow" ;;
-      '') warn "graphics coprocessor" "renderer probe failed" ;;
-      *) pass "graphics coprocessor" "$renderer" ;;
+      *llvmpipe*|*softpipe*) warn "graphics coprocessor" "${renderer:-software renderer} (OpenGL); playable but potentially slow" ;;
+      '') warn "graphics coprocessor" "OpenGL renderer probe failed" ;;
+      *) pass "graphics coprocessor" "$renderer (OpenGL)" ;;
     esac
   else
     info "graphics coprocessor" "glxinfo unavailable; Bevy will perform its own adapter selection"
   fi
+  check_bevy_renderer
 
   case "$pulse_server" in
     unix:*)

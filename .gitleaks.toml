@@ -33,15 +33,22 @@ paths = [
   '''(^|/)Cargo\.lock$''',
   '''(^|/)mix\.lock$''',
 
-  # The SCANNER'S OWN STAGED ARTEFACT -- not an exemption for a file that
-  # "is fine", which the DESIGN RULE above forbids, but the one file the
-  # scanner writes into its own scan target.
+  # The ESTATE BASELINE FILE -- not an exemption for a file that "is fine",
+  # which the DESIGN RULE above forbids, but a file this repository does not
+  # own and does not write.
   #
-  # The standards secret-scanner reusable copies
+  # AS OF 2026-11-01 THE STAGING NO LONGER HAPPENS: the secret gate is
+  # first-party (`scripts/secret_scan.sh`) and never copies anything into the
+  # scanned tree, so this entry is inert. It is retained deliberately --
+  # removing an allowlist entry is a change to what the gate can see, and the
+  # DESIGN RULE below requires re-measuring detection against a real binary,
+  # which the change that removed the staging could not do.
+  #
+  # What it was for: the standards secret-scanner reusable copied
   # `config/gitleaks/estate-baseline.toml` to `.gitleaks-estate.toml` in the
   # workspace root UNCONDITIONALLY, before the step that decides whether this
-  # repo references it. So the baseline is present in the scanned tree even
-  # when the workflow's own log says "nothing staged". That baseline documents
+  # repo references it. So the baseline was present in the scanned tree even
+  # when the workflow's own log said "nothing staged". That baseline documents
   # worked examples of credential SHAPES (RFC 8032 vectors, masked-token
   # forms); they are credential-shaped by construction, so `generic-api-key`
   # fires on them and the gate goes red for reasons no commit here caused.
@@ -81,6 +88,20 @@ regexes = [
   # and shape-constrained: real API keys carry mixed case, digits and symbols
   # and will not match this.
   '''^[a-z]{2,6}_(test|demo|fake|sample|example|dummy|placeholder)_[a-z0-9_]{2,40}$''',
+
+  # TEST VECTOR, NOT A CREDENTIAL -- added 2026-11-01.
+  #
+  # The secret-scan control (tests/secret_scan_self_test.sh) plants a fake
+  # `aws-access-token` to prove the gate can fail. Commit 79b1180 wrote that
+  # value into the script as one literal, so the value entered this
+  # repository's history and the history-complete scan reported it -- the gate
+  # working exactly as designed, on its own fixture.
+  #
+  # This entry is the NARROWEST possible: it matches the one 20-character
+  # string and nothing else. It cannot blind the scanner to any credential, it
+  # is not a pattern class, and it does not weaken the `aws-access-token` rule.
+  # The script now assembles the value at run time so it cannot recur.
+  '''^AKIAZ7Q2XK9MPL4RTUVW$''',
 
   # --- public-by-definition / non-secret identifiers ------------------------
   # OpenPGP 40-hex fingerprints. A fingerprint *identifies* a key; it is
