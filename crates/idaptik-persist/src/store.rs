@@ -528,14 +528,14 @@ impl Store {
         }
 
         for (&at, cp) in &cps {
-            if let Some((_, batch)) = batches.range(..at).next_back() {
-                if cp.tick < batch.tick {
-                    issues.push(VerifyIssue::TickBehindLog {
-                        at,
-                        recorded: cp.tick,
-                        logged: batch.tick,
-                    });
-                }
+            if let Some((_, batch)) = batches.range(..at).next_back()
+                && cp.tick < batch.tick
+            {
+                issues.push(VerifyIssue::TickBehindLog {
+                    at,
+                    recorded: cp.tick,
+                    logged: batch.tick,
+                });
             }
         }
 
