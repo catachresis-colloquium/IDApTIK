@@ -6,11 +6,11 @@
 //! read through the sim's complete perception door, not the free function
 //! with its companion-noise argument omitted.
 
+use idaptik_core::scenario::GhostLobbySim;
 use idaptik_core::scenario::command::{Command, MoleOp, TickInput};
 use idaptik_core::scenario::common::{BillyMode, Phase};
 use idaptik_core::scenario::event::Event;
 use idaptik_core::scenario::infra::{self, Hearing, ObservationKind};
-use idaptik_core::scenario::GhostLobbySim;
 use idaptik_evil_weevil::harness::load_live_script;
 use idaptik_evil_weevil::scenarios::{Scenario, infra_orders::InfraOrdersScenario};
 
@@ -42,7 +42,7 @@ fn the_original_quiet_out_of_range_setup_is_not_a_witness() {
     assert_eq!(sim.state().phase, Phase::Quiet);
     assert_eq!(sim.state().billy.mode, BillyMode::Offsite);
     let billy_x = sim.state().billy.x;
-    let mole_x = sim.state().mole.as_ref().unwrap().x;
+    let mole_x = sim.state().mole.as_ref().unwrap().state.x;
     assert_eq!(billy_x, -90.0);
     assert_eq!(mole_x, 390.0);
     assert!((mole_x - billy_x).abs() > sim.actor().stats.invest_dist);
@@ -55,7 +55,11 @@ fn the_original_quiet_out_of_range_setup_is_not_a_witness() {
     );
     assert_eq!(sim.state().diversion.as_ref().unwrap().x, mole_x);
     assert!(!heard_noise(&sim, mole_x));
-    assert!(!events.iter().any(|e| matches!(e, Event::GuardObserved { .. })));
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Event::GuardObserved { .. }))
+    );
 
     // Presence alone is not enough: even with Billy on shift, the spawn-point
     // diversion remains outside his hearing. The choreography must close the
@@ -65,7 +69,11 @@ fn the_original_quiet_out_of_range_setup_is_not_a_witness() {
     assert_ne!(sim.state().billy.mode, BillyMode::Offsite);
     assert!((mole_x - sim.state().billy.x).abs() > sim.actor().stats.invest_dist);
     assert!(!heard_noise(&sim, mole_x));
-    assert!(!events.iter().any(|e| matches!(e, Event::GuardObserved { .. })));
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Event::GuardObserved { .. }))
+    );
 }
 
 #[test]
@@ -91,7 +99,7 @@ fn an_audible_diversion_uses_the_sim_perception_door() {
         tick(&mut sim, &[]);
     }
     assert_ne!(sim.state().billy.mode, BillyMode::Offsite);
-    assert_eq!(sim.state().mole.as_ref().unwrap().x, target_x);
+    assert_eq!(sim.state().mole.as_ref().unwrap().state.x, target_x);
     assert!((target_x - sim.state().billy.x).abs() < sim.actor().stats.invest_dist);
 
     let events = tick(
@@ -126,9 +134,11 @@ fn an_audible_diversion_uses_the_sim_perception_door() {
         },
         &[],
     );
-    assert!(!without_companion_noise
-        .iter()
-        .any(|o| o.kind == ObservationKind::UnusualNoise && o.x == target_x));
+    assert!(
+        !without_companion_noise
+            .iter()
+            .any(|o| o.kind == ObservationKind::UnusualNoise && o.x == target_x)
+    );
 }
 
 #[test]

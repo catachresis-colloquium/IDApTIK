@@ -534,7 +534,9 @@ impl Scenario for InfraOrdersScenario {
         );
         harness.check(
             "shadow-position-matches-billy-at-synth",
-            witness.as_ref().is_some_and(|w| w.billy_x == billy_at_synth),
+            witness
+                .as_ref()
+                .is_some_and(|w| w.billy_x == billy_at_synth),
             match &witness {
                 Some(w) => format!(
                     "shadow predicted billy.x={billy_at_synth:.1}; production run has {:.1}",
@@ -587,7 +589,9 @@ impl Scenario for InfraOrdersScenario {
         );
         harness.check(
             "perception-contract-lists-the-noise",
-            witness.as_ref().is_some_and(|w| w.heard_diversion().is_some()),
+            witness
+                .as_ref()
+                .is_some_and(|w| w.heard_diversion().is_some()),
             match &witness {
                 Some(w) => format!(
                     "observations at billy.x={:.1}: {:?}; diversion source x={:.1}, \
