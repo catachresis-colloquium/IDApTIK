@@ -37,8 +37,8 @@ const BELIEF_USB: &str = "Billy has decided the drive was the target. That is th
      want him to tell his boss.";
 const BELIEF_NOTE: &str = "Billy has decided the note was the target. He will go and secure \
      it, so be quick or be somewhere else.";
-const MISDIRECT_LIVE: &str = "The misdirect is live: Billy's report will name the drive.";
-const MISDIRECT_BLOWN: &str = "Billy reported the note. The misdirect is blown; leave while \
+const MISDIRECT_LIVE: &str = "The misdirect objective is complete.";
+const MISDIRECT_BLOWN: &str = "The misdirect objective failed; leave while \
      the way out is still open.";
 
 /// The opening brief: why you are here, what to take, where to leave, and the
