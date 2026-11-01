@@ -54,7 +54,7 @@ windows_fallback="$(env \
   IDAPTIK_DIAG_WSLG_DIR="$FIXTURE/wslg" \
   IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/missing_shared_memory" \
   IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
-  "$DOCTOR" report solo 2>&1)"
+  "$DOCTOR" report solo 2>&1 || true)"
 grep -q '\[PASS\].*native Windows Bevy client selected' <<<"$windows_fallback"
 grep -q 'WSLg is bypassed' <<<"$windows_fallback"
 grep -q 'READY TO LAUNCH' <<<"$windows_fallback"
@@ -74,6 +74,59 @@ fallback_dry_run="$(env \
 grep -q 'using the native Windows Bevy client instead' <<<"$fallback_dry_run"
 grep -q '\[PASS\].*native Windows Bevy client selected' <<<"$fallback_dry_run"
 grep -q 'DRY RUN:.*launcher.sh __run-solo' <<<"$fallback_dry_run"
+
+# Interop is discovered at the Windows system directory, not from PATH: this
+# machine's cmd.exe is not on PATH and the launcher still must find it.
+WINSYS="$FIXTURE/winsys32"
+mkdir -p "$WINSYS"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$WINSYS/cmd.exe"
+chmod +x "$WINSYS/cmd.exe"
+interop_report="$(env \
+  IDAPTIK_CLIENT_PLATFORM=windows \
+  IDAPTIK_DIAG_WINDOWS_INTEROP= \
+  IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_DIAG_IS_WSL=1 \
+  IDAPTIK_DIAG_SKIP_TOOLS=1 \
+  IDAPTIK_DIAG_DISPLAY=:0 \
+  IDAPTIK_DIAG_WSLG_DIR="$FIXTURE/wslg" \
+  IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/shared_memory" \
+  IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
+  "$DOCTOR" report solo 2>&1 || true)"
+grep -q '\[PASS\].*native Windows Bevy client selected' <<<"$interop_report" ||
+  { printf 'doctor did not discover interop outside PATH:\n%s\n' "$interop_report" >&2; exit 1; }
+
+# The adapter is reported from Bevy's own log, and software rendering is a
+# warning rather than a silent success. Reset Weston's log first: the Copy Mode
+# fixture above deliberately leaves a failure in it, and this run is about the
+# renderer, not the transport.
+: > "$FIXTURE/wslg/weston.log"
+printf '%s\n' 'INFO bevy_render::renderer: AdapterInfo { name: "llvmpipe (LLVM 19.1.7, 256 bits)", vendor: 0, device: 0, device_type: Cpu, driver: "llvmpipe", driver_info: "Mesa", backend: Vulkan }' \
+  > "$FIXTURE/game.log"
+software_report="$(env \
+  IDAPTIK_DIAG_IS_WSL=1 \
+  IDAPTIK_DIAG_SKIP_TOOLS=1 \
+  IDAPTIK_DIAG_DISPLAY=:0 \
+  IDAPTIK_DIAG_WSLG_DIR="$FIXTURE/wslg" \
+  IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/shared_memory" \
+  IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
+  IDAPTIK_DIAG_GAME_LOG="$FIXTURE/game.log" \
+  "$DOCTOR" report solo 2>&1 || true)"
+grep -q '\[WARN\].*bevy renderer.*llvmpipe' <<<"$software_report" ||
+  { printf 'doctor did not flag a software adapter:\n%s\n' "$software_report" >&2; exit 1; }
+
+printf '%s\n' 'INFO bevy_render::renderer: AdapterInfo { name: "NVIDIA GeForce RTX 4070 Laptop GPU", vendor: 4318, device: 10191, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "555.42", backend: Vulkan }' \
+  > "$FIXTURE/game.log"
+gpu_report="$(env \
+  IDAPTIK_DIAG_IS_WSL=1 \
+  IDAPTIK_DIAG_SKIP_TOOLS=1 \
+  IDAPTIK_DIAG_DISPLAY=:0 \
+  IDAPTIK_DIAG_WSLG_DIR="$FIXTURE/wslg" \
+  IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/shared_memory" \
+  IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
+  IDAPTIK_DIAG_GAME_LOG="$FIXTURE/game.log" \
+  "$DOCTOR" report solo 2>&1 || true)"
+grep -q '\[PASS\].*bevy renderer.*NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)' <<<"$gpu_report" ||
+  { printf 'doctor did not report the selected GPU:\n%s\n' "$gpu_report" >&2; exit 1; }
 
 healthy_dry_run="$(env \
   IDAPTIK_DIAG_IS_WSL=0 \

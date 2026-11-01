@@ -106,7 +106,9 @@ runtime-doctor-test:
 
 # Launcher/multiplayer-runtime fixture coverage: host/join URL formation,
 # spaces in checkout paths, environment overrides, readiness timeout, stale
-# PID, relay early exit, and cleanup (issue #102).
+# PID, relay early exit, and cleanup (issue #102); plus Windows-interop
+# discovery without cmd.exe on PATH, the --windows-client route, and renderer
+# evidence from the client log (software adapters must be named as such).
 launcher-fixture-test:
     bash tests/launcher_fixture_test.sh
 

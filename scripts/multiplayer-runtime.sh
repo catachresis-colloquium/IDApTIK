@@ -25,6 +25,25 @@ case "$CLIENT_PLATFORM" in
   *) printf 'error: unsupported IDAPTIK_CLIENT_PLATFORM %q\n' "$CLIENT_PLATFORM" >&2; exit 1 ;;
 esac
 
+# Windows interop discovery is shared with the launcher, doctor and installer.
+# The Windows seat is tracked through tasklist/taskkill, so this runtime needs a
+# runnable cmd.exe even when C:\Windows\System32 is absent from PATH.
+if [ -r "$REPO_DIR/scripts/windows-interop.sh" ]; then
+  # shellcheck source=scripts/windows-interop.sh
+  . "$REPO_DIR/scripts/windows-interop.sh"
+fi
+WINDOWS_CMD="cmd.exe"
+if [ "$CLIENT_PLATFORM" = "windows" ] && declare -F hp_windows_tool >/dev/null 2>&1; then
+  WINDOWS_CMD="$(hp_windows_tool cmd.exe 2>/dev/null || printf 'cmd.exe')"
+fi
+
+# cmd.exe dislikes a UNC working directory. /mnt/c/Windows is the usual answer,
+# but a custom mount root or a stripped container may not have it; run from /
+# rather than failing the whole seat over a diagnostics working directory.
+windows_cwd() {
+  if [ -d /mnt/c/Windows ]; then printf '/mnt/c/Windows'; else printf '/'; fi
+}
+
 PORT="${IDAPTIK_PORT:-4000}"
 SESSION_DEFAULT="ghost-lobby"
 
@@ -250,7 +269,7 @@ seat_url() {
 }
 
 windows_client_pid() {
-  (cd /mnt/c/Windows && cmd.exe /D /C tasklist \
+  (cd "$(windows_cwd)" && "$WINDOWS_CMD" /D /C tasklist \
     /FI "IMAGENAME eq idaptik-bevy.exe" /FO CSV /NH 2>/dev/null) |
     tr -d '\r' |
     sed -n 's/^"idaptik-bevy\.exe","\([0-9][0-9]*\)".*/\1/p' |
@@ -259,7 +278,7 @@ windows_client_pid() {
 
 windows_pid_is_running() {
   local pid="$1"
-  (cd /mnt/c/Windows && cmd.exe /D /C tasklist \
+  (cd "$(windows_cwd)" && "$WINDOWS_CMD" /D /C tasklist \
     /FI "PID eq $pid" /FO CSV /NH 2>/dev/null) |
     tr -d '\r' |
     grep -q "^\"idaptik-bevy.exe\",\"$pid\""
@@ -283,7 +302,7 @@ run_windows_client() {
 
   cleanup_windows_client() {
     if windows_pid_is_running "$pid"; then
-      (cd /mnt/c/Windows && cmd.exe /D /C taskkill /PID "$pid" /T /F >/dev/null 2>&1) || true
+      (cd "$(windows_cwd)" && "$WINDOWS_CMD" /D /C taskkill /PID "$pid" /T /F >/dev/null 2>&1) || true
     fi
   }
   trap cleanup_windows_client EXIT

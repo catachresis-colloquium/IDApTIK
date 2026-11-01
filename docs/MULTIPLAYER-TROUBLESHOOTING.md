@@ -78,6 +78,58 @@ Reopen the distribution and rerun `./launcher.sh --doctor`. Restart Windows if
 Copy Mode remains. Do not manually create `/mnt/shared_memory`: that can hide
 the symptom without restoring WSLg's host-backed transport.
 
+### The WSLg window opens and dies immediately
+
+Reproduced on this machine: Bevy selected the NVIDIA adapter with the `gl`
+backend and then failed during presentation with
+
+```
+Fallback system failed to choose present mode.
+This is a bug. Mode: Fifo, Options: []
+```
+
+(or `EGL: DRI2: failed to load driver`), well before any game logic ran. This
+is a WSLg surface/present-mode failure, not a game bug. Changing the present
+mode does not fix an empty capability list, and the GL override environment
+variables should not be treated as the fix. Hardware detection succeeding
+(`glxinfo` reporting D3D12/NVIDIA) proves only the OpenGL path: wgpu may still
+land on llvmpipe.
+
+The route that works is the native Windows client, which bypasses WSLg
+entirely. It was previously reachable only by exporting
+`IDAPTIK_CLIENT_PLATFORM=windows` before running the launcher; it is now a
+first-class flag:
+
+```sh
+./launcher.sh --solo --windows-client
+```
+
+The flag composes with `--host`, `--join` and `--auto`. Interop is discovered
+at `/mnt/c/Windows/System32`, so `cmd.exe` does not need to be on `PATH`, and it
+is proved by running `cmd.exe`, so a WSL config with interop disabled is not
+mistaken for a working one. Provision the cross-toolchain once with:
+
+```sh
+just windows-client-deps
+```
+
+When the solo client dies during surface setup, the launcher now says so and
+prints this exact command instead of repeating the same launch.
+
+### Which renderer did I actually get?
+
+Readiness is not evidence about the renderer. Since 0.5.0 the launcher prints
+the `AdapterInfo` line Bevy logs when it chooses an adapter, for example:
+
+```
+renderer: NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)
+```
+
+and labels software adapters (`llvmpipe`, `softpipe`, `SwiftShader`, `WARP`) as
+a warning. `./launcher.sh --status` prints the same line for the last run, and
+`./launcher.sh --doctor` reports both the OpenGL renderer and the adapter Bevy
+selected, which can disagree.
+
 Missing audio and software rendering are reported separately as degradations;
 they do not block play. `./launcher.sh --repair` installs pinned repository
 toolchains and can guide Tailscale bootstrap/authentication, but intentionally
