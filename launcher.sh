@@ -79,6 +79,9 @@ wslg_copy_mode_active() { hp_wslg_copy_mode_broken; }
 
 windows_interop_available() { hp_windows_interop; }
 
+# Validate an explicit Windows selection or select it automatically when WSLg
+# Copy Mode is broken and interop works. Other explicit selections are retained.
+# An invalid Windows request terminates the launcher.
 select_client_platform() {
   # An explicit request wins, but is still validated: the Windows client is a
   # Windows executable, so it needs WSL2 and working interop no matter who
@@ -107,16 +110,20 @@ build_sha() {
 # client got, so Vulkan-on-llvmpipe looked exactly like the discrete GPU until
 # the frame rate gave it away. Bevy logs the AdapterInfo it selected at INFO;
 # read that back rather than inferring anything from the build succeeding.
+# Print the first matching line from $1 (default $LOG_FILE); return 1 if the
+# log is unreadable or contains no match.
 renderer_line() {
   local log="${1:-$LOG_FILE}"
   [ -r "$log" ] || return 1
   grep -a -m1 'AdapterInfo' "$log" 2>/dev/null || return 1
 }
 
+# Print the quoted adapter name from an AdapterInfo line, if present.
 renderer_name() {
   sed -n 's/.*name: *"\([^"]*\)".*/\1/p' <<<"$1" | head -1
 }
 
+# Print the backend from an AdapterInfo line, if present.
 renderer_backend() {
   sed -n 's/.*backend: *\([A-Za-z0-9_-]*\).*/\1/p' <<<"$1" | head -1
 }
@@ -135,9 +142,10 @@ print_renderer() { # $1 = AdapterInfo line
   esac
 }
 
-# Blocking variant used once the solo client is up: wait briefly for the
-# adapter line, and fail if the client dies before it gets that far (the WSLg
-# presentation failure happens exactly here).
+# Wait up to IDAPTIK_RENDERER_WAIT seconds (default 6) for an adapter line.
+# Return 1 if the given process is no longer alive while waiting or, for a
+# non-Windows client, during the one-second check after the line appears.
+# A timeout without a line is reported and returns success.
 report_renderer() { # $1 = pid
   local pid="$1" waited=0 limit="${IDAPTIK_RENDERER_WAIT:-6}" line
   while [ "$waited" -lt "$limit" ]; do

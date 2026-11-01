@@ -268,6 +268,8 @@ seat_url() {
   esac
 }
 
+# Print the first Windows IDApTIK client PID, or no output if none is listed.
+# A tasklist failure propagates through the pipeline.
 windows_client_pid() {
   (cd "$(windows_cwd)" && "$WINDOWS_CMD" /D /C tasklist \
     /FI "IMAGENAME eq idaptik-bevy.exe" /FO CSV /NH 2>/dev/null) |
@@ -276,6 +278,8 @@ windows_client_pid() {
     head -1
 }
 
+# Return success if tasklist identifies $1 as an IDApTIK client PID. A
+# tasklist failure also returns nonzero.
 windows_pid_is_running() {
   local pid="$1"
   (cd "$(windows_cwd)" && "$WINDOWS_CMD" /D /C tasklist \

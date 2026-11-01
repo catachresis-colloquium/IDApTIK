@@ -88,8 +88,10 @@ hp_windows_tool() {
   return 1
 }
 
-# True when this WSL2 session can actually execute Windows programs.
-# Cached per process: the probe starts cmd.exe, which is cheap but not free.
+# Return success when the WSL detection and cmd.exe execution probe succeed.
+# IDAPTIK_DIAG_WINDOWS_INTEROP overrides the verdict. Otherwise the verdict is
+# cached in the current shell; the probe times out after 10 seconds if timeout
+# is available.
 hp_windows_interop() {
   if [ -n "${IDAPTIK_DIAG_WINDOWS_INTEROP:-}" ]; then
     [ "$IDAPTIK_DIAG_WINDOWS_INTEROP" = "1" ]
@@ -126,7 +128,8 @@ hp_windows_interop() {
   return 1
 }
 
-# Explain *why* interop is unavailable, for actionable failure messages.
+# Print a likely reason interop is unavailable, based on WSL detection and
+# cmd.exe discovery. This function does not run the interop probe itself.
 hp_windows_interop_reason() {
   if ! hp_is_wsl; then
     printf 'this is not a WSL2 session'
@@ -137,9 +140,8 @@ hp_windows_interop_reason() {
   fi
 }
 
-# WSLg's Copy Mode failure: Weston could not open the host-backed shared
-# memory, so the window transport is unsafe. Mirrors the launcher's original
-# inline check, now shared with install.sh.
+# Return success if the shared-memory directory is missing or the readable
+# Weston log reports a shared-memory open failure; return failure otherwise.
 hp_wslg_copy_mode_broken() {
   local wslg_dir="${IDAPTIK_DIAG_WSLG_DIR:-/mnt/wslg}"
   local shared_memory="${IDAPTIK_DIAG_SHARED_MEMORY:-/mnt/shared_memory}"
