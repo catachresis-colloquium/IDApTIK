@@ -16,6 +16,7 @@ use idaptik_core::scenario::{GhostLobbySim, TICK_DT, ghost_lobby, log_view};
 use idaptik_tui::input::InputState;
 use idaptik_tui::keymap::map_key;
 use idaptik_tui::render;
+use idaptik_tui::tutorial;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use std::io;
@@ -34,8 +35,12 @@ pub fn run(cfg: RunConfig, seed: u32) -> io::Result<()> {
     let mut sim = GhostLobbySim::new(ghost_lobby(), cfg, seed)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("{e:?}")))?;
     let mut log: Vec<LogLine> = Vec::new();
+    let mut tutor = tutorial::Tutor::new();
+    // The brief comes before the first event: a newcomer should meet the
+    // reason for the trip before the room's own chatter.
+    log.extend(tutorial::brief(sim.definition(), 0, 0.0));
     let startup = sim.drain_events();
-    ingest(&startup, &sim, &mut log);
+    ingest(&startup, &sim, &mut log, &mut tutor);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -50,7 +55,7 @@ pub fn run(cfg: RunConfig, seed: u32) -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_loop(&mut terminal, &mut sim, &mut log, enhanced);
+    let result = run_loop(&mut terminal, &mut sim, &mut log, &mut tutor, enhanced);
 
     if enhanced {
         let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
@@ -65,6 +70,7 @@ fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     sim: &mut GhostLobbySim,
     log: &mut Vec<LogLine>,
+    tutor: &mut tutorial::Tutor,
     enhanced: bool,
 ) -> io::Result<()> {
     let mut input = InputState::with_keyboard_enhancement(enhanced);
@@ -100,15 +106,24 @@ fn run_loop(
                 .any(|e| matches!(e, SimEvent::Restarted { .. }))
             {
                 log.clear();
+                // A restart wipes the log, so it must re-teach the mission or
+                // the retry loop loses the framing that made the first attempt
+                // legible.
+                log.extend(tutorial::brief(sim.definition(), sim.current_tick(), sim.time()));
             }
-            ingest(&events, sim, log);
+            ingest(&events, sim, log, tutor);
             acc -= TICK_DT;
         }
     }
 }
 
 /// Convert freshly-emitted events into rendered log lines (a pure view).
-fn ingest(events: &[SimEvent], sim: &GhostLobbySim, log: &mut Vec<LogLine>) {
+fn ingest(
+    events: &[SimEvent],
+    sim: &GhostLobbySim,
+    log: &mut Vec<LogLine>,
+    tutor: &mut tutorial::Tutor,
+) {
     let tick = sim.current_tick();
     let t = sim.time();
     for e in events {
@@ -116,6 +131,7 @@ fn ingest(events: &[SimEvent], sim: &GhostLobbySim, log: &mut Vec<LogLine>) {
             log.push(line);
         }
     }
+    tutor.observe(events, tick, t, log);
     if log.len() > 500 {
         let drop = log.len() - 500;
         log.drain(0..drop);
