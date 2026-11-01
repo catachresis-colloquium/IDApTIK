@@ -34,10 +34,23 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Pinned identically to developer/tools, which is where this was measured.
-  # A tag would be a moving target under sha_pinning_required; the commit is not.
-  CREUSOT_REF: 318615be3b8bbc60d1f6d52469ba5c0bdebed4f1
-  CREUSOT_VERSION: v0.13.0
+  # MEASURED, then corrected. #212 pinned the Creusot that developer/tools had
+  # been measured with, v0.13.0, while `crates/idaptik-kernel` depends on
+  # creusot-std 0.14.0. Creusot refuses that pairing by design:
+  #
+  #     Error: creusot-std is newer than Creusot.
+  #         creusot     0.13.0
+  #         creusot-std 0.14.0
+  #
+  # so "Translate the kernel" failed on every run since. The crate is the
+  # thing the proofs are written against, and the kernel's dependency is
+  # already in Cargo.lock; the toolchain is what moves. v0.14.0 is the release
+  # that pairs with creusot-std 0.14.0, and it declares nightly-2026-08-03
+  # below. A tag would be a moving target under sha_pinning_required; the
+  # commit is not. The superseded pin was
+  # 318615be3b8bbc60d1f6d52469ba5c0bdebed4f1 (v0.13.0).
+  CREUSOT_REF: 65349025c67e69fcd7479f1f420fa5904f69bc27
+  CREUSOT_VERSION: v0.14.0
 
 jobs:
   ledgers:
@@ -71,9 +84,9 @@ jobs:
       # pinned Creusot ref declares, not a choice made here.
       - name: Install Creusot's rustc
         run: |
-          rustup toolchain install nightly-2026-06-22 \
+          rustup toolchain install nightly-2026-08-03 \
             --component rustfmt --component rustc-dev --component llvm-tools
-          rustup default nightly-2026-06-22
+          rustup default nightly-2026-08-03
 
       # The why3/prover bootstrap is the expensive part (opam switch + four
       # provers). Keyed on the Creusot ref, so a pin bump rebuilds and nothing
@@ -117,7 +130,8 @@ jobs:
           # so setting that variable drops the GUI and the entire GTK stack with
           # it. why3, why3find and the four provers -- everything a headless
           # proof actually uses -- are unaffected. This is how Creusot's own CI
-          # builds, and it is the ONE difference from the developer/tools
+          # builds, and it is the ONE difference from a developer install that
+          # wants the GUI
           # install, which has the IDE because a human might want it.
           opam var in-creusot-ci=true --global
           # Belt and braces: should any other package carry a system dependency,

@@ -60,6 +60,14 @@ Existing evidence inputs:
 - `.github/workflows/creusot-proof.yml`: Creusot source commit
   `318615be3b8bbc60d1f6d52469ba5c0bdebed4f1`, version 0.13.0,
   proof nightly `nightly-2026-06-22`.
+  Superseded on 2026-11-01: the pin is now
+  `65349025c67e69fcd7479f1f420fa5904f69bc27`, version 0.14.0, proof nightly
+  `nightly-2026-08-03`. That is a toolchain repair, not a baseline change --
+  the recorded pairing could not translate the kernel at all, because
+  `idaptik-kernel` depends on creusot-std 0.14.0 and Creusot refuses to run
+  when the crate is newer than the toolchain ("creusot-std is newer than
+  Creusot"). Workstream A0's instruction to isolate toolchain repair holds:
+  the correction is one commit, with the failure text quoted in the workflow.
 - Normal project toolchain: Rust 1.97.1. Preserve separate toolchains; do not
   assume the proof nightly can compile the entire Bevy dependency graph.
 - `crates/CREUSOT-CLASSIFICATION.tsv`, `crates/CREUSOT-PROOF-DEBT.tsv`,
