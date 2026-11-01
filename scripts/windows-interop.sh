@@ -75,6 +75,11 @@ hp_windows_system32() {
 # preferring PATH and falling back to the Windows system directory.
 hp_windows_tool() {
   local name="$1" path dir
+  if [ -n "${IDAPTIK_WINDOWS_SYSTEM32:-}" ]; then
+    [ -f "$IDAPTIK_WINDOWS_SYSTEM32/$name" ] || return 1
+    printf '%s/%s' "$IDAPTIK_WINDOWS_SYSTEM32" "$name"
+    return 0
+  fi
   if path="$(command -v "$name" 2>/dev/null)" && [ -n "$path" ]; then
     printf '%s' "$path"
     return 0
