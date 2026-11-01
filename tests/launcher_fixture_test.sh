@@ -346,7 +346,7 @@ host_out="$SANDBOX/host.log"
 run_env --bg "$LAUNCHER" --host --role hacker >"$host_out" 2>&1 &
 host_launcher=$!
 if wait_for "$host_out" "game process: PID"; then
-  note "ok (clean): the host flow reaches READY FOR JOINERS"
+  note "ok (clean): the host flow reaches LOCAL readiness only"
 else
   broke "host flow never reached readiness:
 $(tail -30 "$host_out")
@@ -356,12 +356,12 @@ fi
 kill "$host_launcher" 2>/dev/null || true
 wait "$host_launcher" 2>/dev/null || true
 
-if grep -qF "joiner address: 192.0.2.42:4123" "$host_out"; then
-  note "ok (clean): joiner address honours the LAN route and IDAPTIK_PORT"
+if grep -qF "local joiner address: 127.0.0.1:4123" "$host_out"; then
+  note "ok (clean): joiner address is loopback only and honours IDAPTIK_PORT"
 else
   broke "joiner address line malformed"
 fi
-if grep -qF "./launcher.sh --join 192.0.2.42:4123 --role infiltrator" "$host_out"; then
+if grep -qF "./launcher.sh --join 127.0.0.1:4123 --role infiltrator" "$host_out"; then
   note "ok (clean): the shared join command names the peer role"
 else
   broke "shared join command malformed"
@@ -372,7 +372,7 @@ else
   broke "host seat args malformed:
 $(cat "$SEAT_ARGS")"
 fi
-if grep -qF 'host|192.0.2.42|4123|ghost-lobby|hacker' "$READY_FILE" 2>/dev/null; then
+if grep -qF 'host|127.0.0.1|4123|ghost-lobby|hacker' "$READY_FILE" 2>/dev/null; then
   note "ok (clean): host readiness record is complete"
 else
   broke "host readiness record malformed"
@@ -413,11 +413,31 @@ else
 $post_stop"
 fi
 
+# The default test relay may NOT make a remotely shareable readiness claim.
+if grep -qF 'READY FOR LOCAL JOINER ONLY' "$host_out" &&
+   ! grep -qF 'READY FOR JOINERS' "$host_out" &&
+   ! grep -qF '192.0.2.42:4123' "$host_out"; then
+  note "ok (clean): test host never advertised the fixture LAN address"
+else
+  broke "test host advertised insecure remote readiness"
+fi
+if grep -qF 'http: [ip: {127, 0, 0, 1}, port: port]' "$RUNTIME"; then
+  note "ok (clean): test relay is forced to bind loopback"
+else
+  broke "test relay bind is not visibly restricted to loopback"
+fi
+
 # --- relay failure fixtures ---------------------------------------------------
 
 say 'relay failure fixtures:'
 
 kill_stragglers
+
+# A pre-existing answering endpoint must never be silently trusted.
+touch "$RELAY_UP_FLAG"
+expect_fail "an unknown answering relay cannot be reused" "refusing to reuse an unverified relay" \
+  run_env IDAPTIK_INTERNAL_RUNTIME=1 "$RUNTIME" host --role hacker
+rm -f "$RELAY_UP_FLAG"
 
 # Early exit: the relay process dies during startup, with a localizing
 # diagnosis in the relay log tail.

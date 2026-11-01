@@ -6,6 +6,21 @@ Known, reproduced failure modes of the multiplayer relay and launch path.
 player-facing launcher target. Add to this file when a new failure is
 confirmed; don't speculate about ones that haven't been hit.
 
+## Current security restriction: test relay is local-only
+
+The launcher uses Burble's offline-capable **test** environment, which carries
+test-only secrets and legacy guest/role joins without secure exclusive-seat
+admission. It must not be exposed on a LAN, tailnet, or the public internet.
+The host relay therefore binds **127.0.0.1 only**, refuses to reuse an
+unverified listener, and prints **READY FOR LOCAL JOINER ONLY**. A second
+player must run on the same computer. Do **not** forward this port.
+
+To restore network play, a separate properly authenticated production-capable
+host profile is required, with exclusive role admission and negative security
+tests. A VPN alone is not a substitute for session-level authorisation. See
+IDApTIK issue #211 and Burble issue #254. The local-only restriction does not
+alter the headless CI loopback gate.
+
 ## A peer cannot join even though the relay is up
 
 ### The shared address is unreachable (WSL2 NAT)
@@ -29,8 +44,8 @@ A user hit this directly: shared the printed "LAN" address with a remote
 player, who got `ended_no_peer` because the address was never reachable in
 the first place — the relay itself was working fine.
 
-The launcher now detects this case (`is_wsl` / `wsl_natted` in its internal
-multiplayer runtime) and prints a warning plus the two routes
+Earlier remote-hosting launcher revisions detected this case (`is_wsl` /
+`wsl_natted`) and printed a warning plus the two routes
 that actually work — a Tailscale/WireGuard tunnel (recommended), or a
 router port-forward *combined with* a Windows `netsh interface portproxy`
 hop into WSL2. WSL2 **mirrored** networking (Windows 11 22H2+) is unaffected
@@ -63,8 +78,8 @@ with an input/output error, a WSL-hosted Bevy window is unsafe. When Windows
 interop, the `x86_64-pc-windows-gnu` Rust target, and the MinGW linker are
 available, the launcher automatically builds and starts a native Windows Bevy
 client instead. The Phoenix relay and Tailscale endpoint remain in WSL; the
-local Windows client reaches that relay through `127.0.0.1`, while a remote
-peer uses the displayed tailnet address.
+local Windows client reaches that relay through `127.0.0.1`. The current
+test profile does **not** advertise a tailnet address for remote players.
 
 If that fallback is unavailable, launch remains blocked. From Windows
 PowerShell as Administrator run:
@@ -85,16 +100,16 @@ cannot restart WSL or alter Windows GPU drivers from inside the session.
 
 ## Host/join readiness choreography
 
-The host must not invite the second player until the launcher prints the green
-`READY FOR JOINERS` result. It means diagnostics passed, the Bevy build
-completed, the relay answered its health probe, a peer-reachable address was
-found, and the host seat is launching. Under WSL2 NAT, an authenticated
-Tailscale route is required.
+The host must not start the second **local** player until the launcher prints
+`READY FOR LOCAL JOINER ONLY`. This means startup diagnostics and the Bevy
+build have completed, and the loopback test relay has answered. It does **not**
+claim authenticated remote-seat admission, application delivery or a durable
+journal. The other player may join on the same computer through
+`127.0.0.1:PORT`. Remote addresses must not be shared or port-forwarded.
 
-The joiner should start only after receiving that message. Their launcher
-performs the same local checks and probes the exact host/port. It prints
-`READY — JOINING HOST NOW` only after the local build is complete and the relay
-answers. A cross is blocking; a warning is a disclosed degradation.
+The local joiner performs its own checks and probes the exact loopback port.
+It prints `READY — JOINING HOST NOW` only after the local build and relay
+probe. A cross is blocking; a warning is a disclosed degradation.
 
 The main launcher builds and starts Bevy in the background. It reports the
 startup log location when launching; by default this is
