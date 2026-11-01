@@ -16,6 +16,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -r "$REPO_DIR/scripts/windows-interop.sh" ]; then
   # shellcheck source=scripts/windows-interop.sh
   . "$REPO_DIR/scripts/windows-interop.sh"
+else
+  printf 'error: shared launch library missing: %s/scripts/windows-interop.sh (incomplete checkout)\n' "$REPO_DIR" >&2
+  exit 1
 fi
 
 MODE="${1:-report}"
