@@ -148,6 +148,8 @@ struct SynthWitness {
 }
 
 impl SynthWitness {
+    /// Returns the first unusual-noise observation matching the diversion's
+    /// exact position and intensity, or `None` if there is no match.
     fn heard_diversion(&self) -> Option<&Observation> {
         self.observations.iter().find(|o| {
             o.kind == ObservationKind::UnusualNoise
@@ -161,6 +163,7 @@ impl SynthWitness {
 pub struct InfraOrdersScenario;
 
 impl Scenario for InfraOrdersScenario {
+    /// Describes EW-06's bounded inputs and expected acceptance and observation trail.
     fn spec(&self) -> ScenarioSpec {
         ScenarioSpec {
             id: ID,
@@ -186,6 +189,14 @@ impl Scenario for InfraOrdersScenario {
         }
     }
 
+    /// Runs EW-06 and returns its checks, evidence, and overall result.
+    /// Failed observation and acceptance checks are recorded in the result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the fixture or scripted setup cannot be built, decoded, or
+    /// accepted, an intent cannot be proposed, or the shadow run cannot reach
+    /// the synth tick.
     fn run(&self) -> ScenarioResult {
         let spec = self.spec();
         let mut harness = IsolatedHarness::new(ID, 777_006);
