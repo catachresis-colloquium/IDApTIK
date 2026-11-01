@@ -238,6 +238,31 @@ jobs:
       - name: The kernel's own tests
         run: cargo test -p idaptik-kernel --lib
 
+      # A translation error is currently unreadable from a pull request: the
+      # step fails, the run carries a bare "Process completed with exit code 1",
+      # and the job log lives on storage the reviewer cannot open. The Pons and
+      # arena-feedback workflows already publish their evidence this way, so a
+      # red proof reads like a red proof instead of a shrug. Runs on success
+      # too, because "no output" is itself the thing a maintainer needs to see
+      # when a prover dies silently.
+      - name: Publish the prover's own output for every outcome
+        if: always()
+        run: |
+          {
+            echo '## Creusot'
+            for log in coma.log prove.log mutant-coma.log mutant.log restored.log; do
+              if test -f "$log"; then
+                echo "### ${log%.log}"
+                echo '```text'
+                tail -40 "$log"
+                echo '```'
+              fi
+            done
+            if ! test -f coma.log; then
+              echo 'The kernel never reached a translator run. Inspect the preceding steps.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Criterion (c) asks for the evidence to be retained as a build artefact.
       # `verif/` is committed as well -- that is the durable half, reviewable in
       # the pull request instead of expiring with the run -- but the RUN's own
