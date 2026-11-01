@@ -45,7 +45,8 @@ for id in \
     EW-02-impossible-movement-invalid-targets \
     EW-03-conflicting-epochs \
     EW-04-reconnect-obsolete-messages \
-    EW-05-delayed-withheld-observations; do
+    EW-05-delayed-withheld-observations \
+    EW-06-infrastructure-orders-and-observations; do
     test -f "$WORK/artifacts/$id/result.json" \
         || { echo "FAIL: missing replay artifact for $id" >&2; exit 1; }
 done

@@ -191,8 +191,10 @@ surfacing them to Billy as `equipment_failure`/`darkness` observations is
 named follow-up work, not a redesign. The weevil corpus carries the
 observation trail today: scenario EW-06 asserts that an accepted companion
 order returns to the player-visible log only as `GuardObserved`
-observations, and evaluates the `observations()` contract where the guard
-stands.
+observations, and evaluates the complete `actor_observations()` contract
+where the guard stands. Its regression controls keep the original quiet,
+out-of-range setup silent and distinguish companion noise from the free
+`observations()` function called without `extra_noise` (issue #191).
 
 **Alternatives considered.** Giving guards direct reads of infrastructure
 state (rejected: omniscience — the brief, and the game, is about perception).

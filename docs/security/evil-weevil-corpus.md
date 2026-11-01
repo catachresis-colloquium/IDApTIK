@@ -1,6 +1,6 @@
 # Evil Weevil corpus — methodology, results, and deployment-mode gaps
 
-- Date: 2026-10-24 (updated 2026-10-25: EW-06 added)
+- Date: 2026-10-24 (updated 2026-11-01: EW-06 observation premises and attribution)
 - Corpus version: `2` (`CORPUS_VERSION` in `crates/idaptik-evil-weevil/src/scenarios/mod.rs`)
 - Report schema: `idaptik-evil-weevil-corpus-v1`
 - Decision record: [ADR-0017](../adr/0017-evil-weevil-adversarial-testing-adapter.md)
@@ -196,32 +196,55 @@ actually fires.
   watermark rejects stale orders, only an accepted order moves the sim — and
   the consequences come back through the canonical log *as observations*,
   never as a leak of the hidden order.
-- **Bounded sequence (6 phases):** commit the infiltrator watermark through
-  tick 1; a `Mole` synth order from the hacker seat through the model relay;
-  a `Power` inspect order from the same seat through the relay; the identical
-  `Mole` order at the frontier on the infiltrator peer path, direct to the
-  production validator; commit the horizon through tick 3 and advance (the
-  order applies, the guard observes); a `Mole` order below the watermark.
+- **Bounded sequence (7 declared inputs):** commit the infiltrator watermark
+  through tick 1; propose a `Mole` synth and a `Power` inspect from the hacker
+  seat through the model relay; submit the same `Mole` synth at frontier
+  tick 2 on the infiltrator peer path, direct to the production validator;
+  schedule `ForceCrisis` and a silent underground `MoleOp::MoveTo` at tick 2,
+  then the scene synth at tick 81; commit through tick 85 and advance in
+  sampling rounds; finally replay a `Mole` order below the watermark.
+- **Observation premises (issue #191):** the shared live-seat fixture is
+  pointed at `pump-house`, with its pause/extract tail removed and horizon
+  raised. A shadow lockstep run replays the same seed, script, frontier
+  synth probe and crisis frame to find Billy's actual position at tick 81;
+  it does not assume the crisis assignment is where he remains. The mole
+  target is the centre of the intersection between Billy's hearing radius
+  and the mole's reachable travel band, with a corridor-width check. The
+  production run then checks the predicted position, actual source distance
+  and intensity against Billy's own archetype stats. No hearing or phase
+  gate is widened, and no simulation state is injected.
 - **Expected / observed:**
-  - `mole-order-refused-at-relay` — the pinned burble profile carries no
-    `Mole` tag; the refusal fails closed and is recorded as a role violation.
-  - `power-order-refused-at-relay` — the same for `Power`, whose per-op seat
-    a tag-keyed table could not route even once extended.
-  - `frontier-mole-order-accepted` — the lockstep validator accepts the
-    frontier order for the peer seat on the pump-house floor; the horizon
-    commit then lets the run execute it.
-  - `mole-order-applied-by-sim` / `no-denial-for-legitimate-order` — the
-    order reaches the hosted companion as a typed `SynthSoundPlayed` event;
-    no `MoleDenied`.
-  - `guard-observed-the-diversion` — Billy's own senses turn the diversion
-    into a `GuardObserved(UnusualNoise)` event: the player-visible evidence
-    for the observation principle.
-  - `perception-contract-lists-the-noise` — `observations()` at Billy's
-    position, with the archetype's hearing, lists the same noise from
-    canonical state alone.
+  - `mole-order-refused-at-relay` / `power-order-refused-at-relay` — the
+    pinned burble profile carries neither tag; both refusals fail closed.
+    `Power` additionally carries its seat per-op, which a tag-keyed table
+    cannot route without splitting the verb.
+  - `frontier-mole-order-accepted` / `scene-frame-accepted-at-*` — the
+    production lockstep validator accepts the peer-seat frames.
+  - `mole-order-applied-by-sim` / `no-denial-for-legitimate-order` — a typed
+    `SynthSoundPlayed` event and its canonical diversion are sampled after
+    command tick 81, not after the earlier acceptance probe; no `MoleDenied`.
+  - `guard-on-shift-when-the-synth-plays`,
+    `shadow-position-matches-billy-at-synth`, and
+    `diversion-source-within-billys-hearing` — the observation premises hold
+    in the production run, not only in the shadow prediction.
+  - `guard-observed-the-diversion` — exactly one matching
+    `GuardObserved(UnusualNoise)` event is emitted on the scene synth tick.
+  - `perception-contract-lists-the-noise` — `sim.actor_observations()` at
+    Billy's position lists a noise matching the diversion's source position
+    and intensity. The free `infra::observations()` function is not a
+    substitute when called with empty `extra_noise`: companion noise enters
+    through the sim method.
+  - `only-the-scene-diversion-announced` — the acceptance probe cannot
+    supply the witness for the later order.
   - `stale-mole-order-rejected` — below the watermark the new verbs are
     refused like any other.
   - `relay-accounting` — two refusals, zero relays, zero drops.
+- **Negative controls:** `tests/infra_orders.rs` replays the original quiet,
+  480-unit setup and asserts silence; forces a crisis while still out of
+  range and asserts that presence alone is insufficient; then walks the mole
+  to Billy's seeded snack position and asserts that the sim method carries
+  the audible diversion while the free function with empty `extra_noise`
+  does not. A third test pins the source-specific corpus checks by name.
 
 
 ## 3. Results, defects, and the honesty boundary
@@ -229,24 +252,24 @@ actually fires.
 ### What is demonstrated
 
 All six scenarios pass against the real production validators in this
-repository, and the 14 tests in `tests/corpus.rs` + `tests/regression.rs`
-plus the crate's unit tests pin the guarantees. The corpus report records,
+repository. The corpus, regression and dedicated EW-06 observation tests,
+plus the crate's unit tests, pin the guarantees. The corpus report records,
 per run: pass/fail per named check, full telemetry, observer classifications
 with measured false-positive/false-negative counts (zero/zero corpus-wide),
 queue-depth and wire-message peaks, and redaction counts.
 
-### Demonstrated defect (one)
+### Demonstrated cross-repository gaps
 
-**Burble idaptik profile lacks the `Signal` command entry.** ADR-0012's
-signal verbs exist in the client routing table (`envelope::seat_for` handles
-`Command::Signal`), but the pinned burble `command_roles()` carries no
-`Signal` tag, so the live relay refuses such frames as unknown commands.
-Evidence: `RelayModel::client_tags_missing_from_relay()` returns exactly
-`["Signal"]` under a regression test that also asserts every other
-client-routed tag is present, and the real-relay leg includes a frame that
-expects the refusal. If burble adds the entry, the pin fails and the finding
-must be re-evaluated rather than silently aging. This is a
-cross-repository drift defect, not a host-validator defect.
+**Burble's idaptik profile lacks `Signal`, `Mole` and `Power`.** The client
+routing table handles these verbs, but the pinned burble `command_roles()`
+carries none of those tags, so the live relay refuses them as unknown
+commands. Evidence: `RelayModel::client_tags_missing_from_relay()` returns
+exactly `["Signal", "Mole", "Power"]` under a regression test; EW-06 drives
+the `Mole` and `Power` refusals, and the real-relay leg covers `Signal`.
+`Power` also needs per-op seat routing rather than a single tag-level seat.
+If burble adds an entry, the pin fails and the finding must be re-evaluated
+rather than silently aging. These are cross-repository gaps, not defects in
+the host validator.
 
 ### Hypotheses and predicate-only coverage (not claimed as demonstrated end-to-end)
 
