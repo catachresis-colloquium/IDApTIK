@@ -155,22 +155,27 @@ toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 
 # Run every offline shell fixture suite (Rust and Elixir gates remain separate).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test pons-scan-test pons-summary-test secret-scan-test
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test pons-scan-test pons-summary-test secret-gate-test
 
 must-check-test:
     bash tests/must_check_test.sh
 
-# The secret gate's control: plant a secret, delete it, warm the cache, change
-# the rules -- and require the verdict to change in every case. Offline, using
-# tests/fixtures/fake-gitleaks.sh unless IDAPTIK_SECRET_SCANNER is set.
-secret-scan-test:
+# Control for the CI secret gate (scripts/secret_scan.sh): plant a secret,
+# delete it, warm the cache, change the rules -- and require the verdict to
+# change in every case. Offline, using tests/fixtures/fake-gitleaks.sh unless
+# IDAPTIK_SECRET_SCANNER is set.
+#
+# NOT `secret-scan`: that recipe is the trufflehog history sweep above, and the
+# pre-push hook runs the same tool. Two different tools on purpose -- see
+# docs/dev-notes/secret-scan-content-cache-2026-11-01.md.
+secret-gate-test:
     bash tests/secret_scan_self_test.sh
 
-# Scan this repository's whole history for secrets. Content-addressed: only
-# blobs not already proven clean under the current scanner+rules are scanned,
-# so a warm run is a fraction of a second. Needs `gitleaks` or
+# The CI secret gate locally: every blob in history, content-addressed, so only
+# blobs not already proven clean under the current scanner+rules are scanned
+# and a warm run is a fraction of a second. Needs `gitleaks` or
 # IDAPTIK_SECRET_SCANNER; the ledger lives in .cache/secret-scan.
-secret-scan:
+secret-gate:
     ./scripts/secret_scan.sh --cache .cache/secret-scan
 
 # Offline fixtures for scripts/pons_scan.sh: staged-inventory selection and the
