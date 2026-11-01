@@ -9,7 +9,7 @@ use crate::record::{
 };
 use crate::schema::{self, BLOBS, CHECKPOINTS, COMMANDS, META, SESSIONS};
 use idaptik_core::scenario::{Buttons, Command, GhostLobbySim, RuntimeSnapshot, fold};
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
