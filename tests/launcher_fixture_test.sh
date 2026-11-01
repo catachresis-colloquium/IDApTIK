@@ -632,6 +632,33 @@ grep -q -- 'launcher.sh __run-solo' <<<"$dry" &&
   broke "--windows-client broke solo command formation:
 $dry"
 
+# The modifier can precede the mode or occur between its arguments. The
+# alias must preserve the requested host/join command and its role.
+dry="$(run_env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --wsl-windows --host --role hacker 2>&1)" ||
+  broke "Windows host dry run exited nonzero:
+$dry"
+if grep -qF 'DRY RUN: IDAPTIK_CLIENT_PLATFORM=windows' <<<"$dry" &&
+   grep -qF 'multiplayer-runtime.sh host --role hacker' <<<"$dry"; then
+  note "ok (clean): the Windows alias composes with host and its role"
+else
+  broke "Windows host command malformed:
+$dry"
+fi
+touch "$RELAY_UP_FLAG"
+dry="$(run_env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  IDAPTIK_LAUNCHER_DRY_RUN=1 "$LAUNCHER" --join 192.0.2.42:4123 --windows-client --role infiltrator 2>&1)" ||
+  broke "Windows join dry run exited nonzero:
+$dry"
+if grep -qF 'DRY RUN: IDAPTIK_CLIENT_PLATFORM=windows' <<<"$dry" &&
+   grep -qF 'multiplayer-runtime.sh join 192.0.2.42:4123 --role infiltrator' <<<"$dry"; then
+  note "ok (clean): the Windows modifier composes with join and its role"
+else
+  broke "Windows join command malformed:
+$dry"
+fi
+rm -f "$RELAY_UP_FLAG"
+
 # Automatic path: broken WSLg Copy Mode plus discovered interop, with no
 # cmd.exe anywhere on PATH.
 dry="$(run_env \
