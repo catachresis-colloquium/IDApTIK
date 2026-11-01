@@ -243,15 +243,16 @@ jobs:
       # and the job log lives on storage a reviewer cannot open. A gate that
       # reports red without a reason is nearly as expensive as no gate.
       #
-      # Two channels, both already used elsewhere in this repository: the step
-      # summary for the run UI, and ::error:: annotations -- which the checks
-      # API returns to anything that can read a pull request -- for the lines
-      # that explain the verdict. Annotations are capped, so the error lines
-      # come first and the tail is the fallback.
+      # Two channels, both already used elsewhere in this repository: a step
+      # summary for the run UI, and ::error:: annotations, which the checks API
+      # returns to anything that can read a pull request. They are separate
+      # steps because the summary is wanted on success too (an empty one is
+      # itself evidence) while an error annotation on a green run would be a
+      # lie.
       - name: Publish the prover's own output for every outcome
         if: always()
         run: |
-          set -uo pipefail
+          set +e
           {
             echo '## Creusot'
             for log in coma.log prove.log mutant-coma.log mutant.log restored.log; do
@@ -264,13 +265,22 @@ jobs:
             done
             test -f coma.log || echo 'The kernel never reached a translator run.'
           } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit 0
 
+      # Runners execute `run:` under `bash -e -o pipefail`, where an empty grep
+      # or a SIGPIPE'd `head` aborts the step before it reports anything --
+      # precisely the failure this step exists to remove. So: opt out of `-e`,
+      # make every selection failure-tolerant, and end on an explicit success.
+      - name: Annotate the proof failure with the prover's own words
+        if: failure()
+        run: |
+          set +e
           announce() {
             log="$1"
             test -f "$log" || return 0
-            picked="$(grep -E '(^| )error(\[|:)' "$log" | head -n 6)"
+            picked="$(grep -E '(^| )error(\[|:)' "$log" | head -n 6 || true)"
             if test -z "$picked"; then
-              picked="$(tail -n 6 "$log")"
+              picked="$(tail -n 6 "$log" || true)"
             fi
             while IFS= read -r line; do
               test -n "$line" || continue
@@ -278,7 +288,9 @@ jobs:
             done <<< "$picked"
           }
           announce coma.log
+          announce prove.log
           announce mutant-coma.log
+          announce mutant.log
           test -f coma.log || echo '::error::the kernel never reached a translator run'
           exit 0
 
