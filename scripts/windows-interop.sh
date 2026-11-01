@@ -67,7 +67,12 @@ hp_windows_system32() {
   fi
 
   [ -n "$dir" ] || return 1
+  # Export the resolved directory: callers resolve it inside `$(...)`, which is
+  # a subshell, and an unexported cache is invisible there. Without this the
+  # wslpath fallback re-runs on every tool lookup and a later pin change makes
+  # a subshell disagree with the shell that already resolved a directory.
   HP_WINDOWS_SYSTEM32_CACHE="$dir"
+  export HP_WINDOWS_SYSTEM32_CACHE
   printf '%s' "$dir"
 }
 
@@ -75,11 +80,10 @@ hp_windows_system32() {
 # preferring PATH and falling back to the Windows system directory.
 hp_windows_tool() {
   local name="$1" path dir
-  if [ -n "${IDAPTIK_WINDOWS_SYSTEM32:-}" ]; then
-    [ -f "$IDAPTIK_WINDOWS_SYSTEM32/$name" ] || return 1
-    printf '%s/%s' "$IDAPTIK_WINDOWS_SYSTEM32" "$name"
-    return 0
-  fi
+  # PATH first, then the Windows system directory. An explicit
+  # IDAPTIK_WINDOWS_SYSTEM32 pin does not short-circuit this order: it only
+  # decides which directory counts as the system directory, so a machine whose
+  # PATH already carries interop keeps using it.
   if path="$(command -v "$name" 2>/dev/null)" && [ -n "$path" ]; then
     printf '%s' "$path"
     return 0
@@ -127,9 +131,11 @@ hp_windows_interop() {
 
   if [ "$probe_ok" -eq 1 ]; then
     HP_WINDOWS_INTEROP_CACHE=1
+    export HP_WINDOWS_INTEROP_CACHE
     return 0
   fi
   HP_WINDOWS_INTEROP_CACHE=0
+  export HP_WINDOWS_INTEROP_CACHE
   return 1
 }
 
