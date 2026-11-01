@@ -135,6 +135,41 @@ WSLPATH
 )
 : > "$FIXTURE/wslg/weston.log"
 
+# Exercise both branches of the probe's timeout handling without waiting ten
+# seconds. Keep PATH isolated so the result cannot depend on the host tools.
+mkdir -p "$FIXTURE/no-timeout" "$FIXTURE/timeout-bin"
+(
+  unset IDAPTIK_DIAG_WINDOWS_INTEROP
+  . "$REPO_DIR/scripts/windows-interop.sh"
+  export IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/system 32"
+  export PROBE_LOG="$FIXTURE/no-timeout-probes" PROBE_EXIT=0
+  export PATH="$FIXTURE/no-timeout"
+  : > "$PROBE_LOG"
+  hp_windows_interop
+  [ "$(< "$PROBE_LOG")" = '/c exit 0' ]
+)
+cat > "$FIXTURE/timeout-bin/timeout" <<'TIMEOUT'
+#!/bin/sh
+printf '%s\n' "$*" > "$TIMEOUT_LOG"
+exit 124
+TIMEOUT
+chmod +x "$FIXTURE/timeout-bin/timeout"
+(
+  unset IDAPTIK_DIAG_WINDOWS_INTEROP
+  . "$REPO_DIR/scripts/windows-interop.sh"
+  export IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/system 32"
+  export PROBE_LOG="$FIXTURE/timed-out-probes" TIMEOUT_LOG="$FIXTURE/timeout-args"
+  export PATH="$FIXTURE/timeout-bin"
+  : > "$PROBE_LOG"
+  if hp_windows_interop; then echo 'timed-out probe accepted' >&2; exit 1; fi
+  [ "$(< "$TIMEOUT_LOG")" = "10 $FIXTURE/system 32/cmd.exe /c exit 0" ]
+  [ ! -s "$PROBE_LOG" ]
+  rm_cmd="$FIXTURE/timeout-bin/timeout"
+  /bin/rm "$rm_cmd"
+  if hp_windows_interop; then echo 'timed-out probe was not cached' >&2; exit 1; fi
+  [ ! -s "$PROBE_LOG" ]
+)
+
 healthy="$(run_fixture report solo 2>&1)"
 grep -q '\[PASS\].*WSLg shared memory' <<<"$healthy"
 grep -q 'READY TO LAUNCH' <<<"$healthy"
