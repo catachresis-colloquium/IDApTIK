@@ -148,6 +148,7 @@ fn the_corpus_keeps_the_source_specific_observation_checks() {
         "guard-on-shift-when-the-synth-plays",
         "shadow-position-matches-billy-at-synth",
         "diversion-source-within-billys-hearing",
+        "diversion-announcement-source-unambiguous",
         "guard-observed-the-diversion",
         "perception-contract-lists-the-noise",
         "only-the-scene-diversion-announced",

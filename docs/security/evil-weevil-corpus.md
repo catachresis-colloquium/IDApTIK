@@ -227,6 +227,10 @@ actually fires.
     `shadow-position-matches-billy-at-synth`, and
     `diversion-source-within-billys-hearing` — the observation premises hold
     in the production run, not only in the shadow prediction.
+  - `diversion-announcement-source-unambiguous` — the diversion is the only
+    audible `UnusualNoise` observation in its room on that tick. The event
+    carries kind + room and the watcher deduplicates on that key, so a
+    coincident noise in the same room cannot be credited to the synth.
   - `guard-observed-the-diversion` — exactly one matching
     `GuardObserved(UnusualNoise)` event is emitted on the scene synth tick.
   - `perception-contract-lists-the-noise` — `sim.actor_observations()` at

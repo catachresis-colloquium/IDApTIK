@@ -140,6 +140,10 @@ struct SynthWitness {
     diversion_intensity: f64,
     on_shift: bool,
     observations: Vec<Observation>,
+    /// Audible unusual-noise observations in the diversion's room. The event
+    /// vocabulary carries only kind + room and the watcher deduplicates on
+    /// that key, so attribution is sound only when this count is one.
+    room_noise_sources: usize,
     noise_announcements: usize,
 }
 
@@ -495,6 +499,14 @@ impl Scenario for InfraOrdersScenario {
                                 && o.x == diversion.x
                                 && o.intensity == diversion.intensity
                         });
+                        let room_noise_sources = source.map_or(0, |s| {
+                            observations
+                                .iter()
+                                .filter(|o| {
+                                    o.kind == ObservationKind::UnusualNoise && o.room == s.room
+                                })
+                                .count()
+                        });
                         let noise_announcements = fresh
                             .iter()
                             .filter(|e| match e {
@@ -513,6 +525,7 @@ impl Scenario for InfraOrdersScenario {
                             diversion_intensity: diversion.intensity,
                             on_shift: st.billy.mode != BillyMode::Offsite,
                             observations,
+                            room_noise_sources,
                             noise_announcements,
                         });
                     }
@@ -573,9 +586,23 @@ impl Scenario for InfraOrdersScenario {
 
         // The observation trail is source-specific and same-tick. A noise tag
         // alone could belong to the acceptance probe or another consequence.
-        let observed = witness
+        let unambiguous = witness
             .as_ref()
-            .is_some_and(|w| w.heard_diversion().is_some() && w.noise_announcements == 1);
+            .is_some_and(|w| w.heard_diversion().is_some() && w.room_noise_sources == 1);
+        harness.check(
+            "diversion-announcement-source-unambiguous",
+            unambiguous,
+            match &witness {
+                Some(w) => format!(
+                    "{} audible UnusualNoise observations in the diversion's room on the \
+                     scene tick; GuardObserved carries kind + room, not a source id",
+                    w.room_noise_sources
+                ),
+                None => "the scene synth was never sampled".to_owned(),
+            },
+        );
+        let observed =
+            unambiguous && witness.as_ref().is_some_and(|w| w.noise_announcements == 1);
         harness.check(
             "guard-observed-the-diversion",
             observed,
