@@ -41,8 +41,9 @@ const MISDIRECT_LIVE: &str = "The misdirect objective is complete.";
 const MISDIRECT_BLOWN: &str = "The misdirect objective failed; leave while \
      the way out is still open.";
 
-/// The opening brief: why you are here, what to take, where to leave, and the
-/// one idea the mission is teaching.
+/// Build the opening tutorial brief from the scenario name and objective labels,
+/// alongside the Ghost Lobby mission framing. Each line carries `tick` and the
+/// simulation time `t` in seconds.
 pub fn brief(def: &ScenarioDefinition, tick: u64, t: f64) -> Vec<LogLine> {
     let mut lines = Vec::with_capacity(def.objectives.len() + 3);
     lines.push(cue(def.name.clone(), Severity::Info, tick, t));
@@ -76,11 +77,14 @@ pub struct Tutor {
 }
 
 impl Tutor {
+    /// Create a tutor with all cues ready to be emitted.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Fold one tick's events into the cue state, appending any new cue.
+    /// Append tutorial cues for the supplied events, stamped with `tick` and
+    /// simulation time `t` in seconds. Each cue category is emitted once until
+    /// a restart event resets the state; events are processed in order.
     pub fn observe(&mut self, events: &[SimEvent], tick: u64, t: f64, out: &mut Vec<LogLine>) {
         for event in events {
             match event {

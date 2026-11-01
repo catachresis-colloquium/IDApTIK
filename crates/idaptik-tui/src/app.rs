@@ -27,6 +27,11 @@ use std::time::{Duration, Instant};
 /// The interactive run is always supervised (the WORKPLAN handoff): the sim
 /// itself folds its event stream into the supervision state and applies the
 /// team allocation to world coverage, so there is no caller-side supervisor.
+///
+/// # Errors
+///
+/// Invalid simulation configuration is returned as `InvalidInput`. Terminal
+/// setup, input, rendering, and cleanup errors are returned as I/O errors.
 pub fn run(cfg: RunConfig, seed: u32) -> io::Result<()> {
     let cfg = RunConfig {
         supervised: true,
@@ -121,7 +126,7 @@ fn run_loop(
     }
 }
 
-/// Convert freshly-emitted events into rendered log lines (a pure view).
+/// Append event and tutorial lines, then retain only the newest 500 log lines.
 fn ingest(
     events: &[SimEvent],
     sim: &GhostLobbySim,

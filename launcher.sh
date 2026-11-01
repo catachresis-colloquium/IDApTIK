@@ -168,6 +168,7 @@ report_renderer() { # $1 = pid
   return 0
 }
 
+# Report the first adapter line in the last client log, or say none is available.
 show_last_renderer() {
   local line
   if line="$(renderer_line)"; then
