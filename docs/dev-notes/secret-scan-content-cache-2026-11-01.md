@@ -147,6 +147,32 @@ of local reasoning had:
 It runs in `just fixture-tests`, in the `fixtures-and-must` CI job, and as a
 step *inside* the secret workflow before the real scan.
 
+## Two tools, on purpose
+
+This repository already ran a secret scan before any of this: `just secret-scan`
+and `.githooks/pre-push` both invoke **trufflehog** over history with
+`--results=verified,unknown`. That is not replaced, and the new recipe is called
+`secret-gate` rather than `secret-scan` so the two cannot be confused (an
+earlier draft did shadow it, and `just` refused to parse the file at all -- a
+duplicate recipe name breaks every recipe, not just the duplicated one).
+
+They answer different questions, and both are worth having:
+
+| | trufflehog (pre-push, local) | gitleaks (CI, `scan / gitleaks`) |
+|---|---|---|
+| detectors | 800+, with live verification | ~150 regex/entropy rules |
+| "is this credential live?" | yes, for supported providers | no |
+| deterministic | no -- verification is a network call | yes |
+| runs where | a developer's machine, if the hook is installed | every push and PR |
+| can be skipped by | not installing the hook | nothing |
+
+The gate is the deterministic one because a required check cannot depend on a
+network call or on a developer's local setup. Trufflehog is the broader net and
+the triage tool. Running the wider detector set *inside* CI is a decision for
+the maintainer rather than something to slip in with this change: verified-only
+results would silently miss unverifiable internal token shapes, and
+unverified-only results would be noisy against a required check.
+
 ## What this does not do
 
 - **The estate's bespoke `rust-secrets` and `shell-secrets` jobs are not
@@ -190,7 +216,7 @@ is still talking about the same past.
 ## Reproducing the evidence
 
 ```
-just secret-scan-test                 # 11 control cases, offline
-just secret-scan                      # real scan, needs gitleaks on PATH
+just secret-gate-test                 # 12 control cases, offline
+just secret-gate                      # the CI gate locally; needs gitleaks
 bash tests/secret_scan_self_test.sh --scanner "$(command -v gitleaks)"
 ```

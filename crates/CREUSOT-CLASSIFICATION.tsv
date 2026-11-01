@@ -215,6 +215,7 @@ T	crates/idaptik-net/tests/mole_routing.rs	test
 T	crates/idaptik-tui/tests/headless_smoke.rs	test
 T	crates/idaptik-tui/tests/infra_script.rs	test
 T	crates/idaptik-tui/tests/net_smoke.rs	test
+T	crates/idaptik-tui/tests/tutorial.rs	test
 T	crates/idaptik-core/tests/infrastructure.rs	infrastructure simulation acceptance and validation tests
 T	crates/idaptik-evil-weevil/src/agent.rs	bounded adversarial testing agent; proposes test intents only
 T	crates/idaptik-evil-weevil/src/bin/evil_weevil.rs	adversarial testing corpus command-line binary
