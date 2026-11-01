@@ -601,8 +601,7 @@ impl Scenario for InfraOrdersScenario {
                 None => "the scene synth was never sampled".to_owned(),
             },
         );
-        let observed =
-            unambiguous && witness.as_ref().is_some_and(|w| w.noise_announcements == 1);
+        let observed = unambiguous && witness.as_ref().is_some_and(|w| w.noise_announcements == 1);
         harness.check(
             "guard-observed-the-diversion",
             observed,
