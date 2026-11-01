@@ -9,7 +9,7 @@ use crate::record::{
 };
 use crate::schema::{self, BLOBS, CHECKPOINTS, COMMANDS, META, SESSIONS};
 use idaptik_core::scenario::{Buttons, Command, GhostLobbySim, RuntimeSnapshot, fold};
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -378,8 +378,7 @@ impl Store {
         // `CheckpointRecord::at`), not one past it.
         let commands = txn.open_table(COMMANDS)?;
         let mut replayed = 0usize;
-        let range = commands
-            .range((id.as_str(), checkpoint_at.saturating_add(1))..=(id.as_str(), u64::MAX))?;
+        let range = commands.range((id.as_str(), checkpoint_at)..=(id.as_str(), u64::MAX))?;
         for entry in range {
             let (_k, v) = entry?;
             let batch: CommandBatch =
@@ -529,14 +528,14 @@ impl Store {
         }
 
         for (&at, cp) in &cps {
-            if let Some((_, batch)) = batches.range(..at).next_back() {
-                if cp.tick < batch.tick {
-                    issues.push(VerifyIssue::TickBehindLog {
-                        at,
-                        recorded: cp.tick,
-                        logged: batch.tick,
-                    });
-                }
+            if let Some((_, batch)) = batches.range(..at).next_back()
+                && cp.tick < batch.tick
+            {
+                issues.push(VerifyIssue::TickBehindLog {
+                    at,
+                    recorded: cp.tick,
+                    logged: batch.tick,
+                });
             }
         }
 
