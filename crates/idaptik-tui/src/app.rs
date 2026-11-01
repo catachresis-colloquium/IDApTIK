@@ -109,7 +109,11 @@ fn run_loop(
                 // A restart wipes the log, so it must re-teach the mission or
                 // the retry loop loses the framing that made the first attempt
                 // legible.
-                log.extend(tutorial::brief(sim.definition(), sim.current_tick(), sim.time()));
+                log.extend(tutorial::brief(
+                    sim.definition(),
+                    sim.current_tick(),
+                    sim.time(),
+                ));
             }
             ingest(&events, sim, log, tutor);
             acc -= TICK_DT;

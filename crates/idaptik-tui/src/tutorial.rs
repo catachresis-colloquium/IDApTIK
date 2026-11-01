@@ -18,7 +18,13 @@ use idaptik_core::scenario::{
 
 /// Build one tutorial line.
 fn cue(text: impl Into<String>, severity: Severity, tick: u64, t: f64) -> LogLine {
-    LogLine { tick, t, text: text.into(), severity, channel: Channel::Tutorial }
+    LogLine {
+        tick,
+        t,
+        text: text.into(),
+        severity,
+        channel: Channel::Tutorial,
+    }
 }
 
 const BRIEF_PRIZE: &str = "You are here for the contact note: a boring sheet of paper in the \
@@ -149,7 +155,9 @@ mod tests {
     #[test]
     fn each_cue_fires_once_per_run() {
         let mut tutor = Tutor::new();
-        let crisis = [SimEvent::CrisisBegan { reason: CrisisReason::Timer }];
+        let crisis = [SimEvent::CrisisBegan {
+            reason: CrisisReason::Timer,
+        }];
 
         assert_eq!(cues(&crisis, &mut tutor).len(), 1);
         assert_eq!(cues(&crisis, &mut tutor).len(), 0);
@@ -158,18 +166,27 @@ mod tests {
     #[test]
     fn a_restart_re_arms_the_cues() {
         let mut tutor = Tutor::new();
-        let crisis = [SimEvent::CrisisBegan { reason: CrisisReason::Usb }];
+        let crisis = [SimEvent::CrisisBegan {
+            reason: CrisisReason::Usb,
+        }];
 
         assert_eq!(cues(&crisis, &mut tutor).len(), 1);
-        assert_eq!(cues(&[SimEvent::Restarted { seed: 7 }], &mut tutor).len(), 0);
+        assert_eq!(
+            cues(&[SimEvent::Restarted { seed: 7 }], &mut tutor).len(),
+            0
+        );
         assert_eq!(cues(&crisis, &mut tutor).len(), 1);
     }
 
     #[test]
     fn the_belief_cue_says_which_story_billy_believes() {
         let mut tutor = Tutor::new();
-        let usb = [SimEvent::BillyBeliefFormed { belief: ObjectKind::Usb }];
-        let note = [SimEvent::BillyBeliefFormed { belief: ObjectKind::Note }];
+        let usb = [SimEvent::BillyBeliefFormed {
+            belief: ObjectKind::Usb,
+        }];
+        let note = [SimEvent::BillyBeliefFormed {
+            belief: ObjectKind::Note,
+        }];
 
         let drive = cues(&usb, &mut tutor);
         assert_eq!(drive.len(), 1);
@@ -207,7 +224,9 @@ mod tests {
     #[test]
     fn a_failed_run_names_the_reason_in_plain_words() {
         let mut tutor = Tutor::new();
-        let over = [SimEvent::MissionFailed { reason: FailReason::Partition }];
+        let over = [SimEvent::MissionFailed {
+            reason: FailReason::Partition,
+        }];
         let line = cues(&over, &mut tutor);
         assert_eq!(line.len(), 1);
         assert!(line[0].text.contains("uplink"));
