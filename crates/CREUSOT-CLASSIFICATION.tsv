@@ -147,6 +147,7 @@ P	crates/idaptik-tui/src/net/render.rs	TUI net rendering
 P	crates/idaptik-tui/src/render.rs	TUI rendering
 P	crates/idaptik-tui/src/replay.rs	TUI replay driver
 P	crates/idaptik-tui/src/script.rs	TUI scripted input
+P	crates/idaptik-tui/src/tutorial.rs	TUI mission briefing and cue text
 P	crates/idaptik-bevy/src/art.rs	Bevy art direction for the playable floor; render-only
 P	crates/idaptik-bevy/src/backdrop.rs	Bevy room dressing built from modular pieces; render-only
 P	crates/idaptik-bevy/src/cones.rs	Bevy vision cones as pixel art; render-only
