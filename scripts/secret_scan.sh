@@ -286,10 +286,32 @@ fi
 
 # Paths with a finding are NOT recorded as clean, so they re-report on every run
 # until the secret is rotated and the rules explain why it is allowed.
+# The report's `File` is not guaranteed to be relative: gitleaks --no-git emits
+# the path it was given, which is whatever `--source` resolved to. Comparing it
+# to the ledger's repo-relative key without normalising silently matched
+# nothing, and "nothing matched" meant every finding was recorded as CLEAN --
+# a false green produced by a path-format difference. Measured on real gitleaks
+# 8.18.4: two control cases went green for exactly this reason.
 finding_paths="$work/finding-paths.tsv"
 : >"$finding_paths"
 if [ "$findings" -gt 0 ]; then
-    jq -r '.[].File // empty' "$report" | LC_ALL=C sort -u >"$finding_paths"
+    jq -r '.[].File // empty' "$report" |
+        LC_ALL=C awk -v prefix="$tree/" '
+            index($0, prefix) == 1 { print substr($0, length(prefix) + 1); next }
+            { sub(/^\.\//, ""); print }
+        ' | LC_ALL=C sort -u >"$finding_paths"
+
+    # Fail closed if a finding cannot be attributed to a key in the scan set.
+    # Guessing here is what produces a green gate over a live credential: an
+    # unmatched path is recorded as clean, and the finding never comes back.
+    unattributed="$(LC_ALL=C comm -23 "$finding_paths" \
+        <(cut -f2 "$todo" | LC_ALL=C sort -u))"
+    if [ -n "$unattributed" ]; then
+        printf 'secret-scan: FAIL %s finding path(s) do not match the scan set:\n' \
+            "$(printf '%s\n' "$unattributed" | wc -l | tr -d ' ')" >&2
+        printf '%s\n' "$unattributed" | sed 's/^/  /' >&2
+        die "refusing to record unattributed findings as clean"
+    fi
 fi
 
 clean_keys="$work/clean.tsv"

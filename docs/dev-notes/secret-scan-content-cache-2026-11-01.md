@@ -96,7 +96,7 @@ one-time cost per cache epoch, not a per-push one.
 
 ## The control suite
 
-`tests/secret_scan_self_test.sh` (11 cases, offline, ~2 s) is what makes the
+`tests/secret_scan_self_test.sh` (12 cases, offline, ~2 s) is what makes the
 above a gate rather than a claim. It builds a throwaway repository and requires
 the verdict to change under mutation:
 
@@ -105,8 +105,22 @@ planted secret fails; 4. **deleting the file does not launder it** — the blob 
 still in history; 5. a warm cache rescans only the blob that still fails;
 6. adding one file scans exactly one extra blob; 7. a rules change rescans
 everything; 8. a corrupt cache still fails; 9. a missing scanner is a hard
-failure; 10. a missing ruleset is a hard failure; 11. rewriting the secret out
-of history restores a pass.
+failure; 10. a missing ruleset is a hard failure; 11. a finding whose path the
+ledger cannot attribute is refused rather than recorded clean; 12. rewriting the
+secret out of history restores a pass.
+
+Two of those cases exist because the control caught real defects that no amount
+of local reasoning had:
+
+- gitleaks 8.18.4 writes its JSON report only when it has findings. The engine
+  required the file, so every clean history read as a broken gate.
+- the report's `File` is the path the scanner was handed, not a repo-relative
+  path. Comparing it to the ledger key without normalising matched nothing --
+  and "nothing matched" meant every finding was recorded as CLEAN, a false green
+  produced by a path-format difference. The engine now normalises the prefix and
+  refuses to give a verdict it cannot attribute. The offline fixture had hidden
+  this by emitting tidier paths than the real binary does; it now emits the path
+  it was given, like the original.
 
 It runs in `just fixture-tests`, in the `fixtures-and-must` CI job, and as a
 step *inside* the secret workflow before the real scan.

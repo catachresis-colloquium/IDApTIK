@@ -194,7 +194,36 @@ else
     no "a missing ruleset gave rc=$rc, expected 2"
 fi
 
-# 11. Removing the secret from history makes it green again -- the ordinary
+# 11. A finding the ledger cannot attribute must fail closed. This is the bug
+#     that reached CI once already: a report path in a different shape matched
+#     no key, so the finding was recorded as CLEAN and the gate went green over
+#     a credential. Refusing to guess is the whole fix.
+mispath="$work/fake-mispath"
+cat >"$mispath" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --report-path) report="$2"; shift 2 ;;
+    *) shift ;;
+    esac
+done
+printf '[{"RuleID":"aws-access-token","File":"/nowhere/at/all.txt","StartLine":1}]' >"$report"
+EOS
+chmod +x "$mispath"
+rm -rf "$work/fresh-cache"
+set +e
+"$script" --repo "$repo" --config "$repo/.gitleaks.toml" \
+    --scanner "$mispath" --cache "$work/fresh-cache" >"$work/out" 2>"$work/err"
+rc=$?
+set -e
+if [ "$rc" = 2 ] && grep -q 'refusing to record unattributed' "$work/err"; then
+    ok "a finding with an unattributable path fails closed"
+else
+    no "an unattributable finding gave rc=$rc instead of a refusal"
+fi
+
+# 12. Removing the secret from history makes it green again -- the ordinary
 #     remediation path (rotate, then rewrite the branch) must work.
 git -C "$repo" checkout -q --orphan clean
 git -C "$repo" rm -q -rf --cached .

@@ -52,7 +52,10 @@ done
 tmp="$(mktemp)"
 : >"$tmp"
 while IFS= read -r file; do
-    rel="${file#"$source_dir"/}"
+    # Deliberately NOT relative: gitleaks --no-git reports the path it was
+    # given, so the fixture must too. A fixture that hands the gate a tidier
+    # path than production does turns the control into a test of the fixture.
+    rel="$file"
     line_no=0
     while IFS= read -r line; do
         line_no=$((line_no + 1))
