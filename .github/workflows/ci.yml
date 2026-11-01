@@ -126,6 +126,11 @@ jobs:
       # catch -- and it turned main's fixtures-and-must red. They are offline
       # (a Git inventory, a scanner double and the workflow's own step text),
       # so they run here rather than beside the Pons bootstrap.
+      # The secret gate's control, run here as well as in the scan itself: it is
+      # offline and takes under two seconds, and a gate whose control only runs
+      # when the gate is green is a control that never fires on a broken change.
+      - name: Secret-gate control (a planted secret must fail the scan)
+        run: bash tests/secret_scan_self_test.sh
       - name: Pons scan and summary fixtures (was invoked by nothing)
         run: |
           bash tests/pons_scan_test.sh

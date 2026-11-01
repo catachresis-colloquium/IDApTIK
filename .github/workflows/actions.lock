@@ -12,7 +12,9 @@ workflows:
     '.github/workflows/pages.yml':
         - 'actions/deploy-pages@v5.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
-    '.github/workflows/secret-scanner.yml': []
+    '.github/workflows/secret-scanner.yml':
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
     '.github/workflows/vendor-winit-watch.yml': []
 dependencies:
     'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9':

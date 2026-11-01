@@ -152,3 +152,8 @@ crates/idaptik-ffi/abi/smoke/build/
 /src/
 /_site/
 /site/
+
+# Content-addressed gate ledgers (scripts/lib/content-cache.sh). Regenerable,
+# local, never committed: a cache that survives a clone is a cache nobody can
+# reproduce.
+/.cache/

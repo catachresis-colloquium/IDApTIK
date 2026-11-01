@@ -33,15 +33,22 @@ paths = [
   '''(^|/)Cargo\.lock$''',
   '''(^|/)mix\.lock$''',
 
-  # The SCANNER'S OWN STAGED ARTEFACT -- not an exemption for a file that
-  # "is fine", which the DESIGN RULE above forbids, but the one file the
-  # scanner writes into its own scan target.
+  # The ESTATE BASELINE FILE -- not an exemption for a file that "is fine",
+  # which the DESIGN RULE above forbids, but a file this repository does not
+  # own and does not write.
   #
-  # The standards secret-scanner reusable copies
+  # AS OF 2026-11-01 THE STAGING NO LONGER HAPPENS: the secret gate is
+  # first-party (`scripts/secret_scan.sh`) and never copies anything into the
+  # scanned tree, so this entry is inert. It is retained deliberately --
+  # removing an allowlist entry is a change to what the gate can see, and the
+  # DESIGN RULE below requires re-measuring detection against a real binary,
+  # which the change that removed the staging could not do.
+  #
+  # What it was for: the standards secret-scanner reusable copied
   # `config/gitleaks/estate-baseline.toml` to `.gitleaks-estate.toml` in the
   # workspace root UNCONDITIONALLY, before the step that decides whether this
-  # repo references it. So the baseline is present in the scanned tree even
-  # when the workflow's own log says "nothing staged". That baseline documents
+  # repo references it. So the baseline was present in the scanned tree even
+  # when the workflow's own log said "nothing staged". That baseline documents
   # worked examples of credential SHAPES (RFC 8032 vectors, masked-token
   # forms); they are credential-shaped by construction, so `generic-api-key`
   # fires on them and the gate goes red for reasons no commit here caused.
