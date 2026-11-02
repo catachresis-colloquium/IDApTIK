@@ -207,5 +207,8 @@ fn the_scene_evidence_records_one_source_and_one_same_tick_announcement() {
         field(hearing, "diversion.x="),
         field(perception, "source x=")
     );
-    assert_eq!(field(hearing, "intensity="), field(perception, "intensity="));
+    assert_eq!(
+        field(hearing, "intensity="),
+        field(perception, "intensity=")
+    );
 }
