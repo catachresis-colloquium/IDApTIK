@@ -19,9 +19,10 @@
 //! immediately (Entering walks him to his seed-rolled snack, then patrol),
 //! so the position at the synth tick is a property of this run's trajectory,
 //! not of the assignment. The run therefore shadows the same deterministic
-//! sim (same seed, script and crisis frame; no companion frames, which
-//! cannot move Billy before the synth) and walks the mole into the
-//! intersection of his hearing radius and the mole's reachable range.
+//! sim (same seed, script, crisis frame and frontier acceptance probe) and
+//! walks the mole into the intersection of his hearing radius and the mole's
+//! reachable range. The later move is silent underground travel; the shadow
+//! includes the earlier synth probe rather than assuming it cannot be heard.
 //!
 //! Cross-repository finding, recorded not simulated: at the pinned burble
 //! revision `command_roles()` carries neither `Mole` nor `Power`, so the
@@ -44,7 +45,7 @@ use idaptik_core::companion::MoleEvent;
 use idaptik_core::scenario::command::{Command, MoleOp};
 use idaptik_core::scenario::common::BillyMode;
 use idaptik_core::scenario::event::Event;
-use idaptik_core::scenario::infra::ObservationKind;
+use idaptik_core::scenario::infra::{Observation, ObservationKind};
 use idaptik_core::scenario::power::sim::{PowerIndex, PowerOp};
 use idaptik_core::scenario::signal::sim::Seat;
 use idaptik_net::envelope::Role;
@@ -127,10 +128,42 @@ fn inputs() -> Vec<InputSpec> {
     ]
 }
 
+/// Read-only evidence captured immediately after the scene's synth command.
+/// The observation is matched to the canonical diversion, not merely to the
+/// `UnusualNoise` tag: an earlier probe or an unrelated alarm must not satisfy
+/// the observation trail for this order (issue #191).
+struct SynthWitness {
+    billy_x: f64,
+    hearing_dist: f64,
+    hearing_threshold: f64,
+    diversion_x: f64,
+    diversion_intensity: f64,
+    on_shift: bool,
+    observations: Vec<Observation>,
+    /// Audible unusual-noise observations in the diversion's room. The event
+    /// vocabulary carries only kind + room and the watcher deduplicates on
+    /// that key, so attribution is sound only when this count is one.
+    room_noise_sources: usize,
+    noise_announcements: usize,
+}
+
+impl SynthWitness {
+    /// Returns the first unusual-noise observation matching the diversion's
+    /// exact position and intensity, or `None` if there is no match.
+    fn heard_diversion(&self) -> Option<&Observation> {
+        self.observations.iter().find(|o| {
+            o.kind == ObservationKind::UnusualNoise
+                && o.x == self.diversion_x
+                && o.intensity == self.diversion_intensity
+        })
+    }
+}
+
 /// Scenario 6's corpus entry.
 pub struct InfraOrdersScenario;
 
 impl Scenario for InfraOrdersScenario {
+    /// Describes EW-06's bounded inputs and expected acceptance and observation trail.
     fn spec(&self) -> ScenarioSpec {
         ScenarioSpec {
             id: ID,
@@ -145,9 +178,10 @@ impl Scenario for InfraOrdersScenario {
             expectation: "Both relay refusals are recorded as role violations; the frontier \
                           Mole order applies on the pump-house floor (a typed companion \
                           event, no denial); with the guard on shift and the mole walked \
-                          into earshot, Billy's own senses turn the synth diversion into a \
-                          GuardObserved(UnusualNoise) event and the same observations list \
-                          it; the stale order never re-enters the input set.",
+                          into earshot, Billy's own senses turn that synth diversion into a \
+                          GuardObserved(UnusualNoise) event on the same tick, and the perception \
+                          contract lists a noise matching its source; the earlier acceptance \
+                          probe is not a witness, and the stale order never re-enters the input set.",
             topology: TopologyMode::SingleRendezvousRelay,
             game_server_admin_present: false,
             evidence: EvidenceStatus::Demonstrated,
@@ -155,6 +189,14 @@ impl Scenario for InfraOrdersScenario {
         }
     }
 
+    /// Runs EW-06 and returns its checks, evidence, and overall result.
+    /// Failed observation and acceptance checks are recorded in the result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the fixture or scripted setup cannot be built, decoded, or
+    /// accepted, an intent cannot be proposed, or the shadow run cannot reach
+    /// the synth tick.
     fn run(&self) -> ScenarioResult {
         let spec = self.spec();
         let mut harness = IsolatedHarness::new(ID, 777_006);
@@ -317,17 +359,22 @@ impl Scenario for InfraOrdersScenario {
         //   the synth tick.** Not where the crisis puts him: the moment
         //   `begin_crisis` assigns `CRISIS_BILLY_X` (26), the guard's FSM
         //   leaves that point (Entering walks him to his snack, then patrol
-        //   takes over), so by `SYNTH_AT` he is elsewhere. The companion
-        //   frames cannot change his trajectory before the synth -- the mole
-        //   walks silently underground, and the guard's investigation only
-        //   starts on noise that is audible, and no noise exists before the
-        //   synth -- so a shadow of the same deterministic run (same seed,
-        //   same script, same crisis frame, no companion frames) lands Billy
-        //   exactly where the production run has him at the synth tick.
+        //   takes over), so by `SYNTH_AT` he is elsewhere. Replay the exact
+        //   pre-diversion prefix in a shadow: same seed, script, frontier
+        //   acceptance probe and crisis frame, in the same merge order. Do
+        //   not omit the probe on the assumption that it is inaudible -- that
+        //   is a property to check, not a premise for the prediction. Only
+        //   the later silent underground MoveTo and the scene synth itself
+        //   are omitted; neither precedes the position being predicted.
         let mut shadow = LockstepCore::new(Role::Hacker, 1, &script).expect("shadow core builds");
         shadow
             .on_peer_commit(1)
             .expect("shadow: opening commit accepted");
+        let (probe_at, probe_cmd) = idaptik_net::envelope::decode_command(&mole_peer.wire)
+            .expect("accepted frontier probe decodes");
+        shadow
+            .on_peer_command(probe_at, probe_cmd)
+            .expect("shadow: frontier probe accepted");
         let crisis_frame = wire::with_seq(wire::typed_command(SCENE_AT, &Command::ForceCrisis), 4);
         let (at, cmd) =
             idaptik_net::envelope::decode_command(&crisis_frame).expect("crisis frame decodes");
@@ -425,14 +472,13 @@ impl Scenario for InfraOrdersScenario {
         // own script horizon first is what lets the run proceed: advance stops
         // at either watermark, and the sampling horizon only moves in
         // pump_outgoing -- the same rounds the observations scenario runs. The
-        // loop ratchets towards SYNTH_AT two ticks at a time and stops as soon
-        // as the diversion has been heard.
+        // loop ratchets towards SYNTH_AT two ticks at a time and stops after
+        // sampling the scene synth, whether or not Billy could hear it.
         let mut feed = ScriptFeed::new(&script, Role::Hacker);
         let mut events: Vec<Event> = Vec::new();
-        let mut obs_at_billy: Option<(f64, Vec<ObservationKind>)> = None;
-        let mut guard_on_shift = false;
+        let mut witness: Option<SynthWitness> = None;
         for _round in 0..200 {
-            if obs_at_billy.is_some() || target.finished() {
+            if witness.is_some() || target.finished() {
                 break;
             }
             let _ = target.pump_outgoing(&mut feed);
@@ -446,48 +492,102 @@ impl Scenario for InfraOrdersScenario {
                         }
                     )
                 });
-                // The frontier acceptance probe also plays a synth at tick 2,
-                // outside Billy's hearing. Sampling that event ends the run
-                // before the scene diversion at SYNTH_AT can execute.
-                // advance_with calls us after the tick, so the scene's
-                // command tick has advanced to SYNTH_AT + 1 here.
-                if synth_now && obs_at_billy.is_none() && sim.current_tick() == SYNTH_AT + 1 {
+                // The frontier acceptance probe also plays a synth at tick 2.
+                // Only the scene command at SYNTH_AT is the subject of the
+                // observation trail. advance_with calls us after the tick, so
+                // the scene's command tick is SYNTH_AT + 1 here.
+                if synth_now && witness.is_none() && sim.current_tick() == SYNTH_AT + 1 {
                     let st = sim.state();
-                    guard_on_shift = st.billy.mode != BillyMode::Offsite;
-                    // The detector the watcher itself uses: canonical
-                    // observations at the actor's own position, including the
-                    // companion's noise. Sampling it through the sim rather
-                    // than re-deriving it here is what stops this assertion
-                    // drifting away from `system_infra_watch` again.
-                    obs_at_billy = Some((
-                        st.billy.x,
-                        sim.actor_observations(st.billy.x)
-                            .into_iter()
-                            .map(|o| o.kind)
-                            .collect(),
-                    ));
+                    if let Some(diversion) = st.diversion.as_ref() {
+                        // The detector the watcher itself uses: canonical
+                        // observations at Billy's own position, including
+                        // companion noise. The free observations() function
+                        // needs extra_noise supplied explicitly; the sim
+                        // method is the complete perception contract.
+                        let observations = sim.actor_observations(st.billy.x);
+                        let source = observations.iter().find(|o| {
+                            o.kind == ObservationKind::UnusualNoise
+                                && o.x == diversion.x
+                                && o.intensity == diversion.intensity
+                        });
+                        let room_noise_sources = source.map_or(0, |s| {
+                            observations
+                                .iter()
+                                .filter(|o| {
+                                    o.kind == ObservationKind::UnusualNoise && o.room == s.room
+                                })
+                                .count()
+                        });
+                        let noise_announcements = fresh
+                            .iter()
+                            .filter(|e| match e {
+                                Event::GuardObserved {
+                                    kind: ObservationKind::UnusualNoise,
+                                    room,
+                                } => source.is_some_and(|o| o.room == *room),
+                                _ => false,
+                            })
+                            .count();
+                        witness = Some(SynthWitness {
+                            billy_x: st.billy.x,
+                            hearing_dist: sim.actor().stats.invest_dist,
+                            hearing_threshold: sim.actor().stats.invest_noise,
+                            diversion_x: diversion.x,
+                            diversion_intensity: diversion.intensity,
+                            on_shift: st.billy.mode != BillyMode::Offsite,
+                            observations,
+                            room_noise_sources,
+                            noise_announcements,
+                        });
+                    }
                 }
             });
         }
         harness.check(
-            "guard-on-shift-when-the-synth-plays",
-            guard_on_shift,
-            "the diversion has to be played where the guard can hear it; an \
-             off-site Billy is not a witness to anything",
-        );
-
-        let applied = events.iter().any(|e| {
-            matches!(
-                e,
-                Event::Mole {
-                    mole: MoleEvent::SynthSoundPlayed { .. }
-                }
-            )
-        });
-        harness.check(
             "mole-order-applied-by-sim",
-            applied,
-            "the accepted order reached the hosted companion as a typed event",
+            witness.is_some(),
+            format!(
+                "SynthSoundPlayed and its canonical diversion were sampled after command \
+                 tick {SYNTH_AT}, not after the earlier acceptance probe"
+            ),
+        );
+        harness.check(
+            "guard-on-shift-when-the-synth-plays",
+            witness.as_ref().is_some_and(|w| w.on_shift),
+            "an off-site Billy is not a witness to anything",
+        );
+        harness.check(
+            "shadow-position-matches-billy-at-synth",
+            witness
+                .as_ref()
+                .is_some_and(|w| w.billy_x == billy_at_synth),
+            match &witness {
+                Some(w) => format!(
+                    "shadow predicted billy.x={billy_at_synth:.1}; production run has {:.1}",
+                    w.billy_x
+                ),
+                None => "the scene synth was never sampled".to_owned(),
+            },
+        );
+        harness.check(
+            "diversion-source-within-billys-hearing",
+            witness.as_ref().is_some_and(|w| {
+                (w.diversion_x - w.billy_x).abs() < w.hearing_dist
+                    && w.diversion_intensity > w.hearing_threshold
+            }),
+            match &witness {
+                Some(w) => format!(
+                    "billy.x={:.1}, diversion.x={:.1}, gap={:.1} < hearing={:.1}; \
+                     intensity={:.2} > threshold={:.2}",
+                    w.billy_x,
+                    w.diversion_x,
+                    (w.diversion_x - w.billy_x).abs(),
+                    w.hearing_dist,
+                    w.diversion_intensity,
+                    w.hearing_threshold
+                ),
+                None => "the scene synth was never sampled".to_owned(),
+            },
         );
         harness.check(
             "no-denial-for-legitimate-order",
@@ -495,36 +595,71 @@ impl Scenario for InfraOrdersScenario {
             "the pump-house floor hosts the mole; the legitimate order was not refused",
         );
 
-        // The observation trail: Billy heard the diversion through his own
-        // senses — the player-visible record is the GuardObserved event, and
-        // the perception contract lists the same noise where he stands.
-        let observed = events.iter().any(|e| {
-            matches!(
-                e,
-                Event::GuardObserved {
-                    kind: ObservationKind::UnusualNoise,
-                    ..
-                }
-            )
-        });
+        // The observation trail is source-specific and same-tick. A noise tag
+        // alone could belong to the acceptance probe or another consequence.
+        let unambiguous = witness
+            .as_ref()
+            .is_some_and(|w| w.heard_diversion().is_some() && w.room_noise_sources == 1);
+        harness.check(
+            "diversion-announcement-source-unambiguous",
+            unambiguous,
+            match &witness {
+                Some(w) => format!(
+                    "{} audible UnusualNoise observations in the diversion's room on the \
+                     scene tick; GuardObserved carries kind + room, not a source id",
+                    w.room_noise_sources
+                ),
+                None => "the scene synth was never sampled".to_owned(),
+            },
+        );
+        let observed = unambiguous && witness.as_ref().is_some_and(|w| w.noise_announcements == 1);
         harness.check(
             "guard-observed-the-diversion",
             observed,
-            "the synth diversion came back as an UnusualNoise observation event",
+            match &witness {
+                Some(w) => format!(
+                    "{} matching GuardObserved(UnusualNoise) events on command tick {SYNTH_AT}",
+                    w.noise_announcements
+                ),
+                None => "the scene synth was never sampled".to_owned(),
+            },
         );
-        let contract_lists_noise = obs_at_billy
-            .as_ref()
-            .is_some_and(|(_, kinds)| kinds.contains(&ObservationKind::UnusualNoise));
         harness.check(
             "perception-contract-lists-the-noise",
-            contract_lists_noise,
-            match &obs_at_billy {
-                Some((x, kinds)) => format!(
-                    "observations at billy.x={x:.1}: {kinds:?} — computed from canonical \
-                     state at the actor's own position"
+            witness
+                .as_ref()
+                .is_some_and(|w| w.heard_diversion().is_some()),
+            match &witness {
+                Some(w) => format!(
+                    "observations at billy.x={:.1}: {:?}; diversion source x={:.1}, \
+                     intensity={:.2} — matched through actor_observations()",
+                    w.billy_x,
+                    w.observations.iter().map(|o| o.kind).collect::<Vec<_>>(),
+                    w.diversion_x,
+                    w.diversion_intensity
                 ),
-                None => "the run never reached the tick the synth played".to_owned(),
+                None => "the scene synth was never sampled".to_owned(),
             },
+        );
+        let noise_event_count = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    Event::GuardObserved {
+                        kind: ObservationKind::UnusualNoise,
+                        ..
+                    }
+                )
+            })
+            .count();
+        harness.check(
+            "only-the-scene-diversion-announced",
+            observed && noise_event_count == 1,
+            format!(
+                "{noise_event_count} UnusualNoise announcements through the scene synth; \
+                 the acceptance probe must not supply the witness"
+            ),
         );
 
         // 5. A stale Mole order below the watermark: the acceptance rules
@@ -575,9 +710,10 @@ impl Scenario for InfraOrdersScenario {
              fails closed, which is the safe direction."
                 .into(),
             "The observation evidence is the player-visible pair: Event::GuardObserved in the \
-             canonical log (rendered as Billy's own words) and the observations() contract \
-             evaluated at Billy's position with the archetype's hearing — the guard reacts to \
-             what it perceives, never to the hidden Mole order."
+             canonical log (rendered as Billy's own words) and actor_observations() evaluated \
+             at Billy's position with the archetype's hearing. The observed noise matches the \
+             scene diversion's canonical source and is announced on that same command tick; \
+             the earlier acceptance probe is not evidence that this order was heard."
                 .into(),
             "The run still rides the shared live-seat fixture, with its scenario field \
              pointed at pump-house; it is not a private copy. Two fields are adjusted in \
