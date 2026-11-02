@@ -93,6 +93,8 @@ jobs:
           bash tests/runtime_doctor_test.sh
           bash tests/launcher_fixture_test.sh
           bash tests/vendor_winit_check_test.sh
+      - name: Evil Weevil replay-artifact gate fixtures (issue #191)
+        run: bash tests/evil_weevil_check_test.sh
       # Issues #141 and its sibling. Two suites were committed under tests/ at
       # mode 100755 and wired into NOTHING -- no justfile recipe, no workflow
       # step -- so each provided zero protection while reading as coverage in

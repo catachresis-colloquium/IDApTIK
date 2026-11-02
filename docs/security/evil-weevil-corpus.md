@@ -316,6 +316,8 @@ It runs the crate's unit and integration tests, `clippy --all-targets -D
 warnings`, the corpus binary, artifact-existence and secret-shape gates, and
 a byte-identical determinism comparison across two runs. A missing cargo
 fails the gate rather than skipping it.
+`bash tests/evil_weevil_check_test.sh` exercises the artifact requirement
+offline (stubbed Cargo), including missing-EW-06 and wrong-filename controls.
 
 Run the corpus directly and keep the artifacts:
 
