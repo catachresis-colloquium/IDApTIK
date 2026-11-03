@@ -116,6 +116,11 @@ launcher-fixture-test:
 vendor-winit-test:
     bash tests/vendor_winit_check_test.sh
 
+# Offline fixture coverage for the Evil Weevil replay-artifact requirement
+# (issue #191): a missing EW-06 result.json must fail the offline gate.
+evil-weevil-artifact-test:
+    bash tests/evil_weevil_check_test.sh
+
 # Offline fixture coverage for the ABI authority pins and the wire table
 # (issues #139, #141). Runs the workflow's own pin block against stubbed
 # curl/sha256sum, then checks the document independently. Was committed by
@@ -155,7 +160,7 @@ toolchain-parity-test:
     bash scripts/toolchain-parity.sh --self-test
 
 # Run every offline shell fixture suite (Rust and Elixir gates remain separate).
-fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test pons-scan-test pons-summary-test secret-gate-test
+fixture-tests: runtime-doctor-test launcher-fixture-test vendor-winit-test evil-weevil-artifact-test abi-authority-pin-test ci-security-config-test pages-wellknown-test lock-sync-check toolchain-parity-test coordination-k9-test machine-readable-migration-test must-check-test pons-scan-test pons-summary-test secret-gate-test
 
 must-check-test:
     bash tests/must_check_test.sh
