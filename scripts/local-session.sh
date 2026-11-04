@@ -5,6 +5,8 @@
 # Shared boundary for the experimental, fixed-secret Burble test profile.
 # This is not authenticated admission. Never accept a remote target here.
 
+# Print a decimal port without leading zeroes; accept 1–5 digits in the range
+# 1 through 65535. Return 1 without output for an invalid port.
 idaptik_local_port() {
   local port="$1"
   [[ "$port" =~ ^[0-9]{1,5}$ ]] || return 1
@@ -16,6 +18,8 @@ idaptik_local_port() {
 # Return a canonical numeric authority, never an unresolved hostname. Reject
 # userinfo, queries, fragments, alternate paths, address lookalikes and TLS
 # claims: this profile serves only ws://127.0.0.1:<port>/voice/websocket.
+# A missing port uses IDAPTIK_PORT or 4000. Invalid targets or ports return 1
+# and print a diagnostic to stderr.
 idaptik_local_target() {
   local target="$1" port
   if [[ "$target" =~ ^(ws://)?(127\.0\.0\.1|localhost)(:([0-9]{1,5}))?(/voice/websocket)?$ ]]; then
@@ -33,10 +37,13 @@ idaptik_local_target() {
 
 # Standards launcher policy: predictable records inside a user-scoped
 # directory, never directly in the shared /tmp namespace.
+# Use XDG_RUNTIME_DIR, then XDG_STATE_HOME, then $HOME/.local/state as the base.
 idaptik_runtime_root() {
   printf '%s/launch-scaffolder/idaptik' "${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}}"
 }
 
+# Create the supplied directories and set their modes to 0700. Return nonzero
+# if creation or permission changes fail.
 idaptik_private_dirs() {
   # umask also protects any newly created intermediate directories. Repair
   # the final directories' modes on upgrades from older launchers.

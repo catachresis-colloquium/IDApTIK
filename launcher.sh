@@ -45,6 +45,7 @@ RUNTIME_DIR="$(idaptik_runtime_root)"
 
 # Each local seat owns its process, log and startup channel. Starting the
 # second client must not overwrite or impersonate the host's readiness.
+# Select the paths for solo, infiltrator, or hacker; exit for any other seat.
 seat_paths() {
   case "$1" in solo|infiltrator|hacker) ;; *) die "invalid local seat: $1" ;; esac
   SEAT="$1"
@@ -199,6 +200,7 @@ show_last_renderer() {
 # kill -0 also succeeds for an exited child awaiting its parent's wait().
 # Only a confirmed zombie is additional evidence of exit: failed or empty
 # process inspection must never authorize dropping a potentially live record.
+# Return success if kill -0 fails or ps identifies a zombie; otherwise return 1.
 pid_has_exited() {
   kill -0 "$1" 2>/dev/null || return 0
   local state
@@ -207,6 +209,10 @@ pid_has_exited() {
   case "$state" in Z*) return 0 ;; *) return 1 ;; esac
 }
 
+# Inspect the selected seat's PID record. Return 0 if the PID passes the
+# liveness check and its command matches a game; return 1 for a missing,
+# unreadable, or invalid record, a failed liveness check, or a zombie; return 2
+# when ownership of the remaining PID cannot be verified.
 pid_is_game() {
   [ -f "$PID_FILE" ] || return 1
   local pid command
@@ -298,6 +304,9 @@ show_progress_line() {
   esac
 }
 
+# Start the selected seat using profile, target, display label, and seat name,
+# followed by the command to launch. Refuse a running or unverified PID.
+# Wait for readiness; on timeout return 1 and leave the process tracked.
 start_game() {
   local profile="$1" target="$2" label="$3" seat="$4"
   shift 4
@@ -504,6 +513,8 @@ MENU
   done
 }
 
+# Stop the selected seat and remove its PID and startup records. Leave them
+# in place and return 1 if ownership is unverified or the stop times out.
 stop_game() {
   if pid_is_game; then
     local pid

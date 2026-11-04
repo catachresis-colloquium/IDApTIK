@@ -151,6 +151,8 @@ relay_pid() {
   printf '%s' "$pid"
 }
 
+# Probe the local HTTP root without a proxy. Success indicates reachability,
+# not session admission or game readiness.
 relay_up() { curl --noproxy '*' -fsS --connect-timeout 2 --max-time 3 "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; }
 
 start_relay() {
@@ -218,6 +220,7 @@ share_addresses() {
   say ""
 }
 
+# Build the WebSocket URL from an already validated host:port authority.
 seat_url() { printf 'ws://%s/voice/websocket' "$1"; }
 
 # Return success if tasklist identifies $1 as an IDApTIK client PID. A
@@ -230,6 +233,9 @@ windows_pid_is_running() {
     grep -q "^\"idaptik-bevy.exe\",\"$pid\""
 }
 
+# Launch and track one Windows client using its exact PID. Write the supplied
+# readiness record after verifying that PID, and attempt to stop that client
+# on cancellation. Launch or PID verification failures exit with an error.
 run_windows_client() { # mode target url role session run_config readiness
   local mode="$1" target="$2" url="$3" role="$4" session="$5" run_config="$6" readiness="$7"
   local pid pid_record powershell wrapper

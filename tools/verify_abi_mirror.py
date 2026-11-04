@@ -100,6 +100,11 @@ class Layout:
 
 
 def main():
+    """Compare the header and Rust mirror named in argv; return 0 on a match, 1 for drift.
+
+    Print usage and exit for an incorrect argument count. File and UTF-8
+    decoding errors propagate to the caller.
+    """
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     with open(sys.argv[1], encoding="utf-8") as source:
