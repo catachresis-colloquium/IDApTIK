@@ -178,6 +178,7 @@ run_check() { # $1 = workflows dir
     n = norm(raw)
     if (n == "") next
     if ($1 == "J") {
+      jobseen[k, n] = 1
       jobrefs[k] = jobrefs[k] " " n; njob++
     } else {
       if (!((k SUBSEP n) in stepseen)) { stepseen[k, n] = 1; steps[k] = steps[k] " " n; nstep++ }
@@ -216,7 +217,10 @@ run_check() { # $1 = workflows dir
       for (lr in lock) {
         split(lr, kp, SUBSEP)
         if (kp[1] != k) continue
-        if (!((k SUBSEP kp[2]) in stepseen)) orphan = orphan " " kp[2]
+        # As in standards/scripts/check-lock-sync.sh, a literal job-level
+        # reusable call is a use of its recorded repository ref. Its actual
+        # nested dependencies are checked by the canonical closure gate.
+        if (!((k SUBSEP kp[2]) in stepseen) && !((k SUBSEP kp[2]) in jobseen)) orphan = orphan " " kp[2]
       }
       if (orphan != "") {
         printf "FAIL %s\n     stale lockfile entries no uses: references:%s\n", k, orphan
@@ -518,6 +522,21 @@ LOCK
     "$fixture/actions.lock"
   expect_fail 'a recorded job-level ref that disagrees with the YAML is rejected (burble mirror.yml)' \
     'job-level reusable ref' "$fixture"
+
+  fixture="$(new_case recorded-jobref)"
+  sed -i "s/'.github\/workflows\/reusable.yml': \[\]/'.github\/workflows\/reusable.yml':\n        - 'hyperpolymath\/standards@092dedada188f56c5915f74a5fd40aac093742c3'/" \
+    "$fixture/actions.lock"
+  cat >> "$fixture/actions.lock" <<'LOCK'
+    'hyperpolymath/standards@092dedada188f56c5915f74a5fd40aac093742c3':
+        ref: '092dedada188f56c5915f74a5fd40aac093742c3'
+        commit: 'sha1-092dedada188f56c5915f74a5fd40aac093742c3'
+        owner_id: 6759885
+        repo_id: 1116521501
+LOCK
+  expect_pass 'an exact recorded job-level ref is used, not an orphan' "$fixture"
+  sed -i "/^    'hyperpolymath\/standards@092dedada188f56c5915f74a5fd40aac093742c3':$/,/^        repo_id:/d" "$fixture/actions.lock"
+  expect_fail 'a recorded job-level ref still needs its dependency entry' \
+    'but dependencies: has no entry for it' "$fixture"
 
   fixture="$(new_case deleted-workflow)"
   rm "$fixture/ci.yml"
