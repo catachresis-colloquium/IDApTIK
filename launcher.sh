@@ -196,12 +196,23 @@ show_last_renderer() {
   fi
 }
 
+# kill -0 also succeeds for an exited child awaiting its parent's wait().
+# Only a confirmed zombie is additional evidence of exit: failed or empty
+# process inspection must never authorize dropping a potentially live record.
+pid_has_exited() {
+  kill -0 "$1" 2>/dev/null || return 0
+  local state
+  state="$(ps -p "$1" -o stat= 2>/dev/null)" || return 1
+  state="${state//[[:space:]]/}"
+  case "$state" in Z*) return 0 ;; *) return 1 ;; esac
+}
+
 pid_is_game() {
   [ -f "$PID_FILE" ] || return 1
   local pid command
   IFS= read -r pid < "$PID_FILE" || return 1
   case "$pid" in *[!0-9]*|'') return 1 ;; esac
-  kill -0 "$pid" 2>/dev/null || return 1
+  pid_has_exited "$pid" && return 1
   # A live PID with unknown ownership is not a stale record. In particular,
   # missing/broken process inspection must not let a second launch overwrite
   # it, or let --stop signal an unrelated process after PID reuse.
@@ -500,11 +511,11 @@ stop_game() {
     say "stopping $SEAT game (PID $pid)"
     kill "$pid"
     local waited=0
-    while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 10 ]; do
+    while ! pid_has_exited "$pid" && [ "$waited" -lt 10 ]; do
       sleep 1
       waited=$((waited + 1))
     done
-    if kill -0 "$pid" 2>/dev/null; then
+    if ! pid_has_exited "$pid"; then
       warn "game did not stop within 10 seconds (PID $pid)"
       return 1
     fi

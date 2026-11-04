@@ -14,6 +14,141 @@
 set -euo pipefail
 
 SOURCE_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# This focused mode exercises the PID-state boundary without claiming the
+# complete launcher/relay fixture suite ran. CI invokes this file without it.
+case "${1:-}" in
+  ''|--pid-state-only) ;;
+  *) printf 'usage: %s [--pid-state-only]\n' "$0" >&2; exit 2 ;;
+esac
+pid_state_fixtures() (
+# Exercise the real launcher with controlled ps observations and a real live
+# process. A zombie is still visible to kill -0, so that process deliberately
+# stays alive: the tests prove that confirmed Z state does not authorize a
+# signal, and that failed/empty inspection cannot discard a live PID record.
+# This is a process-state boundary fixture, not a native zombie integration test.
+set -euo pipefail
+
+SANDBOX="$(mktemp -d)"
+failures=0
+fixture_pid=
+cleanup() {
+  if [ -n "$fixture_pid" ]; then
+    kill -KILL "$fixture_pid" 2>/dev/null || true
+    wait "$fixture_pid" 2>/dev/null || true
+  fi
+  rm -rf "$SANDBOX"
+}
+trap cleanup EXIT
+
+mkdir -p "$SANDBOX/bin" "$SANDBOX/run/launch-scaffolder/idaptik" \
+  "$SANDBOX/state/idaptik/seats/solo"
+PID_FILE="$SANDBOX/run/launch-scaffolder/idaptik/solo.pid"
+READY_FILE="$SANDBOX/state/idaptik/seats/solo/startup.ready"
+STATE_FILE="$SANDBOX/process.state"
+ARGS_FILE="$SANDBOX/process.args"
+SIGNAL_FILE="$SANDBOX/process.signal"
+
+# TERM changes the observed state but deliberately leaves kill -0 true, as for
+# an unreaped child. The fixture owns this child and cleans it up with KILL.
+cat > "$SANDBOX/client" <<'EOF'
+#!/usr/bin/env bash
+trap 'printf "Z\n" > "$1"; printf "TERM\n" > "$2"' TERM
+printf 'ready\n' > "$3"
+while :; do sleep 1; done
+EOF
+bash "$SANDBOX/client" "$STATE_FILE" "$SIGNAL_FILE" "$SANDBOX/child.ready" &
+fixture_pid=$!
+for _ in 1 2 3 4 5; do
+  [ -f "$SANDBOX/child.ready" ] && break
+  sleep 1
+done
+[ -f "$SANDBOX/child.ready" ] || { echo 'PID-state fixture child did not start' >&2; exit 1; }
+
+cat > "$SANDBOX/bin/ps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+state="$(cat "$FIXTURE_STATE")"
+case "$state" in fail) exit 1 ;; empty) exit 0 ;; esac
+case "$*" in
+  "-p $FIXTURE_PID -o stat=") printf '  %s\n' "$state" ;;
+  "-p $FIXTURE_PID -o args=") cat "$FIXTURE_ARGS" ;;
+  *) echo "unexpected ps query: $*" >&2; exit 2 ;;
+esac
+EOF
+chmod +x "$SANDBOX/bin/ps"
+
+run_launcher() {
+  env HOME="$SANDBOX" XDG_CONFIG_HOME="$SANDBOX/config" \
+    XDG_RUNTIME_DIR="$SANDBOX/run" XDG_STATE_HOME="$SANDBOX/state" \
+    PATH="$SANDBOX/bin:$PATH" FIXTURE_PID="$fixture_pid" \
+    FIXTURE_STATE="$STATE_FILE" FIXTURE_ARGS="$ARGS_FILE" \
+    IDAPTIK_DIAG_IS_WSL=0 IDAPTIK_DIAG_DISPLAY=:0 \
+    IDAPTIK_DIAG_SKIP_TOOLS=1 IDAPTIK_CLIENT_PLATFORM=linux \
+    IDAPTIK_LAUNCHER_DRY_RUN=1 "$SOURCE_REPO/launcher.sh" "$@"
+}
+record() {
+  printf '%s\n' "$fixture_pid" > "$PID_FILE"
+  printf 'solo\n' > "$READY_FILE"
+  printf '%s\n' "$1" > "$STATE_FILE"
+  printf '%s\n' "$2" > "$ARGS_FILE"
+  rm -f "$SIGNAL_FILE"
+}
+check() {
+  local description="$1"; shift
+  if "$@"; then
+    printf '  ok: %s\n' "$description"
+  else
+    printf '  FAIL: %s\n' "$description" >&2
+    failures=$((failures + 1))
+  fi
+}
+records_preserved() {
+  [ "$(cat "$PID_FILE" 2>/dev/null)" = "$fixture_pid" ] &&
+    [ -f "$READY_FILE" ] && [ ! -e "$SIGNAL_FILE" ] &&
+    kill -0 "$fixture_pid" 2>/dev/null
+}
+records_cleared() { [ ! -e "$PID_FILE" ] && [ ! -e "$READY_FILE" ]; }
+
+printf 'launcher PID-state boundary fixtures (controlled ps, real signals):\n'
+record Z '[bash] <defunct>'
+out="$(run_launcher --status 2>&1)" || true
+check 'confirmed zombie is stopped with stale readiness, not unverified ownership' \
+  bash -c '[[ "$1" == *"solo game: stopped"* && "$1" == *"readiness: stale record present"* && "$1" != *"unverified ownership"* ]]' _ "$out"
+check 'stopping a confirmed zombie succeeds' run_launcher --stop
+check 'confirmed zombie cleanup removes PID and readiness records' records_cleared
+check 'confirmed zombie cleanup sends no signal' \
+  bash -c '[[ ! -e "$1" ]] && kill -0 "$2"' _ "$SIGNAL_FILE" "$fixture_pid"
+
+record Zs '[bash] <defunct>'
+check 'a confirmed zombie does not block a new solo launch' run_launcher --solo
+
+for state in S fail empty; do
+  record "$state" 'unrelated-command'
+  status=0
+  out="$(run_launcher --solo 2>&1)" || status=$?
+  check "$state inspection cannot authorize replacing a live PID" \
+    bash -c '[[ "$1" != 0 && "$2" == *"ownership cannot be verified"* ]]' _ "$status" "$out"
+  status=0
+  out="$(run_launcher --stop 2>&1)" || status=$?
+  check "$state inspection cannot authorize signaling or discarding a live PID" \
+    bash -c '[[ "$1" != 0 && "$2" == *"refusing to signal it"* ]]' _ "$status" "$out"
+  check "$state inspection preserves the live process and both records" records_preserved
+done
+
+record S 'idaptik-bevy --local'
+check 'owned client becoming a zombie after TERM completes stop' run_launcher --stop
+check 'post-TERM zombie removes PID and readiness records' records_cleared
+check 'post-TERM control remains visible to kill -0 and records the actual signal' \
+  bash -c '[[ "$(cat "$1")" == TERM ]] && kill -0 "$2"' _ "$SIGNAL_FILE" "$fixture_pid"
+
+if [ "$failures" -ne 0 ]; then
+  printf 'launcher PID-state fixtures: %s failure(s)\n' "$failures" >&2
+  exit 1
+fi
+printf 'launcher PID-state fixtures: all 17 controls passed\n'
+)
+pid_state_fixtures
+[ "${1:-}" != --pid-state-only ] || exit 0
 SANDBOX="$(mktemp -d)"
 
 REPO="$SANDBOX/IDApTIK test"          # deliberate space: checkout paths bite
