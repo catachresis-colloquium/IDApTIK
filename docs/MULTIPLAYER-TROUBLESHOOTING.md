@@ -21,6 +21,32 @@ tests. A VPN alone is not a substitute for session-level authorisation. See
 IDApTIK issue #211 and Burble issue #254. The local-only restriction does not
 alter the headless CI loopback gate.
 
+## Windows blocks the multiplayer helper before a client starts
+
+Native Windows multiplayer starts each seat through
+`scripts/start-windows-client.ps1`, so it needs permission to run that file
+under the machine's approved PowerShell policy. The launcher first invokes
+the helper's `-PolicyCheck` parameter set through ordinary `-File` execution.
+That probe returns before creating a process or writing a PID record. Windows
+itself checks execution policy, signature trust, downloaded-file markings and
+any application controls; an empty or failed probe blocks launch.
+
+`Restricted` policy does not allow script files. `AllSigned` requires a valid
+signature from a trusted publisher, and `RemoteSigned` also requires signing
+for files Windows identifies as downloaded. Follow your administrator's
+approved signing and execution policy for this exact helper. A properly
+approved signed helper continues through the same `-File` path. The launcher
+does not change policy, unblock downloads, import trust certificates, or move
+the helper body into inline commands. The Linux/WSL client remains available
+through the normal launcher when its display prerequisites are met.
+
+On failure, the diagnostic prints the effective policy and PowerShell's actual
+error. A signature or application-control error can still occur under a policy
+that generally permits scripts; the policy name alone is not an authorization
+decision. See Microsoft's
+[execution-policy reference](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1)
+and [script-signing guidance](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_signing?view=powershell-5.1).
+
 ## A peer cannot join even though the relay is up
 
 ### The shared address is unreachable (WSL2 NAT)

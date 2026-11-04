@@ -47,9 +47,9 @@ mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
     actual="$(idaptik_local_target "$input")"
     [ "$actual" = "$expected" ] || { printf 'target %s became %s\n' "$input" "$actual" >&2; exit 1; }
   done
-  IDAPTIK_PORT=0080
+  export IDAPTIK_PORT=0080
   [ "$(idaptik_local_target localhost)" = '127.0.0.1:80' ]
-  IDAPTIK_PORT=65536
+  export IDAPTIK_PORT=65536
   if idaptik_local_target localhost >/dev/null 2>&1; then
     echo 'invalid default port accepted' >&2; exit 1
   fi
@@ -245,7 +245,10 @@ grep -q 'READY TO LAUNCH' <<<"$healthy"
 for lan in '' 172.28.1.2; do
   offline="$(IDAPTIK_DIAG_LAN_ADDRESS="$lan" run_fixture preflight host 2>&1)"
   grep -q '\[PASS\].*local-only profile uses 127.0.0.1' <<<"$offline"
-  ! grep -q '\[FAIL\].*tailscale\|\[FAIL\].*reachability' <<<"$offline"
+  if grep -q '\[FAIL\].*tailscale\|\[FAIL\].*reachability' <<<"$offline"; then
+    printf 'local-only host preflight reported a retired remote-flow failure (lan=%s)\n' "$lan" >&2
+    exit 1
+  fi
 done
 for port in 0 65536 invalid; do
   if invalid_port="$(IDAPTIK_PORT="$port" run_fixture preflight host 2>&1)"; then
@@ -280,7 +283,10 @@ local_probe="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$pro
 grep -qF 'http://127.0.0.1:4123/' "$probe_log"
 grep -qF -- '--noproxy *' "$probe_log"
 grep -qF 'session admission and game readiness are not established' <<<"$local_probe"
-! grep -qF 'the host has reached' <<<"$local_probe"
+if grep -qF 'the host has reached' <<<"$local_probe"; then
+  echo 'HTTP probe output claims the host was reached' >&2
+  exit 1
+fi
 if failed_probe="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
   IDAPTIK_FIXTURE_PROBE_EXIT=7 run_fixture preflight join localhost:1 2>&1)"; then
   echo 'failed relay probe did not block join' >&2; exit 1
@@ -390,15 +396,73 @@ grep -q '\[PASS\].*Windows linker' <<<"$tools_report"
 
 # Multiplayer needs the PowerShell owner even when the cross-build tools are
 # otherwise present; solo does not. Use an isolated PATH for both controls.
-printf '#!/bin/sh\nexit 0\n' > "$FIXTURE/tools/powershell.exe"
+cat > "$FIXTURE/tools/powershell.exe" <<'POWERSHELL'
+#!/usr/bin/env bash
+# Modeled Windows policy decision; the real helper probe runs separately in
+# windows_client_test.ps1. This fixture does not claim Windows policy proof.
+set -eu
+if [ -n "${IDAPTIK_FIXTURE_POLICY_LOG:-}" ]; then printf '%s\n' "$@" >> "$IDAPTIK_FIXTURE_POLICY_LOG"; fi
+[ "${1:-}" = -NoProfile ] && [ "${2:-}" = -NonInteractive ] || exit 64
+case "${3:-}" in
+  -Command)
+    [ "${4:-}" = Get-ExecutionPolicy ] || exit 64
+    printf '%s\n' "${IDAPTIK_FIXTURE_PS_POLICY:-RemoteSigned}"
+    ;;
+  -File)
+    [ "${5:-}" = -PolicyCheck ] || exit 64
+    case "${IDAPTIK_FIXTURE_PS_OUTCOME:-allowed}" in
+      allowed) printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\r\n' ;;
+      empty) exit 0 ;;
+      blocked) printf 'fixture: script is not permitted by this machine\n' >&2; exit 1 ;;
+      *) exit 65 ;;
+    esac
+    ;;
+  *) exit 64 ;;
+esac
+POWERSHELL
+printf '#!/bin/sh\nprintf "%%s" "$2"\n' > "$FIXTURE/tools/wslpath"
 printf '#!/bin/sh\nexit 0\n' > "$FIXTURE/tools/curl"
-chmod +x "$FIXTURE/tools/powershell.exe" "$FIXTURE/tools/curl"
+chmod +x "$FIXTURE/tools/powershell.exe" "$FIXTURE/tools/wslpath" "$FIXTURE/tools/curl"
 for profile in host join; do
   windows_multiplayer="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
     IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
     IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
     "$DOCTOR" report "$profile" localhost 2>&1)"
   grep -q '\[PASS\].*Windows seat owner' <<<"$windows_multiplayer"
+done
+# An allowed signed-file decision under AllSigned remains usable. A blocked
+# script, failed inspection or empty exit-zero result cannot authorize launch.
+for policy in Restricted AllSigned RemoteSigned; do
+  if blocked_policy="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_FIXTURE_PS_POLICY="$policy" IDAPTIK_FIXTURE_PS_OUTCOME=blocked \
+    IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+    IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" preflight host localhost 2>&1)"; then
+    printf 'blocked Windows helper accepted under %s\n' "$policy" >&2; exit 1
+  fi
+  grep -q "effective PowerShell policy ($policy)" <<<"$blocked_policy"
+  grep -q "machine's approved policy" <<<"$blocked_policy"
+done
+signed_policy="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+  IDAPTIK_FIXTURE_PS_POLICY=AllSigned IDAPTIK_FIXTURE_PS_OUTCOME=allowed \
+  IDAPTIK_FIXTURE_POLICY_LOG="$FIXTURE/policy-arguments" \
+  IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+  "$DOCTOR" preflight join localhost 2>&1)"
+grep -q '\[PASS\].*Windows seat owner' <<<"$signed_policy"
+grep -qx -- -File "$FIXTURE/policy-arguments"
+grep -qx -- -PolicyCheck "$FIXTURE/policy-arguments"
+if grep -qiE -- 'ExecutionPolicy|EncodedCommand|ScriptBlock' "$FIXTURE/policy-arguments"; then
+  echo 'policy probe changed policy or replaced file execution' >&2; exit 1
+fi
+for outcome in empty error; do
+  if invalid_policy="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_FIXTURE_PS_OUTCOME="$outcome" IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" \
+    IDAPTIK_CLIENT_PLATFORM=windows IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" preflight host localhost 2>&1)"; then
+    printf 'invalid Windows policy probe accepted: %s\n' "$outcome" >&2; exit 1
+  fi
+  grep -q '\[FAIL\].*Windows seat owner' <<<"$invalid_policy"
 done
 rm "$FIXTURE/tools/powershell.exe"
 for profile in host join; do
@@ -410,7 +474,10 @@ for profile in host join; do
   fi
   grep -q '\[FAIL\].*Windows seat owner.*powershell.exe' <<<"$missing_owner"
 done
-! grep -q 'Windows seat owner' <<<"$tools_report"
+if grep -q 'Windows seat owner' <<<"$tools_report"; then
+  echo 'solo mode unnecessarily requires the multiplayer Windows seat owner' >&2
+  exit 1
+fi
 
 rm "$FIXTURE/tools/x86_64-w64-mingw32-gcc"
 if tools_missing="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=0 \
@@ -465,7 +532,10 @@ default_renderer="$(env -u IDAPTIK_DIAG_GAME_LOG XDG_STATE_HOME="$FIXTURE/render
   IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
   "$DOCTOR" report solo 2>&1)"
 grep -q '\[PASS\].*bevy renderer.*NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)' <<<"$default_renderer"
-! grep -q '\[WARN\].*bevy renderer.*llvmpipe' <<<"$default_renderer"
+if grep -q '\[WARN\].*bevy renderer.*llvmpipe' <<<"$default_renderer"; then
+  echo 'renderer report used the retired shared log instead of the solo seat log' >&2
+  exit 1
+fi
 
 printf 'client started without an adapter line\n' > "$FIXTURE/game.log"
 no_adapter="$(env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_SKIP_TOOLS=1 \

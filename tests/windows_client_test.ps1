@@ -32,6 +32,12 @@ function Stop-Process {
 }
 
 try {
+    $probe = & $helper -PolicyCheck
+    Assert-Equal 'IDAPTIK_WINDOWS_HELPER_ALLOWED' $probe 'the actual helper policy probe returns its marker'
+    Assert-Equal 0 $global:IdaptikWindowsFixture.Starts.Count 'the policy probe starts no client'
+    Assert-Equal 0 $global:IdaptikWindowsFixture.Stops.Count 'the policy probe stops no client'
+    Assert-Equal 0 @(Get-ChildItem -LiteralPath $fixture).Count 'the policy probe writes no ownership record'
+
     $options = @{
         Executable = 'C:\checkout with spaces\idaptik-bevy.exe'
         Mode = 'host'

@@ -878,6 +878,14 @@ cat > "$WINSYS/powershell.exe" <<'POWERSHELL'
 set -eu
 while [ $# -gt 0 ]; do
   case "$1" in
+    -PolicyCheck)
+      if [ "${IDAPTIK_FIXTURE_WINDOWS_POLICY:-allowed}" = blocked ]; then
+        printf 'fixture: Windows policy blocked the helper\n' >&2; exit 1
+      fi
+      printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\n'; exit 0 ;;
+    -Command)
+      [ "${2:-}" = Get-ExecutionPolicy ] || exit 64
+      printf 'Restricted\n'; exit 0 ;;
     -File) wrapper="${2#C:}"; shift 2 ;;
     -Executable) executable="${2#C:}"; shift 2 ;;
     -Mode) mode="$2"; shift 2 ;;
@@ -993,6 +1001,21 @@ $(cat "$windows_out" 2>/dev/null || true)"
 kill "$windows_launcher" 2>/dev/null || true
 wait "$windows_launcher" 2>/dev/null || true
 run_env "$LAUNCHER" --stop >/dev/null 2>&1 || true
+
+# The internal runtime rechecks the actual helper even if launcher preflight
+# previously passed. A modeled Windows policy denial cannot create a seat,
+# ownership record or readiness marker.
+: > "$SEAT_ARGS"
+expect_fail 'Windows policy denial blocks an internal seat launch' 'no client was started' \
+  run_env IDAPTIK_CLIENT_PLATFORM=windows IDAPTIK_INTERNAL_RUNTIME=1 IDAPTIK_PREFLIGHT_DONE=1 \
+  IDAPTIK_FIXTURE_WINDOWS_POLICY=blocked IDAPTIK_READY_FILE="$SANDBOX/policy-ready" \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_WINDOWS_SYSTEM32="$WINSYS" \
+  "$RUNTIME" join 127.0.0.1 --role hacker
+if [ ! -s "$SEAT_ARGS" ] && [ ! -e "$SANDBOX/policy-ready" ] && [ ! -e "$SANDBOX/windows-clients/4242" ]; then
+  note 'ok (clean): a denied helper leaves no client, ownership or readiness evidence'
+else
+  broke 'a denied Windows helper produced client or readiness evidence'
+fi
 
 # Multiplayer Windows seat: the runtime tracks the client through tasklist, so
 # a cmd.exe that is not on PATH must still be found and used.

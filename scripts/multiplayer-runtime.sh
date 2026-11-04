@@ -242,17 +242,18 @@ run_windows_client() { # mode target url role session run_config readiness
   powershell="$(hp_windows_tool powershell.exe)" || die "native Windows multiplayer requires powershell.exe for per-seat process ownership"
   wrapper="$REPO_DIR/scripts/start-windows-client.ps1"
   [ -r "$wrapper" ] || die "Windows client helper is missing: $wrapper"
+  hp_windows_script_preflight "$wrapper" || die "Windows client helper did not pass its policy preflight; no client was started"
   idaptik_private_dirs "$RUNTIME_DIR"
   pid_record="$(mktemp "$RUNTIME_DIR/windows-$role.XXXXXX")"
   # Start-Process returns the new client's PID. An image-name search would
   # select the host when launching the second local seat, or kill the wrong
   # window on cancellation. No game-specific authority is granted by this PID.
-  if ! (cd "$(windows_cwd)" && "$powershell" -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+  if ! (cd "$(windows_cwd)" && "$powershell" -NoProfile -NonInteractive \
       -File "$(wslpath -w "$wrapper")" -Executable "$(wslpath -w "$BEVY_BIN")" \
       -Mode "$mode" -Target "$target" -Url "$url" -Session "$session" \
       -Role "$role" -RunConfig "$run_config" -PidFile "$(wslpath -w "$pid_record")"); then
     rm -f "$pid_record"
-    die "Windows client launch failed before process ownership was recorded"
+    die "Windows client launch failed before process ownership was recorded; inspect the PowerShell diagnostic and the machine's approved script/signing policy"
   fi
   pid="$(tr -d '\r\n' < "$pid_record")"
   rm -f "$pid_record"

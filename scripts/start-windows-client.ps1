@@ -2,18 +2,27 @@
 # SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 # Start one native client and return its exact PID through the caller's file.
 # Looking up the first image-name match cannot distinguish two local seats.
+[CmdletBinding(DefaultParameterSetName = 'Launch')]
 param(
-    [Parameter(Mandatory = $true)][string]$Executable,
-    [Parameter(Mandatory = $true)][ValidateSet('host', 'join')][string]$Mode,
-    [Parameter(Mandatory = $true)][string]$Target,
-    [Parameter(Mandatory = $true)][string]$Url,
-    [Parameter(Mandatory = $true)][string]$Session,
-    [Parameter(Mandatory = $true)][ValidateSet('infiltrator', 'hacker')][string]$Role,
-    [Parameter(Mandatory = $true)][string]$RunConfig,
-    [Parameter(Mandatory = $true)][string]$PidFile
+    [Parameter(Mandatory = $true, ParameterSetName = 'Policy')][switch]$PolicyCheck,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][string]$Executable,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][ValidateSet('host', 'join')][string]$Mode,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][string]$Target,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][string]$Url,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][string]$Session,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][ValidateSet('infiltrator', 'hacker')][string]$Role,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][string]$RunConfig,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Launch')][string]$PidFile
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The normal -File authorization boundary applies to this probe too. It does
+# not create a client, touch PID records, or change execution policy.
+if ($PSCmdlet.ParameterSetName -eq 'Policy') {
+    Write-Output 'IDAPTIK_WINDOWS_HELPER_ALLOWED'
+    return
+}
 
 # Start-Process joins ArgumentList on Windows PowerShell 5.1. Quote each
 # argument according to the native Windows command-line rules, including

@@ -159,10 +159,11 @@ check_tools() {
       fail "Windows linker" "x86_64-w64-mingw32-gcc is missing; run 'just windows-client-deps' (installs gcc-mingw-w64-x86-64)"
     fi
     if [ "$PROFILE" = "host" ] || [ "$PROFILE" = "join" ] || [ "$PROFILE" = "all" ]; then
-      if hp_windows_tool powershell.exe >/dev/null 2>&1; then
-        pass "Windows seat owner" "PowerShell can record the exact native client PID"
+      local helper_status
+      if helper_status="$(hp_windows_script_preflight "$REPO_DIR/scripts/start-windows-client.ps1" 2>&1)"; then
+        pass "Windows seat owner" "the helper's policy probe completed without starting a client"
       else
-        fail "Windows seat owner" "powershell.exe is required for independent local multiplayer clients"
+        fail "Windows seat owner" "$helper_status"
       fi
     fi
   fi
