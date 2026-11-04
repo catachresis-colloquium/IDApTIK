@@ -23,6 +23,72 @@ run_fixture() {
 mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
 : > "$FIXTURE/wslg/weston.log"
 
+# Exercise the shared local-only boundary directly, including values that
+# would be ambiguous if ports were interpreted as octal or as URL authorities.
+(
+  . "$REPO_DIR/scripts/local-session.sh"
+  unset IDAPTIK_PORT
+  for pair in '1 1' '00001 1' '0080 80' '65535 65535'; do
+    read -r input expected <<<"$pair"
+    actual="$(idaptik_local_port "$input")"
+    [ "$actual" = "$expected" ] || { printf 'port %s became %s\n' "$input" "$actual" >&2; exit 1; }
+  done
+  for input in '' 0 00000 65536 100000 -1 +1 ' 80' 80x; do
+    if idaptik_local_port "$input" >/dev/null; then
+      printf 'invalid port accepted: [%s]\n' "$input" >&2; exit 1
+    fi
+  done
+
+  for pair in 'localhost 127.0.0.1:4000' \
+    '127.0.0.1:00001 127.0.0.1:1' \
+    'ws://localhost:65535/voice/websocket 127.0.0.1:65535' \
+    'ws://127.0.0.1/voice/websocket 127.0.0.1:4000'; do
+    read -r input expected <<<"$pair"
+    actual="$(idaptik_local_target "$input")"
+    [ "$actual" = "$expected" ] || { printf 'target %s became %s\n' "$input" "$actual" >&2; exit 1; }
+  done
+  IDAPTIK_PORT=0080
+  [ "$(idaptik_local_target localhost)" = '127.0.0.1:80' ]
+  IDAPTIK_PORT=65536
+  if idaptik_local_target localhost >/dev/null 2>&1; then
+    echo 'invalid default port accepted' >&2; exit 1
+  fi
+  [ "$(idaptik_local_target localhost:1)" = '127.0.0.1:1' ]
+  for input in '' localhost: localhost:00000 localhost:100000 \
+    localhost. LOCALHOST 127.0.0.2 127.000.0.1 'localhost#fragment' \
+    'localhost?query=1' 'ws://user@localhost/voice/websocket' \
+    'ws://localhost/voice/websocket/' 'http://localhost' 'localhost/path' \
+    'localhost:80/voice/websocket?x=1'; do
+    if idaptik_local_target "$input" >/dev/null 2>&1; then
+      printf 'invalid local target accepted: [%s]\n' "$input" >&2; exit 1
+    fi
+  done
+)
+
+# Runtime paths use XDG precedence and create or repair private directories
+# without changing the caller's umask, including paths containing spaces.
+(
+  . "$REPO_DIR/scripts/local-session.sh"
+  export HOME="$FIXTURE/home path" XDG_STATE_HOME="$FIXTURE/state path" XDG_RUNTIME_DIR="$FIXTURE/runtime path"
+  [ "$(idaptik_runtime_root)" = "$XDG_RUNTIME_DIR/launch-scaffolder/idaptik" ]
+  unset XDG_RUNTIME_DIR
+  [ "$(idaptik_runtime_root)" = "$XDG_STATE_HOME/launch-scaffolder/idaptik" ]
+  unset XDG_STATE_HOME
+  [ "$(idaptik_runtime_root)" = "$HOME/.local/state/launch-scaffolder/idaptik" ]
+  mkdir -p "$FIXTURE/existing private"
+  chmod 0755 "$FIXTURE/existing private"
+  umask 022
+  idaptik_private_dirs "$FIXTURE/existing private" "$FIXTURE/new parent/new child"
+  [ "$(stat -c %a "$FIXTURE/existing private")" = 700 ]
+  [ "$(stat -c %a "$FIXTURE/new parent")" = 700 ]
+  [ "$(stat -c %a "$FIXTURE/new parent/new child")" = 700 ]
+  [ "$(umask)" = 0022 ]
+  : > "$FIXTURE/not-a-directory"
+  if idaptik_private_dirs "$FIXTURE/not-a-directory/child" 2>/dev/null; then
+    echo 'directory creation failure was ignored' >&2; exit 1
+  fi
+)
+
 # Exercise the shared library directly in isolated shells. Paths with spaces
 # also check that discovery and the execution probe preserve argument boundaries.
 mkdir -p "$FIXTURE/system 32" "$FIXTURE/path-bin" "$FIXTURE/empty"
@@ -181,6 +247,12 @@ for lan in '' 172.28.1.2; do
   grep -q '\[PASS\].*local-only profile uses 127.0.0.1' <<<"$offline"
   ! grep -q '\[FAIL\].*tailscale\|\[FAIL\].*reachability' <<<"$offline"
 done
+for port in 0 65536 invalid; do
+  if invalid_port="$(IDAPTIK_PORT="$port" run_fixture preflight host 2>&1)"; then
+    printf 'invalid host port accepted: %s\n' "$port" >&2; exit 1
+  fi
+  grep -q '\[FAIL\].*relay port.*between 1 and 65535' <<<"$invalid_port"
+done
 
 # The diagnostic cannot be used as a network probe for an unsupported legacy
 # session. An answering HTTP root must also not be called session admission.
@@ -188,7 +260,7 @@ mkdir -p "$FIXTURE/network-bin"
 cat > "$FIXTURE/network-bin/curl" <<'CURL'
 #!/bin/sh
 printf '%s\n' "$*" >> "$IDAPTIK_FIXTURE_PROBE_LOG"
-exit 0
+exit "${IDAPTIK_FIXTURE_PROBE_EXIT:-0}"
 CURL
 chmod +x "$FIXTURE/network-bin/curl"
 probe_log="$FIXTURE/network-probes"
@@ -209,6 +281,12 @@ grep -qF 'http://127.0.0.1:4123/' "$probe_log"
 grep -qF -- '--noproxy *' "$probe_log"
 grep -qF 'session admission and game readiness are not established' <<<"$local_probe"
 ! grep -qF 'the host has reached' <<<"$local_probe"
+if failed_probe="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
+  IDAPTIK_FIXTURE_PROBE_EXIT=7 run_fixture preflight join localhost:1 2>&1)"; then
+  echo 'failed relay probe did not block join' >&2; exit 1
+fi
+grep -q '\[FAIL\].*host relay.*127.0.0.1:1 is not reachable' <<<"$failed_probe"
+grep -qF 'http://127.0.0.1:1/' "$probe_log"
 
 # PID paths are user-scoped even without XDG_RUNTIME_DIR. TMPDIR must not
 # redirect stable ownership records into a shared directory.
@@ -298,6 +376,7 @@ case "$*" in
   'exec -- rustup target list --installed')
     [ "${FIXTURE_TARGET:-0}" != 1 ] || printf 'x86_64-pc-windows-gnu\n'
     ;;
+  'exec -- mix --version') exit 0 ;;
   *) exit 1 ;;
 esac
 MISE
@@ -308,6 +387,31 @@ tools_report="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 
   "$DOCTOR" report solo 2>&1)"
 grep -q '\[PASS\].*Windows target.*x86_64-pc-windows-gnu' <<<"$tools_report"
 grep -q '\[PASS\].*Windows linker' <<<"$tools_report"
+
+# Multiplayer needs the PowerShell owner even when the cross-build tools are
+# otherwise present; solo does not. Use an isolated PATH for both controls.
+printf '#!/bin/sh\nexit 0\n' > "$FIXTURE/tools/powershell.exe"
+printf '#!/bin/sh\nexit 0\n' > "$FIXTURE/tools/curl"
+chmod +x "$FIXTURE/tools/powershell.exe" "$FIXTURE/tools/curl"
+for profile in host join; do
+  windows_multiplayer="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+    IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" report "$profile" localhost 2>&1)"
+  grep -q '\[PASS\].*Windows seat owner' <<<"$windows_multiplayer"
+done
+rm "$FIXTURE/tools/powershell.exe"
+for profile in host join; do
+  if missing_owner="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+    IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" report "$profile" localhost 2>&1)"; then
+    printf 'Windows %s accepted without PowerShell\n' "$profile" >&2; exit 1
+  fi
+  grep -q '\[FAIL\].*Windows seat owner.*powershell.exe' <<<"$missing_owner"
+done
+! grep -q 'Windows seat owner' <<<"$tools_report"
+
 rm "$FIXTURE/tools/x86_64-w64-mingw32-gcc"
 if tools_missing="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=0 \
   IDAPTIK_CLIENT_PLATFORM=windows IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
@@ -350,6 +454,18 @@ gpu_report="$(env \
   "$DOCTOR" report solo 2>&1 || true)"
 grep -q '\[PASS\].*bevy renderer.*NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)' <<<"$gpu_report" ||
   { printf 'doctor did not report the selected GPU:\n%s\n' "$gpu_report" >&2; exit 1; }
+
+# Without an override, read the solo seat's log rather than the old shared log.
+mkdir -p "$FIXTURE/renderer-state/idaptik/seats/solo"
+cp "$FIXTURE/game.log" "$FIXTURE/renderer-state/idaptik/seats/solo/game.log"
+printf '%s\n' 'AdapterInfo { name: "llvmpipe", backend: Vulkan }' > "$FIXTURE/renderer-state/idaptik/game.log"
+default_renderer="$(env -u IDAPTIK_DIAG_GAME_LOG XDG_STATE_HOME="$FIXTURE/renderer-state" \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_SKIP_TOOLS=1 IDAPTIK_DIAG_DISPLAY=:0 \
+  IDAPTIK_DIAG_WSLG_DIR="$FIXTURE/wslg" IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/shared_memory" \
+  IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
+  "$DOCTOR" report solo 2>&1)"
+grep -q '\[PASS\].*bevy renderer.*NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)' <<<"$default_renderer"
+! grep -q '\[WARN\].*bevy renderer.*llvmpipe' <<<"$default_renderer"
 
 printf 'client started without an adapter line\n' > "$FIXTURE/game.log"
 no_adapter="$(env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_SKIP_TOOLS=1 \
