@@ -15,7 +15,8 @@ idaptik_local_port() {
   printf '%s' "$port"
 }
 
-# Return a canonical numeric authority, never an unresolved hostname. Reject
+# Print a canonical numeric authority for 127.0.0.1 or localhost, optionally
+# prefixed by ws:// and followed by a port and/or /voice/websocket. Reject
 # userinfo, queries, fragments, alternate paths, address lookalikes and TLS
 # claims: this profile serves only ws://127.0.0.1:<port>/voice/websocket.
 # A missing port uses IDAPTIK_PORT or 4000. Invalid targets or ports return 1

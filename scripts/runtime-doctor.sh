@@ -278,6 +278,9 @@ check_display() {
   info "extended coprocessors" "QPU/APU/IOPU/vector/physics/math/tensor/neural/crypto suite is not required by this release"
 }
 
+# Check the local relay port for host/all profiles, or validate and probe the
+# local target for join. Record failures in FAILURES; an HTTP response does
+# not establish session admission or game readiness.
 check_network() {
   [ "$PROFILE" = "host" ] || [ "$PROFILE" = "join" ] || [ "$PROFILE" = "all" ] || return
 

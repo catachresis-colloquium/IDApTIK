@@ -101,6 +101,8 @@ hp_windows_tool() {
 # its normal -File entry point. Windows retains authority over script policy,
 # Authenticode trust, zone markings and application controls. Never execute
 # the helper body as inline code or change the effective execution policy.
+# Return 0 only for the expected completion marker; otherwise print a
+# diagnostic to stderr and return 1.
 hp_windows_script_preflight() { # <helper path>
   local helper="$1" powershell translated output policy
   [ -r "$helper" ] || { printf 'Windows helper is missing: %s\n' "$helper" >&2; return 1; }

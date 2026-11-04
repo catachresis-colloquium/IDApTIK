@@ -434,6 +434,7 @@ start_host() {
   start_game host "" "multiplayer host · $role" "$role" "$MULTIPLAYER_RUNTIME" host --role "$role"
 }
 
+# Reject unsupported targets before preflight, then launch the requested local seat.
 start_join() {
   local host="$1" role="$2"
   host="$(idaptik_local_target "$host")" || die "join refused: this test relay is local-only"
@@ -539,6 +540,8 @@ stop_game() {
   rm -f "$PID_FILE" "$READY_FILE" "$PROGRESS_FILE"
 }
 
+# Attempt to stop every seat and, when available, the relay. Return 1 if any
+# stop fails, while still attempting the remaining stops.
 stop_all() {
   local status=0 seat
   for seat in solo infiltrator hacker; do
@@ -551,6 +554,9 @@ stop_all() {
   return "$status"
 }
 
+# Report each seat and its last renderer, plus relay status when available.
+# Return 1 for unverified seat ownership; otherwise return 0 if a seat is
+# running or the relay status command succeeds, and 1 if neither applies.
 mode_status() {
   local status=1 seat unverified=0
   for seat in solo infiltrator hacker; do

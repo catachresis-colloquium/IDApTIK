@@ -155,6 +155,9 @@ relay_pid() {
 # not session admission or game readiness.
 relay_up() { curl --noproxy '*' -fsS --connect-timeout 2 --max-time 3 "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; }
 
+# Start the test relay on loopback and wait for its HTTP root to answer.
+# Exit on an already answering port, startup failure, or timeout. If the
+# recorded relay exits early or times out, retain its PID file and log.
 start_relay() {
   if relay_up; then
     die "port $PORT is already answering; refusing to reuse an unverified relay (stop it explicitly)"
@@ -274,6 +277,9 @@ run_windows_client() { # mode target url role session run_config readiness
   trap - EXIT HUP INT TERM
 }
 
+# Launch the host or join client. Linux writes the readiness record before
+# replacing this process; Windows writes it after the client PID is verified.
+# The record signals launch progress, not successful session admission.
 run_seat() { # mode target url role session readiness
   local mode="$1" target="$2" url="$3" role="$4" session="$5" readiness="$6"
   local run_config="$RUN_CONFIG"
@@ -334,6 +340,8 @@ mode_host() {
     "host|$HOST_SHARE_ADDRESS|$PORT|$session|$role"
 }
 
+# Validate and canonicalize the local target before preflight and launch.
+# Unsupported targets and roles terminate the runtime with an error.
 mode_join() {
   [ $# -ge 1 ] || die "join needs a local relay address: join 127.0.0.1[:port] [--role R] [--session S]"
   local target="$1"; shift
