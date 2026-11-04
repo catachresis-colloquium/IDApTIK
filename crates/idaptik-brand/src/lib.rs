@@ -312,11 +312,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "exactly one font must be the default, found 2")]
     fn the_generator_refuses_two_default_fonts() {
+        // Built from one font, so it holds however many fonts the committed
+        // tokens have (a one-font brand is valid: see good_minimal.ncl).
         let mut b = Brand::load();
-        for t in &mut b.font.tokens {
-            t.default = true;
-        }
-        b.font.tokens.truncate(2);
+        let mut first = b.font.tokens[0].clone();
+        first.default = true;
+        let mut second = first.clone();
+        second.name.push_str("_twin");
+        b.font.tokens = vec![first, second];
         let _ = b.render_generated();
     }
 

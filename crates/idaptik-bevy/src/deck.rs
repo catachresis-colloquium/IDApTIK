@@ -147,7 +147,7 @@ pub enum CardText {
 }
 
 const DIM: Color = Color::srgba(0.36, 0.95, 0.71, 0.55);
-const FAINT: Color = Color::srgba(0.36, 0.95, 0.71, 0.14);
+pub(crate) const FAINT: Color = Color::srgba(0.36, 0.95, 0.71, 0.14);
 
 fn line(text: &str, color: Color) -> impl Bundle {
     (

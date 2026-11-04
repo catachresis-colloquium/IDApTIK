@@ -65,6 +65,7 @@ pub const DOOR_UNLOCKED: Color = hex(tok::DOOR_UNLOCKED);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::color::Alpha;
     use idaptik_brand::srgb::{self, BODY, LARGE};
 
     /// A colour as the 8-bit sRGB bytes it renders to, `0xRRGGBB`.
@@ -96,23 +97,28 @@ mod tests {
             "DECK_GLASS moved; re-check every row below"
         );
 
-        // The room names are phosphor at 55 % alpha over the glass. The blend
-        // space decides the result (4.72:1 in sRGB bytes, 7.89:1 in linear);
-        // pin the worse one, the sRGB-space blend, so the verdict holds either way.
-        let dim = {
-            let (p, g) = (bytes(PHOSPHOR), glass);
+        // Translucent colours are composited over the glass with the alpha
+        // the frontend really uses (`screen::ROOM_NAME_ALPHA`, `deck::FAINT`),
+        // so retuning either moves the verdict here. The blend space decides
+        // the result (room names: 4.72:1 in sRGB bytes, 7.89:1 in linear);
+        // pin the worse one, the sRGB-space blend, so the verdict holds
+        // either way.
+        let over = |fg: Color, bg: u32| -> u32 {
+            let a = f64::from(fg.alpha());
+            let f = bytes(fg.with_alpha(1.0));
             let ch = |shift: u32| {
-                let (a, b) = (
-                    f64::from((p >> shift) & 0xff),
-                    f64::from((g >> shift) & 0xff),
+                let (x, y) = (
+                    f64::from((f >> shift) & 0xff),
+                    f64::from((bg >> shift) & 0xff),
                 );
-                ((0.55 * a + 0.45 * b).round() as u32) << shift
+                ((a * x + (1.0 - a) * y).round() as u32) << shift
             };
             ch(16) | ch(8) | ch(0)
         };
+        let dim = over(PHOSPHOR.with_alpha(crate::screen::ROOM_NAME_ALPHA), glass);
+        let faint = over(crate::deck::FAINT, glass);
 
-        // (what, foreground, background, meets 4.5:1, meets 3:1)
-        let rows: [(&str, u32, u32, bool, bool); 7] = [
+        let rows: [(&str, u32, u32, bool, bool); 9] = [
             (
                 "phosphor device labels, screen.rs",
                 bytes(PHOSPHOR),
@@ -163,6 +169,27 @@ mod tests {
                 glass,
                 true,
                 true,
+            ),
+            // FLAGGED, live: an OT verb turns the ready button alarm red with
+            // the verb still in glass (4.27:1). No palette colour reaches
+            // 4.5:1 on alarm red. Open decision in inventory.md.
+            (
+                "glass-coloured OT verb on the alarm button, deck.rs",
+                glass,
+                bytes(ALARM),
+                false,
+                true,
+            ),
+            // A not-ready button is FAINT (phosphor at 14 %): the verb is
+            // about 1.35:1, 2.77:1 in a linear blend. The sim refuses the
+            // action and the card's note line says why, so this is a disabled
+            // control, which WCAG 1.4.3 exempts. Recorded, not flagged.
+            (
+                "glass-coloured verb on the not-ready button (disabled), deck.rs",
+                glass,
+                faint,
+                false,
+                false,
             ),
         ];
         for (what, fg, bg, body, glyph) in rows {

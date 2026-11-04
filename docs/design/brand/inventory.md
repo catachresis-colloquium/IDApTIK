@@ -68,7 +68,7 @@ None of the following was changed on this branch.
 ## Open decisions (yours to make; nothing was changed)
 
 Handoff rule 3 says flag contrast failures rather than silently change the
-brand, so both live failures are pinned as they are. Each option below is a
+brand, so all three live failures are pinned as they are. Each option below is a
 real change to what the game draws; pick one and the tests and §5 of the book
 move with it.
 
@@ -80,7 +80,16 @@ move with it.
 | B. Add a text-red token | A lighter red lifted to at least 4.5:1 on night and glass. | A new colour: rule 1 forbids inventing one without a source, so it needs your sign-off. |
 | C. Accept and document | Keep alarm text; record the exception. | Fails WCAG for the hacker's most urgent labels. |
 
-**2. The bandwidth bar** (`cobalt` on `slate`, 2.58:1).
+**2. The OT deck button** (glass verb on an `alarm` fill, 4.27:1). Found by
+Codex review on #207.
+
+| Option | Change | Trade-off |
+|---|---|---|
+| A. Keep the phosphor button, mark OT another way | The button stays `phosphor` (13.53:1); an `alarm` border, corner or glyph says "operational technology". | Passes and keeps the seat law: red still means threat, as a mark. Recommended. |
+| B. Darker button red | A deeper red fill that a light label clears at 4.5:1. | A new colour, so it needs your sign-off under rule 1. |
+| C. Accept and document | Keep the red button; record the exception. | 4.27:1 on the hacker's riskiest action. |
+
+**3. The bandwidth bar** (`cobalt` on `slate`, 2.58:1).
 
 | Option | Change | Trade-off |
 |---|---|---|
