@@ -247,7 +247,7 @@ run_windows_client() { # mode target url role session run_config readiness
   # Start-Process returns the new client's PID. An image-name search would
   # select the host when launching the second local seat, or kill the wrong
   # window on cancellation. No game-specific authority is granted by this PID.
-  if ! (cd "$(windows_cwd)" && "$powershell" -NoProfile -NonInteractive \
+  if ! (cd "$(windows_cwd)" && "$powershell" -NoProfile -NonInteractive -ExecutionPolicy Bypass \
       -File "$(wslpath -w "$wrapper")" -Executable "$(wslpath -w "$BEVY_BIN")" \
       -Mode "$mode" -Target "$target" -Url "$url" -Session "$session" \
       -Role "$role" -RunConfig "$run_config" -PidFile "$(wslpath -w "$pid_record")"); then
