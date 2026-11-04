@@ -64,7 +64,7 @@ chmod +x "$FIXTURE/system 32/cmd.exe"
   # An explicit verdict overrides even a cached result.
   IDAPTIK_DIAG_WINDOWS_INTEROP=0
   if hp_windows_interop; then echo 'interop override ignored' >&2; exit 1; fi
-  IDAPTIK_DIAG_WINDOWS_INTEROP=1; hp_windows_interop
+  export IDAPTIK_DIAG_WINDOWS_INTEROP=1; hp_windows_interop
 )
 (
   unset IDAPTIK_DIAG_WINDOWS_INTEROP
@@ -129,7 +129,7 @@ WSLPATH
   if hp_wslg_copy_mode_broken; then echo 'healthy WSLg reported broken' >&2; exit 1; fi
   printf '%s\n' 'rdp_allocate_shared_memory: Failed to open fixture' > "$IDAPTIK_DIAG_WESTON_LOG"
   hp_wslg_copy_mode_broken
-  IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/missing"
+  export IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/missing"
   IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/missing.log"
   hp_wslg_copy_mode_broken
 )
@@ -173,6 +173,48 @@ chmod +x "$FIXTURE/timeout-bin/timeout"
 healthy="$(run_fixture report solo 2>&1)"
 grep -q '\[PASS\].*WSLg shared memory' <<<"$healthy"
 grep -q 'READY TO LAUNCH' <<<"$healthy"
+
+# A local relay requires neither a usable external route nor authenticated
+# Tailscale. These were incorrectly inherited from the retired remote flow.
+for lan in '' 172.28.1.2; do
+  offline="$(IDAPTIK_DIAG_LAN_ADDRESS="$lan" run_fixture preflight host 2>&1)"
+  grep -q '\[PASS\].*local-only profile uses 127.0.0.1' <<<"$offline"
+  ! grep -q '\[FAIL\].*tailscale\|\[FAIL\].*reachability' <<<"$offline"
+done
+
+# The diagnostic cannot be used as a network probe for an unsupported legacy
+# session. An answering HTTP root must also not be called session admission.
+mkdir -p "$FIXTURE/network-bin"
+cat > "$FIXTURE/network-bin/curl" <<'CURL'
+#!/bin/sh
+printf '%s\n' "$*" >> "$IDAPTIK_FIXTURE_PROBE_LOG"
+exit 0
+CURL
+chmod +x "$FIXTURE/network-bin/curl"
+probe_log="$FIXTURE/network-probes"
+: > "$probe_log"
+for target in example.test 100.64.0.1 ws://127.0.0.1@example.test/voice/websocket \
+  127.0.0.1:0 127.0.0.1:65536 wss://127.0.0.1/voice/websocket; do
+  if rejected="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
+    run_fixture preflight join "$target" 2>&1)"; then
+    printf 'unsupported target accepted: %s\n' "$target" >&2
+    exit 1
+  fi
+  grep -q '\[FAIL\].*host target.*local-only' <<<"$rejected"
+done
+[ ! -s "$probe_log" ]
+local_probe="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
+  run_fixture preflight join ws://localhost:4123/voice/websocket 2>&1)"
+grep -qF 'http://127.0.0.1:4123/' "$probe_log"
+grep -qF -- '--noproxy *' "$probe_log"
+grep -qF 'session admission and game readiness are not established' <<<"$local_probe"
+! grep -qF 'the host has reached' <<<"$local_probe"
+
+# PID paths are user-scoped even without XDG_RUNTIME_DIR. TMPDIR must not
+# redirect stable ownership records into a shared directory.
+runtime_root="$(unset XDG_RUNTIME_DIR; XDG_STATE_HOME="$FIXTURE/state" TMPDIR=/tmp \
+  bash -c '. "$1/scripts/local-session.sh"; idaptik_runtime_root' _ "$REPO_DIR")"
+[ "$runtime_root" = "$FIXTURE/state/launch-scaffolder/idaptik" ]
 
 rmdir "$FIXTURE/shared_memory"
 if missing="$(run_fixture preflight host 2>&1)"; then

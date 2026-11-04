@@ -77,7 +77,7 @@ log. If the mount is missing or Weston reports `rdp_allocate_shared_memory`
 with an input/output error, a WSL-hosted Bevy window is unsafe. When Windows
 interop, the `x86_64-pc-windows-gnu` Rust target, and the MinGW linker are
 available, the launcher automatically builds and starts a native Windows Bevy
-client instead. The Phoenix relay and Tailscale endpoint remain in WSL; the
+client instead. The Phoenix relay remains in WSL; the
 local Windows client reaches that relay through `127.0.0.1`. The current
 test profile does **not** advertise a tailnet address for remote players.
 
@@ -147,7 +147,7 @@ selected, which can disagree.
 
 Missing audio and software rendering are reported separately as degradations;
 they do not block play. `./launcher.sh --repair` installs pinned repository
-toolchains and can guide Tailscale bootstrap/authentication, but intentionally
+toolchains and explains host-level WSL recovery, but intentionally
 cannot restart WSL or alter Windows GPU drivers from inside the session.
 
 ## Host/join readiness choreography
@@ -160,16 +160,25 @@ journal. The other player may join on the same computer through
 `127.0.0.1:PORT`. Remote addresses must not be shared or port-forwarded.
 
 The local joiner performs its own checks and probes the exact loopback port.
+Both the launcher and internal runtime reject remote targets before connecting;
+`localhost` is normalised to `127.0.0.1`, so no DNS answer can redirect it.
+An HTTP answer establishes reachability only, not an authenticated or exclusive
+seat. Offline machines and WSL2 NAT do not need Tailscale for this profile.
 It prints `READY — JOINING HOST NOW` only after the local build and relay
 probe. A cross is blocking; a warning is a disclosed degradation.
 
 The main launcher builds and starts Bevy in the background. It reports the
 startup log location when launching; by default this is
-`$XDG_STATE_HOME/idaptik/game.log` (or
-`$HOME/.local/state/idaptik/game.log`). Check it with:
+`$XDG_STATE_HOME/idaptik/seats/ROLE/game.log` (or
+`$HOME/.local/state/idaptik/seats/ROLE/game.log`), where `ROLE` is `solo`,
+`infiltrator` or `hacker`. Each seat has its own PID and readiness records,
+so starting the other local client does not overwrite the host. `--status`
+reports all three slots; `--stop` stops all tracked clients and the relay.
+Native Windows clients are tracked by the exact PID returned by
+`Start-Process`, never by the first matching executable name. Check a log with:
 
 ```sh
-tail -50 "${XDG_STATE_HOME:-$HOME/.local/state}/idaptik/game.log"
+tail -50 "${XDG_STATE_HOME:-$HOME/.local/state}/idaptik/seats/hacker/game.log"
 ```
 
 Run `./launcher.sh --status` to distinguish a slow first build from a process
