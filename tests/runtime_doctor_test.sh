@@ -34,13 +34,17 @@ mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
     [ "$actual" = "$expected" ] || { printf 'port %s became %s\n' "$input" "$actual" >&2; exit 1; }
   done
   for input in '' 0 00000 65536 100000 -1 +1 ' 80' 80x; do
-    if idaptik_local_port "$input" >/dev/null; then
+    if output="$(idaptik_local_port "$input")"; then
       printf 'invalid port accepted: [%s]\n' "$input" >&2; exit 1
     fi
+    [ -z "$output" ] || { printf 'invalid port produced output: [%s]\n' "$input" >&2; exit 1; }
   done
 
   for pair in 'localhost 127.0.0.1:4000' \
+    'ws://localhost 127.0.0.1:4000' \
+    'localhost/voice/websocket 127.0.0.1:4000' \
     '127.0.0.1:00001 127.0.0.1:1' \
+    'ws://127.0.0.1:0080 127.0.0.1:80' \
     'ws://localhost:65535/voice/websocket 127.0.0.1:65535' \
     'ws://127.0.0.1/voice/websocket 127.0.0.1:4000'; do
     read -r input expected <<<"$pair"
@@ -49,6 +53,8 @@ mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
   done
   export IDAPTIK_PORT=0080
   [ "$(idaptik_local_target localhost)" = '127.0.0.1:80' ]
+  export IDAPTIK_PORT=''
+  [ "$(idaptik_local_target ws://localhost)" = '127.0.0.1:4000' ]
   export IDAPTIK_PORT=65536
   if idaptik_local_target localhost >/dev/null 2>&1; then
     echo 'invalid default port accepted' >&2; exit 1
@@ -58,10 +64,13 @@ mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
     localhost. LOCALHOST 127.0.0.2 127.000.0.1 'localhost#fragment' \
     'localhost?query=1' 'ws://user@localhost/voice/websocket' \
     'ws://localhost/voice/websocket/' 'http://localhost' 'localhost/path' \
-    'localhost:80/voice/websocket?x=1'; do
-    if idaptik_local_target "$input" >/dev/null 2>&1; then
+    'localhost:80/voice/websocket?x=1' 'localhost:80#fragment' \
+    'ws://localhost:80@127.0.0.1/voice/websocket' 'localhost:80:90' \
+    '127.0.0.1:80/voice/websocket%2f' 'localhost ' $'localhost\n'; do
+    if output="$(idaptik_local_target "$input" 2>/dev/null)"; then
       printf 'invalid local target accepted: [%s]\n' "$input" >&2; exit 1
     fi
+    [ -z "$output" ] || { printf 'invalid target produced an authority: [%s]\n' "$input" >&2; exit 1; }
   done
 )
 
@@ -87,6 +96,95 @@ mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
   if idaptik_private_dirs "$FIXTURE/not-a-directory/child" 2>/dev/null; then
     echo 'directory creation failure was ignored' >&2; exit 1
   fi
+)
+
+# The Windows helper must be authorized by its normal -File entry point.
+# Simulate only path translation and PowerShell; inspect every invocation so
+# failed probes cannot silently fall back to inline execution or policy edits.
+mkdir -p "$FIXTURE/policy-bin"
+cat > "$FIXTURE/policy-bin/wslpath" <<'WSLPATH'
+#!/bin/sh
+[ "$1" = -w ] && [ "$2" = "$POLICY_HELPER" ] || exit 1
+case "$TRANSLATION" in
+  fail) exit 1 ;;
+  empty) exit 0 ;;
+  *) printf '%s\n' 'C:\helper path\start-windows-client.ps1' ;;
+esac
+WSLPATH
+cat > "$FIXTURE/policy-bin/powershell.exe" <<'POWERSHELL'
+#!/bin/sh
+printf '<%s>' "$@" >> "$POLICY_LOG"
+printf '\n' >> "$POLICY_LOG"
+case "$*" in
+  *-PolicyCheck)
+    case "$POLICY_RESULT" in
+      allow) printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\r\n' ;;
+      extra) printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\nextra output\n' ;;
+      deny) printf 'fixture policy denied\n' >&2; exit 1 ;;
+    esac ;;
+  *Get-ExecutionPolicy)
+    if [ "$POLICY_QUERY" = fail ]; then exit 1; fi
+    printf 'AllSigned\r\n' ;;
+  *) exit 2 ;;
+esac
+POWERSHELL
+chmod +x "$FIXTURE/policy-bin/wslpath" "$FIXTURE/policy-bin/powershell.exe"
+(
+  . "$REPO_DIR/scripts/windows-interop.sh"
+  export PATH="$FIXTURE/policy-bin:/usr/bin:/bin" IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty"
+  export POLICY_HELPER="$FIXTURE/helper with spaces.ps1" POLICY_LOG="$FIXTURE/policy-log"
+  export TRANSLATION=ok POLICY_RESULT=allow POLICY_QUERY=ok
+  : > "$POLICY_HELPER"
+  : > "$POLICY_LOG"
+  hp_windows_script_preflight "$POLICY_HELPER"
+  expected='<-NoProfile><-NonInteractive><-File><C:\helper path\start-windows-client.ps1><-PolicyCheck>'
+  [ "$(cat "$POLICY_LOG")" = "$expected" ]
+
+  POLICY_RESULT=extra
+  : > "$POLICY_LOG"
+  if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+    echo 'extra probe output was accepted' >&2; exit 1
+  fi
+  [[ "$output" == *'no recognised completion marker'* ]]
+  [ "$(cat "$POLICY_LOG")" = "$expected" ]
+
+  POLICY_RESULT=deny
+  for POLICY_QUERY in ok fail; do
+    export POLICY_QUERY
+    : > "$POLICY_LOG"
+    if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+      echo 'denied policy probe was accepted' >&2; exit 1
+    fi
+    if [ "$POLICY_QUERY" = ok ]; then
+      [[ "$output" == *'(AllSigned)'* ]]
+    else
+      [[ "$output" == *'(unavailable)'* ]]
+    fi
+    [[ "$output" == *'fixture policy denied'* ]]
+    [ "$(cat "$POLICY_LOG")" = "$expected"$'\n''<-NoProfile><-NonInteractive><-Command><Get-ExecutionPolicy>' ]
+  done
+
+  for TRANSLATION in fail empty; do
+    export TRANSLATION
+    : > "$POLICY_LOG"
+    if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+      echo 'failed path translation was accepted' >&2; exit 1
+    fi
+    [[ "$output" == *'wslpath could not resolve'* ]]
+    [ ! -s "$POLICY_LOG" ]
+  done
+  if output="$(hp_windows_script_preflight "$FIXTURE/missing-helper" 2>&1)"; then
+    echo 'missing helper was accepted' >&2; exit 1
+  fi
+  [[ "$output" == *'Windows helper is missing'* ]]
+  [ ! -s "$POLICY_LOG" ]
+
+  rm "$FIXTURE/policy-bin/powershell.exe"
+  if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+    echo 'missing PowerShell was accepted' >&2; exit 1
+  fi
+  [[ "$output" == *'powershell.exe is required'* ]]
+  [ ! -s "$POLICY_LOG" ]
 )
 
 # Exercise the shared library directly in isolated shells. Paths with spaces
