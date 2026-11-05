@@ -87,11 +87,17 @@ trouble is covered by
 [`docs/MULTIPLAYER-TROUBLESHOOTING.md`](docs/MULTIPLAYER-TROUBLESHOOTING.md).
 Before launch, the menu and `./launcher.sh --doctor` review the player machine,
 OS/kernel/WSL transport, graphics coprocessor, audio, pinned dependencies,
-Tailscale and reachability. `./launcher.sh --repair` performs safe dependency
-and guided network remediation; `./launcher.sh --flowdiags` opens a friendly
+and the local relay boundary. `./launcher.sh --repair` performs safe dependency
+remediation and explains WSL recovery; `./launcher.sh --flowdiags` opens a friendly
 HTML decision flow, and `./launcher.sh --man` displays the complete manual.
-Hosts invite peers only after the green `READY FOR JOINERS` result; joiners get
-their own build/reachability checklist and green joining result.
+The current test-profile multiplayer is **local-only**: after
+`READY FOR LOCAL JOINER ONLY`, run the printed `--join 127.0.0.1:PORT` command
+in another terminal on this computer, selecting the other role. Each seat
+has its own process, log and readiness record. No internet route or Tailscale
+login is required, and remote targets are refused before connecting. Secure
+remote hosting remains gated on Burble's authenticated admission and exclusive
+seats ([Burble #254](https://github.com/metadatastician/burble/issues/254));
+an HTTP response or passing legacy loopback does not establish those guarantees.
 
 On WSL2, `./launcher.sh --solo --windows-client` builds and runs the native
 Windows client instead of the WSLg one; use it when a WSLg window dies during

@@ -18,14 +18,16 @@ does not declare readiness merely because a process exists.
 Build and open the Bevy GUI with both roles controlled locally.
 .TP
 .BR --host " [--role infiltrator|hacker]"
-Check host dependencies and route, build the GUI, start and health-check the
-Phoenix/Bandit relay, then open the selected seat.  Invite another player only
-after the green READY FOR JOINERS message.
+Check host dependencies, build the GUI, start the loopback-only Phoenix/Bandit
+test relay, then open the selected seat.  Open the other local seat only
+after the green READY FOR LOCAL JOINER ONLY message.
 .TP
 .BR --join " HOST [--role infiltrator|hacker]"
-Check the join machine, build the GUI, and probe HOST port 4000.  The client
-does not start until the relay answers.  HOST may be a name, IPv4 address,
-host:port pair, or ws:// / wss:// URL.
+Check the local machine, build the GUI, and probe the loopback relay.  HOST
+must be 127.0.0.1 or localhost, optionally with a port (default 4000), or the
+equivalent ws:// address ending in /voice/websocket.  localhost is converted
+to 127.0.0.1 before any connection.  Remote targets, TLS claims, alternate
+paths, userinfo, query strings and fragments are refused.
 .TP
 .BR --auto , " --browser" , " --web"
 Open the interactive menu.  This is the default.
@@ -37,18 +39,20 @@ Windows Bevy client instead of the WSLg one.  Windows interop is discovered at
 not need to be on PATH, and interop is proved by executing cmd.exe rather than
 by trusting that the file exists.  Provision it with
 .B just windows-client-deps
-(the x86_64-pc-windows-gnu target and the MinGW cross-linker).  The relay and
-Tailscale endpoint stay in WSL.
+(the x86_64-pc-windows-gnu target and the MinGW cross-linker).  The relay stays
+in WSL.  Multiplayer also requires Windows PowerShell: Start-Process records
+the exact native PID for each seat, so stopping one cannot select the other
+client by image name.
 .SH DIAGNOSTICS AND REPAIR
 .TP
 .B --doctor
 Print machine, OS/kernel/architecture, WSL/WSLg transport, CPU/memory,
 graphics coprocessor/renderer, audio, pinned Rust and Elixir dependencies,
-Tailscale, and host-route status.  Fatal checks return non-zero.
+and the local-only relay boundary.  No external route or Tailscale connection
+is needed for loopback hosting.  Fatal checks return non-zero.
 .TP
 .B --repair
-Trust the repository and install its pinned mise dependencies.  On WSL2 NAT,
-offer guided Tailscale installation/authentication.  Host-level WSLg recovery
+Trust the repository and install its pinned mise dependencies.  Host-level WSLg recovery
 is explained but never performed automatically because wsl --shutdown would
 terminate every active WSL process.
 .TP
@@ -64,10 +68,12 @@ Display this manual.
 Alias for solo GUI launch.
 .TP
 .B --status
-Report tracked game/relay processes, binary state, and logs.
+Report each tracked local seat and relay process, binary state, and logs.
 .TP
 .B --stop
-Stop the tracked game and relay.
+Stop all tracked local seats and the relay.  Untracked processes are not
+owned by this launcher.  Stop an older launcher before upgrading; the new
+per-user PID directory does not trust records left in a shared /tmp directory.
 .TP
 .BR --integ " [--force]"
 Install desktop/start-menu integration.
@@ -90,10 +96,14 @@ away.  --status prints the same line from the last run's log.  The doctor
 reports both the OpenGL renderer (glxinfo) and the adapter Bevy actually
 selected; these can disagree.
 .SH READINESS CONTRACT
-The host's READY FOR JOINERS message means runtime diagnostics passed, the GUI
-build completed, the relay answered its health probe, a peer-reachable address
-exists, and the host seat is launching.  The joiner's READY -- JOINING HOST NOW
-message means its diagnostics/build passed and the exact host relay answered.
+The host's READY FOR LOCAL JOINER ONLY message means runtime diagnostics
+passed, the GUI build completed, the loopback test relay answered its health
+probe, and the host seat is launching.  It permits the second client on this
+computer only.  The joiner's READY -- JOINING HOST NOW message means its
+diagnostics/build passed and the exact loopback relay answered.
+An HTTP response establishes neither authenticated admission, exclusive seat
+authority, peer delivery, nor applied game state.  Those claims need their own
+protocol evidence.  The current profile is experimental and local-only.
 A warning is a degradation; a cross is blocking and nothing should launch.
 .SH WSLG COPY MODE
 If Windows shows a penguin taskbar item prefixed [WARN: COPY MODE], WSLg failed
@@ -101,7 +111,7 @@ its shared-memory window transport.  The launcher detects the Weston
 rdp_allocate_shared_memory error or missing /mnt/shared_memory.  When Windows
 interop, the x86_64-pc-windows-gnu Rust target, and the MinGW linker are
 available, it bypasses WSLg with a native Windows Bevy client while retaining
-the Phoenix relay and Tailscale endpoint in WSL.  Otherwise it stops before
+the Phoenix relay in WSL.  Otherwise it stops before
 launch.  The same client can be requested explicitly with --windows-client when
 WSLg opens a window that dies during surface or present-mode negotiation; the
 launcher prints that command when it sees the client die that early.  In Windows PowerShell as Administrator run:
@@ -114,9 +124,13 @@ wsl --shutdown
 Reopen the distribution and run --doctor.  Restart Windows if necessary.  Do
 not manually create /mnt/shared_memory; WSLg must supply the host-backed mount.
 .SH NETWORKING
-WSL2 NAT addresses in 172.16.0.0/12 are not offered to peers.  Tailscale is the
-supported simple route and must be connected before the host becomes ready.
-The joiner probes the selected host and port before launching.
+The fixed-secret MIX_ENV=test relay binds only to 127.0.0.1.  Host and join
+both enforce this profile; no LAN, tailnet, public address, SSH forward or
+portproxy may expose it to another machine.  Authenticated remote hosting
+remains gated on Burble session admission and exclusive seats (Burble #254).
+The current native Windows client uses Windows-to-WSL localhost access;
+if that local route is unavailable, diagnose WSL locally rather than exposing
+the relay on 0.0.0.0.
 .SH EXTENDED COPROCESSORS
 QPU, APU, IOPU, vector, physics, math, tensor, neural, graphics, and crypto
 suite work is separate architecture planning.  Except for the graphics adapter
@@ -142,14 +156,18 @@ linux or windows.  --windows-client sets it; an explicit value wins over the
 WSLg Copy Mode fallback, but is still validated against WSL2/interop.
 .SH FILES
 .TP
-.I ~/.local/state/idaptik/game.log
-GUI/build startup log.
+.I $XDG_RUNTIME_DIR/launch-scaffolder/idaptik/{solo,infiltrator,hacker,relay}.pid
+Per-seat and relay ownership.  Without XDG_RUNTIME_DIR the base is
+XDG_STATE_HOME (default ~/.local/state), never /tmp.
 .TP
-.I ~/.local/state/idaptik/startup.progress
-Machine-readable startup phase stream.
+.I ~/.local/state/idaptik/seats/{solo,infiltrator,hacker}/game.log
+Per-seat GUI/build startup log.
 .TP
-.I ~/.local/state/idaptik/startup.ready
-Readiness record, created only after all startup gates.
+.I ~/.local/state/idaptik/seats/{solo,infiltrator,hacker}/startup.progress
+Per-seat machine-readable startup phase stream.
+.TP
+.I ~/.local/state/idaptik/seats/{solo,infiltrator,hacker}/startup.ready
+Per-seat readiness record, created only after that seat's startup gates.
 .TP
 .I ~/.local/state/idaptik-multiplayer/relay.log
 Phoenix/Bandit relay log.

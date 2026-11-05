@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: MPL-2.0
+# Exercise the shared gate on this repository's real kernel obligations.
+# The existing Creusot Proof workflow retains its denominator and mutant gate.
+name: Shared Creusot Kernel Canary
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-creusot-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lock-closure:
+    name: Shared gate lock closure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      STANDARDS_REF: d3e4b485a2af90c92a8e18af0888cd19cb132cd9
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Provision pinned YAML reader (Y-1)
+        run: bash scripts/install-ci-yq.sh
+      - name: Fetch the canonical closure checker at its reviewed revision
+        run: |
+          set -euo pipefail
+          git init --quiet "$RUNNER_TEMP/standards"
+          git -C "$RUNNER_TEMP/standards" remote add origin https://github.com/metadatastician/standards.git
+          git -C "$RUNNER_TEMP/standards" fetch --no-tags --depth=1 origin "$STANDARDS_REF"
+          git -C "$RUNNER_TEMP/standards" checkout --detach --force FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/standards" rev-parse HEAD)" = "$STANDARDS_REF"
+      - name: Closure checker controls and the reviewed caller graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/standards/scripts/tests/check-reusable-closure-test.sh"
+          bash "$RUNNER_TEMP/standards/scripts/close-lock.sh" --check
+          bash "$RUNNER_TEMP/standards/scripts/check-reusable-closure.sh" \
+            --repo "$GITHUB_REPOSITORY"
+
+  kernel:
+    name: Shared kernel proof
+    uses: hyperpolymath/cicd-suite/.github/workflows/creusot-gate.yml@faba7124aee223098d33497bdadc96e111829752
+    with:
+      working_directory: crates/idaptik-kernel
+      creusot_version: "0.14.0"
+      rust_nightly: "nightly-2026-08-03"
+      enforce_hollow: true

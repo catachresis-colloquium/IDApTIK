@@ -23,6 +23,170 @@ run_fixture() {
 mkdir -p "$FIXTURE/wslg" "$FIXTURE/shared_memory"
 : > "$FIXTURE/wslg/weston.log"
 
+# Exercise the shared local-only boundary directly, including values that
+# would be ambiguous if ports were interpreted as octal or as URL authorities.
+(
+  . "$REPO_DIR/scripts/local-session.sh"
+  unset IDAPTIK_PORT
+  for pair in '1 1' '00001 1' '0080 80' '65535 65535'; do
+    read -r input expected <<<"$pair"
+    actual="$(idaptik_local_port "$input")"
+    [ "$actual" = "$expected" ] || { printf 'port %s became %s\n' "$input" "$actual" >&2; exit 1; }
+  done
+  for input in '' 0 00000 65536 100000 -1 +1 ' 80' 80x; do
+    if output="$(idaptik_local_port "$input")"; then
+      printf 'invalid port accepted: [%s]\n' "$input" >&2; exit 1
+    fi
+    [ -z "$output" ] || { printf 'invalid port produced output: [%s]\n' "$input" >&2; exit 1; }
+  done
+
+  for pair in 'localhost 127.0.0.1:4000' \
+    'ws://localhost 127.0.0.1:4000' \
+    'localhost/voice/websocket 127.0.0.1:4000' \
+    '127.0.0.1:00001 127.0.0.1:1' \
+    'ws://127.0.0.1:0080 127.0.0.1:80' \
+    'ws://localhost:65535/voice/websocket 127.0.0.1:65535' \
+    'ws://127.0.0.1/voice/websocket 127.0.0.1:4000'; do
+    read -r input expected <<<"$pair"
+    actual="$(idaptik_local_target "$input")"
+    [ "$actual" = "$expected" ] || { printf 'target %s became %s\n' "$input" "$actual" >&2; exit 1; }
+  done
+  export IDAPTIK_PORT=0080
+  [ "$(idaptik_local_target localhost)" = '127.0.0.1:80' ]
+  export IDAPTIK_PORT=''
+  [ "$(idaptik_local_target ws://localhost)" = '127.0.0.1:4000' ]
+  export IDAPTIK_PORT=65536
+  if idaptik_local_target localhost >/dev/null 2>&1; then
+    echo 'invalid default port accepted' >&2; exit 1
+  fi
+  [ "$(idaptik_local_target localhost:1)" = '127.0.0.1:1' ]
+  for input in '' localhost: localhost:00000 localhost:100000 \
+    localhost. LOCALHOST 127.0.0.2 127.000.0.1 'localhost#fragment' \
+    'localhost?query=1' 'ws://user@localhost/voice/websocket' \
+    'ws://localhost/voice/websocket/' 'http://localhost' 'localhost/path' \
+    'localhost:80/voice/websocket?x=1' 'localhost:80#fragment' \
+    'ws://localhost:80@127.0.0.1/voice/websocket' 'localhost:80:90' \
+    '127.0.0.1:80/voice/websocket%2f' 'localhost ' $'localhost\n'; do
+    if output="$(idaptik_local_target "$input" 2>/dev/null)"; then
+      printf 'invalid local target accepted: [%s]\n' "$input" >&2; exit 1
+    fi
+    [ -z "$output" ] || { printf 'invalid target produced an authority: [%s]\n' "$input" >&2; exit 1; }
+  done
+)
+
+# Runtime paths use XDG precedence and create or repair private directories
+# without changing the caller's umask, including paths containing spaces.
+(
+  . "$REPO_DIR/scripts/local-session.sh"
+  export HOME="$FIXTURE/home path" XDG_STATE_HOME="$FIXTURE/state path" XDG_RUNTIME_DIR="$FIXTURE/runtime path"
+  [ "$(idaptik_runtime_root)" = "$XDG_RUNTIME_DIR/launch-scaffolder/idaptik" ]
+  unset XDG_RUNTIME_DIR
+  [ "$(idaptik_runtime_root)" = "$XDG_STATE_HOME/launch-scaffolder/idaptik" ]
+  unset XDG_STATE_HOME
+  [ "$(idaptik_runtime_root)" = "$HOME/.local/state/launch-scaffolder/idaptik" ]
+  mkdir -p "$FIXTURE/existing private"
+  chmod 0755 "$FIXTURE/existing private"
+  umask 022
+  idaptik_private_dirs "$FIXTURE/existing private" "$FIXTURE/new parent/new child"
+  [ "$(stat -c %a "$FIXTURE/existing private")" = 700 ]
+  [ "$(stat -c %a "$FIXTURE/new parent")" = 700 ]
+  [ "$(stat -c %a "$FIXTURE/new parent/new child")" = 700 ]
+  [ "$(umask)" = 0022 ]
+  : > "$FIXTURE/not-a-directory"
+  if idaptik_private_dirs "$FIXTURE/not-a-directory/child" 2>/dev/null; then
+    echo 'directory creation failure was ignored' >&2; exit 1
+  fi
+)
+
+# The Windows helper must be authorized by its normal -File entry point.
+# Simulate only path translation and PowerShell; inspect every invocation so
+# failed probes cannot silently fall back to inline execution or policy edits.
+mkdir -p "$FIXTURE/policy-bin"
+cat > "$FIXTURE/policy-bin/wslpath" <<'WSLPATH'
+#!/bin/sh
+[ "$1" = -w ] && [ "$2" = "$POLICY_HELPER" ] || exit 1
+case "$TRANSLATION" in
+  fail) exit 1 ;;
+  empty) exit 0 ;;
+  *) printf '%s\n' 'C:\helper path\start-windows-client.ps1' ;;
+esac
+WSLPATH
+cat > "$FIXTURE/policy-bin/powershell.exe" <<'POWERSHELL'
+#!/bin/sh
+printf '<%s>' "$@" >> "$POLICY_LOG"
+printf '\n' >> "$POLICY_LOG"
+case "$*" in
+  *-PolicyCheck)
+    case "$POLICY_RESULT" in
+      allow) printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\r\n' ;;
+      extra) printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\nextra output\n' ;;
+      deny) printf 'fixture policy denied\n' >&2; exit 1 ;;
+    esac ;;
+  *Get-ExecutionPolicy)
+    if [ "$POLICY_QUERY" = fail ]; then exit 1; fi
+    printf 'AllSigned\r\n' ;;
+  *) exit 2 ;;
+esac
+POWERSHELL
+chmod +x "$FIXTURE/policy-bin/wslpath" "$FIXTURE/policy-bin/powershell.exe"
+(
+  . "$REPO_DIR/scripts/windows-interop.sh"
+  export PATH="$FIXTURE/policy-bin:/usr/bin:/bin" IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty"
+  export POLICY_HELPER="$FIXTURE/helper with spaces.ps1" POLICY_LOG="$FIXTURE/policy-log"
+  export TRANSLATION=ok POLICY_RESULT=allow POLICY_QUERY=ok
+  : > "$POLICY_HELPER"
+  : > "$POLICY_LOG"
+  hp_windows_script_preflight "$POLICY_HELPER"
+  expected='<-NoProfile><-NonInteractive><-File><C:\helper path\start-windows-client.ps1><-PolicyCheck>'
+  [ "$(cat "$POLICY_LOG")" = "$expected" ]
+
+  POLICY_RESULT=extra
+  : > "$POLICY_LOG"
+  if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+    echo 'extra probe output was accepted' >&2; exit 1
+  fi
+  [[ "$output" == *'no recognised completion marker'* ]]
+  [ "$(cat "$POLICY_LOG")" = "$expected" ]
+
+  POLICY_RESULT=deny
+  for POLICY_QUERY in ok fail; do
+    export POLICY_QUERY
+    : > "$POLICY_LOG"
+    if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+      echo 'denied policy probe was accepted' >&2; exit 1
+    fi
+    if [ "$POLICY_QUERY" = ok ]; then
+      [[ "$output" == *'(AllSigned)'* ]]
+    else
+      [[ "$output" == *'(unavailable)'* ]]
+    fi
+    [[ "$output" == *'fixture policy denied'* ]]
+    [ "$(cat "$POLICY_LOG")" = "$expected"$'\n''<-NoProfile><-NonInteractive><-Command><Get-ExecutionPolicy>' ]
+  done
+
+  for TRANSLATION in fail empty; do
+    export TRANSLATION
+    : > "$POLICY_LOG"
+    if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+      echo 'failed path translation was accepted' >&2; exit 1
+    fi
+    [[ "$output" == *'wslpath could not resolve'* ]]
+    [ ! -s "$POLICY_LOG" ]
+  done
+  if output="$(hp_windows_script_preflight "$FIXTURE/missing-helper" 2>&1)"; then
+    echo 'missing helper was accepted' >&2; exit 1
+  fi
+  [[ "$output" == *'Windows helper is missing'* ]]
+  [ ! -s "$POLICY_LOG" ]
+
+  rm "$FIXTURE/policy-bin/powershell.exe"
+  if output="$(hp_windows_script_preflight "$POLICY_HELPER" 2>&1)"; then
+    echo 'missing PowerShell was accepted' >&2; exit 1
+  fi
+  [[ "$output" == *'powershell.exe is required'* ]]
+  [ ! -s "$POLICY_LOG" ]
+)
+
 # Exercise the shared library directly in isolated shells. Paths with spaces
 # also check that discovery and the execution probe preserve argument boundaries.
 mkdir -p "$FIXTURE/system 32" "$FIXTURE/path-bin" "$FIXTURE/empty"
@@ -64,7 +228,7 @@ chmod +x "$FIXTURE/system 32/cmd.exe"
   # An explicit verdict overrides even a cached result.
   IDAPTIK_DIAG_WINDOWS_INTEROP=0
   if hp_windows_interop; then echo 'interop override ignored' >&2; exit 1; fi
-  IDAPTIK_DIAG_WINDOWS_INTEROP=1; hp_windows_interop
+  export IDAPTIK_DIAG_WINDOWS_INTEROP=1; hp_windows_interop
 )
 (
   unset IDAPTIK_DIAG_WINDOWS_INTEROP
@@ -129,7 +293,7 @@ WSLPATH
   if hp_wslg_copy_mode_broken; then echo 'healthy WSLg reported broken' >&2; exit 1; fi
   printf '%s\n' 'rdp_allocate_shared_memory: Failed to open fixture' > "$IDAPTIK_DIAG_WESTON_LOG"
   hp_wslg_copy_mode_broken
-  IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/missing"
+  export IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/missing"
   IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/missing.log"
   hp_wslg_copy_mode_broken
 )
@@ -173,6 +337,66 @@ chmod +x "$FIXTURE/timeout-bin/timeout"
 healthy="$(run_fixture report solo 2>&1)"
 grep -q '\[PASS\].*WSLg shared memory' <<<"$healthy"
 grep -q 'READY TO LAUNCH' <<<"$healthy"
+
+# A local relay requires neither a usable external route nor authenticated
+# Tailscale. These were incorrectly inherited from the retired remote flow.
+for lan in '' 172.28.1.2; do
+  offline="$(IDAPTIK_DIAG_LAN_ADDRESS="$lan" run_fixture preflight host 2>&1)"
+  grep -q '\[PASS\].*local-only profile uses 127.0.0.1' <<<"$offline"
+  if grep -q '\[FAIL\].*tailscale\|\[FAIL\].*reachability' <<<"$offline"; then
+    printf 'local-only host preflight reported a retired remote-flow failure (lan=%s)\n' "$lan" >&2
+    exit 1
+  fi
+done
+for port in 0 65536 invalid; do
+  if invalid_port="$(IDAPTIK_PORT="$port" run_fixture preflight host 2>&1)"; then
+    printf 'invalid host port accepted: %s\n' "$port" >&2; exit 1
+  fi
+  grep -q '\[FAIL\].*relay port.*between 1 and 65535' <<<"$invalid_port"
+done
+
+# The diagnostic cannot be used as a network probe for an unsupported legacy
+# session. An answering HTTP root must also not be called session admission.
+mkdir -p "$FIXTURE/network-bin"
+cat > "$FIXTURE/network-bin/curl" <<'CURL'
+#!/bin/sh
+printf '%s\n' "$*" >> "$IDAPTIK_FIXTURE_PROBE_LOG"
+exit "${IDAPTIK_FIXTURE_PROBE_EXIT:-0}"
+CURL
+chmod +x "$FIXTURE/network-bin/curl"
+probe_log="$FIXTURE/network-probes"
+: > "$probe_log"
+for target in example.test 100.64.0.1 ws://127.0.0.1@example.test/voice/websocket \
+  127.0.0.1:0 127.0.0.1:65536 wss://127.0.0.1/voice/websocket; do
+  if rejected="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
+    run_fixture preflight join "$target" 2>&1)"; then
+    printf 'unsupported target accepted: %s\n' "$target" >&2
+    exit 1
+  fi
+  grep -q '\[FAIL\].*host target.*local-only' <<<"$rejected"
+done
+[ ! -s "$probe_log" ]
+local_probe="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
+  run_fixture preflight join ws://localhost:4123/voice/websocket 2>&1)"
+grep -qF 'http://127.0.0.1:4123/' "$probe_log"
+grep -qF -- '--noproxy *' "$probe_log"
+grep -qF 'session admission and game readiness are not established' <<<"$local_probe"
+if grep -qF 'the host has reached' <<<"$local_probe"; then
+  echo 'HTTP probe output claims the host was reached' >&2
+  exit 1
+fi
+if failed_probe="$(PATH="$FIXTURE/network-bin:$PATH" IDAPTIK_FIXTURE_PROBE_LOG="$probe_log" \
+  IDAPTIK_FIXTURE_PROBE_EXIT=7 run_fixture preflight join localhost:1 2>&1)"; then
+  echo 'failed relay probe did not block join' >&2; exit 1
+fi
+grep -q '\[FAIL\].*host relay.*127.0.0.1:1 is not reachable' <<<"$failed_probe"
+grep -qF 'http://127.0.0.1:1/' "$probe_log"
+
+# PID paths are user-scoped even without XDG_RUNTIME_DIR. TMPDIR must not
+# redirect stable ownership records into a shared directory.
+runtime_root="$(unset XDG_RUNTIME_DIR; XDG_STATE_HOME="$FIXTURE/state" TMPDIR=/tmp \
+  bash -c '. "$1/scripts/local-session.sh"; idaptik_runtime_root' _ "$REPO_DIR")"
+[ "$runtime_root" = "$FIXTURE/state/launch-scaffolder/idaptik" ]
 
 rmdir "$FIXTURE/shared_memory"
 if missing="$(run_fixture preflight host 2>&1)"; then
@@ -256,6 +480,7 @@ case "$*" in
   'exec -- rustup target list --installed')
     [ "${FIXTURE_TARGET:-0}" != 1 ] || printf 'x86_64-pc-windows-gnu\n'
     ;;
+  'exec -- mix --version') exit 0 ;;
   *) exit 1 ;;
 esac
 MISE
@@ -266,6 +491,92 @@ tools_report="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 
   "$DOCTOR" report solo 2>&1)"
 grep -q '\[PASS\].*Windows target.*x86_64-pc-windows-gnu' <<<"$tools_report"
 grep -q '\[PASS\].*Windows linker' <<<"$tools_report"
+
+# Multiplayer needs the PowerShell owner even when the cross-build tools are
+# otherwise present; solo does not. Use an isolated PATH for both controls.
+cat > "$FIXTURE/tools/powershell.exe" <<'POWERSHELL'
+#!/usr/bin/env bash
+# Modeled Windows policy decision; the real helper probe runs separately in
+# windows_client_test.ps1. This fixture does not claim Windows policy proof.
+set -eu
+if [ -n "${IDAPTIK_FIXTURE_POLICY_LOG:-}" ]; then printf '%s\n' "$@" >> "$IDAPTIK_FIXTURE_POLICY_LOG"; fi
+[ "${1:-}" = -NoProfile ] && [ "${2:-}" = -NonInteractive ] || exit 64
+case "${3:-}" in
+  -Command)
+    [ "${4:-}" = Get-ExecutionPolicy ] || exit 64
+    printf '%s\n' "${IDAPTIK_FIXTURE_PS_POLICY:-RemoteSigned}"
+    ;;
+  -File)
+    [ "${5:-}" = -PolicyCheck ] || exit 64
+    case "${IDAPTIK_FIXTURE_PS_OUTCOME:-allowed}" in
+      allowed) printf 'IDAPTIK_WINDOWS_HELPER_ALLOWED\r\n' ;;
+      empty) exit 0 ;;
+      blocked) printf 'fixture: script is not permitted by this machine\n' >&2; exit 1 ;;
+      *) exit 65 ;;
+    esac
+    ;;
+  *) exit 64 ;;
+esac
+POWERSHELL
+printf '#!/bin/sh\nprintf "%%s" "$2"\n' > "$FIXTURE/tools/wslpath"
+printf '#!/bin/sh\nexit 0\n' > "$FIXTURE/tools/curl"
+chmod +x "$FIXTURE/tools/powershell.exe" "$FIXTURE/tools/wslpath" "$FIXTURE/tools/curl"
+for profile in host join; do
+  windows_multiplayer="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+    IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" report "$profile" localhost 2>&1)"
+  grep -q '\[PASS\].*Windows seat owner' <<<"$windows_multiplayer"
+done
+# An allowed signed-file decision under AllSigned remains usable. A blocked
+# script, failed inspection or empty exit-zero result cannot authorize launch.
+for policy in Restricted AllSigned RemoteSigned; do
+  if blocked_policy="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_FIXTURE_PS_POLICY="$policy" IDAPTIK_FIXTURE_PS_OUTCOME=blocked \
+    IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+    IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" preflight host localhost 2>&1)"; then
+    printf 'blocked Windows helper accepted under %s\n' "$policy" >&2; exit 1
+  fi
+  grep -q "effective PowerShell policy ($policy)" <<<"$blocked_policy"
+  grep -q "machine's approved policy" <<<"$blocked_policy"
+done
+signed_policy="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+  IDAPTIK_FIXTURE_PS_POLICY=AllSigned IDAPTIK_FIXTURE_PS_OUTCOME=allowed \
+  IDAPTIK_FIXTURE_POLICY_LOG="$FIXTURE/policy-arguments" \
+  IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+  "$DOCTOR" preflight join localhost 2>&1)"
+grep -q '\[PASS\].*Windows seat owner' <<<"$signed_policy"
+grep -qx -- -File "$FIXTURE/policy-arguments"
+grep -qx -- -PolicyCheck "$FIXTURE/policy-arguments"
+if grep -qiE -- 'ExecutionPolicy|EncodedCommand|ScriptBlock' "$FIXTURE/policy-arguments"; then
+  echo 'policy probe changed policy or replaced file execution' >&2; exit 1
+fi
+for outcome in empty error; do
+  if invalid_policy="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_FIXTURE_PS_OUTCOME="$outcome" IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" \
+    IDAPTIK_CLIENT_PLATFORM=windows IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" preflight host localhost 2>&1)"; then
+    printf 'invalid Windows policy probe accepted: %s\n' "$outcome" >&2; exit 1
+  fi
+  grep -q '\[FAIL\].*Windows seat owner' <<<"$invalid_policy"
+done
+rm "$FIXTURE/tools/powershell.exe"
+for profile in host join; do
+  if missing_owner="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=1 \
+    IDAPTIK_WINDOWS_SYSTEM32="$FIXTURE/empty" IDAPTIK_CLIENT_PLATFORM=windows \
+    IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
+    "$DOCTOR" report "$profile" localhost 2>&1)"; then
+    printf 'Windows %s accepted without PowerShell\n' "$profile" >&2; exit 1
+  fi
+  grep -q '\[FAIL\].*Windows seat owner.*powershell.exe' <<<"$missing_owner"
+done
+if grep -q 'Windows seat owner' <<<"$tools_report"; then
+  echo 'solo mode unnecessarily requires the multiplayer Windows seat owner' >&2
+  exit 1
+fi
+
 rm "$FIXTURE/tools/x86_64-w64-mingw32-gcc"
 if tools_missing="$(env HOME="$FIXTURE/home" PATH="$FIXTURE/tools" FIXTURE_TARGET=0 \
   IDAPTIK_CLIENT_PLATFORM=windows IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_WINDOWS_INTEROP=1 \
@@ -308,6 +619,21 @@ gpu_report="$(env \
   "$DOCTOR" report solo 2>&1 || true)"
 grep -q '\[PASS\].*bevy renderer.*NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)' <<<"$gpu_report" ||
   { printf 'doctor did not report the selected GPU:\n%s\n' "$gpu_report" >&2; exit 1; }
+
+# Without an override, read the solo seat's log rather than the old shared log.
+mkdir -p "$FIXTURE/renderer-state/idaptik/seats/solo"
+cp "$FIXTURE/game.log" "$FIXTURE/renderer-state/idaptik/seats/solo/game.log"
+printf '%s\n' 'AdapterInfo { name: "llvmpipe", backend: Vulkan }' > "$FIXTURE/renderer-state/idaptik/game.log"
+default_renderer="$(env -u IDAPTIK_DIAG_GAME_LOG XDG_STATE_HOME="$FIXTURE/renderer-state" \
+  IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_SKIP_TOOLS=1 IDAPTIK_DIAG_DISPLAY=:0 \
+  IDAPTIK_DIAG_WSLG_DIR="$FIXTURE/wslg" IDAPTIK_DIAG_SHARED_MEMORY="$FIXTURE/shared_memory" \
+  IDAPTIK_DIAG_WESTON_LOG="$FIXTURE/wslg/weston.log" \
+  "$DOCTOR" report solo 2>&1)"
+grep -q '\[PASS\].*bevy renderer.*NVIDIA GeForce RTX 4070 Laptop GPU (Vulkan)' <<<"$default_renderer"
+if grep -q '\[WARN\].*bevy renderer.*llvmpipe' <<<"$default_renderer"; then
+  echo 'renderer report used the retired shared log instead of the solo seat log' >&2
+  exit 1
+fi
 
 printf 'client started without an adapter line\n' > "$FIXTURE/game.log"
 no_adapter="$(env IDAPTIK_DIAG_IS_WSL=1 IDAPTIK_DIAG_SKIP_TOOLS=1 \

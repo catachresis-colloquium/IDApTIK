@@ -5,7 +5,7 @@
 # Internal multiplayer runtime for launcher.sh. This is deliberately not a
 # launcher and has no lifecycle/UI aliases: players use ./launcher.sh only.
 # It owns the Phoenix relay process, release build, host/join seat execution,
-# readiness events, and peer-address discovery behind the canonical launcher.
+# readiness events, and the local-only boundary behind the canonical launcher.
 #
 # Environment: IDAPTIK_PORT (relay port, default 4000), IDAPTIK_BURBLE_DIR
 # (Burble checkout, default sibling ../burble), IDAPTIK_CLIENT_PLATFORM
@@ -15,6 +15,13 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -r "$REPO_DIR/scripts/local-session.sh" ]; then
+  # shellcheck source=scripts/local-session.sh
+  . "$REPO_DIR/scripts/local-session.sh"
+else
+  printf 'error: shared local-session boundary missing\n' >&2
+  exit 1
+fi
 BURBLE_DIR="${IDAPTIK_BURBLE_DIR:-$REPO_DIR/../burble}"
 RUNTIME_DOCTOR="$REPO_DIR/scripts/runtime-doctor.sh"
 RUN_CONFIG="$REPO_DIR/fixtures/session_relay/versus_script.json"
@@ -44,10 +51,14 @@ windows_cwd() {
   if [ -d /mnt/c/Windows ]; then printf '/mnt/c/Windows'; else printf '/'; fi
 }
 
-PORT="${IDAPTIK_PORT:-4000}"
+PORT="$(idaptik_local_port "${IDAPTIK_PORT:-4000}")" || {
+  printf 'error: IDAPTIK_PORT must be between 1 and 65535\n' >&2
+  exit 1
+}
 SESSION_DEFAULT="ghost-lobby"
 
-PID_FILE="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/idaptik-relay.pid"
+RUNTIME_DIR="$(idaptik_runtime_root)"
+PID_FILE="$RUNTIME_DIR/relay.pid"
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/idaptik-multiplayer"
 LOG_FILE="$LOG_DIR/relay.log"
 
@@ -70,21 +81,6 @@ progress() {
 mark_ready() {
   [ -n "${IDAPTIK_READY_FILE:-}" ] || die "internal readiness channel is missing"
   printf '%s\n' "$1" > "$IDAPTIK_READY_FILE"
-}
-
-# WSL2's virtual adapter is NAT'd behind Windows: an address from it is
-# unreachable from any other machine, so the share banner must not offer it.
-is_wsl() { grep -qi microsoft /proc/version 2>/dev/null; }
-
-# True when running under WSL *and* holding an address in WSL's NAT block
-# (172.16/12). WSL2 mirrored networking (Windows 11 22H2+) shares the host's
-# real LAN address instead and is reachable, so it must not be warned about.
-wsl_natted() {
-  is_wsl || return 1
-  case "$1" in
-    172.1[6-9].*|172.2[0-9].*|172.3[01].*) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 need() {
@@ -155,13 +151,18 @@ relay_pid() {
   printf '%s' "$pid"
 }
 
-relay_up() { curl -fsS "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; }
+# Probe the local HTTP root without a proxy. Success indicates reachability,
+# not session admission or game readiness.
+relay_up() { curl --noproxy '*' -fsS --connect-timeout 2 --max-time 3 "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; }
 
+# Start the test relay on loopback and wait for its HTTP root to answer.
+# Exit on an already answering port, startup failure, or timeout. If the
+# recorded relay exits early or times out, retain its PID file and log.
 start_relay() {
   if relay_up; then
     die "port $PORT is already answering; refusing to reuse an unverified relay (stop it explicitly)"
   fi
-  mkdir -p "$LOG_DIR"
+  idaptik_private_dirs "$RUNTIME_DIR" "$LOG_DIR"
   say "starting the relay on :$PORT (log: $LOG_FILE)…"
   progress STEP "Starting the Phoenix/Bandit relay on port $PORT"
   # This is Burble's test-only, fixed-secret profile. Bind LOOPBACK only:
@@ -222,24 +223,8 @@ share_addresses() {
   say ""
 }
 
-seat_url() {
-  # Accept a bare host, host:port, or a full ws:// url.
-  case "$1" in
-    ws://*|wss://*) printf '%s' "$1" ;;
-    *:*)            printf 'ws://%s/voice/websocket' "$1" ;;
-    *)              printf 'ws://%s:%s/voice/websocket' "$1" "$PORT" ;;
-  esac
-}
-
-# Print the first Windows IDApTIK client PID, or no output if none is listed.
-# A tasklist failure propagates through the pipeline.
-windows_client_pid() {
-  (cd "$(windows_cwd)" && "$WINDOWS_CMD" /D /C tasklist \
-    /FI "IMAGENAME eq idaptik-bevy.exe" /FO CSV /NH 2>/dev/null) |
-    tr -d '\r' |
-    sed -n 's/^"idaptik-bevy\.exe","\([0-9][0-9]*\)".*/\1/p' |
-    head -1
-}
+# Build the WebSocket URL from an already validated host:port authority.
+seat_url() { printf 'ws://%s/voice/websocket' "$1"; }
 
 # Return success if tasklist identifies $1 as an IDApTIK client PID. A
 # tasklist failure also returns nonzero.
@@ -251,20 +236,33 @@ windows_pid_is_running() {
     grep -q "^\"idaptik-bevy.exe\",\"$pid\""
 }
 
-run_windows_client() {
-  local pid="" waited=0
-  [ -z "$(windows_client_pid)" ] || die "a Windows IDApTIK client is already running; close it or use './launcher.sh --stop'"
-
-  # WSL interop detaches a Windows GUI process when this runtime itself was
-  # backgrounded by launcher.sh. Capture the resulting Windows PID and keep
-  # this Linux owner alive so its Phoenix child relay is not reaped with it.
-  "$@"
-  while [ -z "$pid" ] && [ "$waited" -lt 10 ]; do
-    pid="$(windows_client_pid)"
-    [ -n "$pid" ] || sleep 1
-    waited=$((waited + 1))
-  done
-  [ -n "$pid" ] || die "Windows reported no idaptik-bevy.exe after launch"
+# Launch and track one Windows client using its exact PID. Write the supplied
+# readiness record after verifying that PID, and attempt to stop that client
+# on cancellation. Launch or PID verification failures exit with an error.
+run_windows_client() { # mode target url role session run_config readiness
+  local mode="$1" target="$2" url="$3" role="$4" session="$5" run_config="$6" readiness="$7"
+  local pid pid_record powershell wrapper
+  powershell="$(hp_windows_tool powershell.exe)" || die "native Windows multiplayer requires powershell.exe for per-seat process ownership"
+  wrapper="$REPO_DIR/scripts/start-windows-client.ps1"
+  [ -r "$wrapper" ] || die "Windows client helper is missing: $wrapper"
+  hp_windows_script_preflight "$wrapper" || die "Windows client helper did not pass its policy preflight; no client was started"
+  idaptik_private_dirs "$RUNTIME_DIR"
+  pid_record="$(mktemp "$RUNTIME_DIR/windows-$role.XXXXXX")"
+  # Start-Process returns the new client's PID. An image-name search would
+  # select the host when launching the second local seat, or kill the wrong
+  # window on cancellation. No game-specific authority is granted by this PID.
+  if ! (cd "$(windows_cwd)" && "$powershell" -NoProfile -NonInteractive \
+      -File "$(wslpath -w "$wrapper")" -Executable "$(wslpath -w "$BEVY_BIN")" \
+      -Mode "$mode" -Target "$target" -Url "$url" -Session "$session" \
+      -Role "$role" -RunConfig "$run_config" -PidFile "$(wslpath -w "$pid_record")"); then
+    rm -f "$pid_record"
+    die "Windows client launch failed before process ownership was recorded; inspect the PowerShell diagnostic and the machine's approved script/signing policy"
+  fi
+  pid="$(tr -d '\r\n' < "$pid_record")"
+  rm -f "$pid_record"
+  case "$pid" in *[!0-9]*|'') die "Windows returned an invalid client PID" ;; esac
+  [ "$pid" -gt 0 ] || die "Windows returned an invalid client PID"
+  windows_pid_is_running "$pid" || die "the Windows client exited before readiness"
   say "Windows client: PID $pid"
 
   cleanup_windows_client() {
@@ -274,12 +272,16 @@ run_windows_client() {
   }
   trap cleanup_windows_client EXIT
   trap 'cleanup_windows_client; exit 143' HUP INT TERM
+  mark_ready "$readiness"
   while windows_pid_is_running "$pid"; do sleep 1; done
   trap - EXIT HUP INT TERM
 }
 
-run_seat() { # $1 host|join  $2 target  $3 url  $4 role  $5 session
-  local mode="$1" target="$2" url="$3" role="$4" session="$5"
+# Launch the host or join client. Linux writes the readiness record before
+# replacing this process; Windows writes it after the client PID is verified.
+# The record signals launch progress, not successful session admission.
+run_seat() { # mode target url role session readiness
+  local mode="$1" target="$2" url="$3" role="$4" session="$5" readiness="$6"
   local run_config="$RUN_CONFIG"
   if [ "$CLIENT_PLATFORM" = "windows" ]; then
     run_config="$(wslpath -w "$RUN_CONFIG")"
@@ -289,18 +291,18 @@ run_seat() { # $1 host|join  $2 target  $3 url  $4 role  $5 session
   case "$mode" in
     host)
       if [ "$CLIENT_PLATFORM" = "windows" ]; then
-        run_windows_client "$BEVY_BIN" --host --url "$url" --session "$session" \
-          --role "$role" --script "$run_config"
+        run_windows_client host "$target" "$url" "$role" "$session" "$run_config" "$readiness"
       else
+        mark_ready "$readiness"
         exec "$BEVY_BIN" --host --url "$url" --session "$session" \
           --role "$role" --script "$run_config"
       fi
       ;;
     join)
       if [ "$CLIENT_PLATFORM" = "windows" ]; then
-        run_windows_client "$BEVY_BIN" --join "$target" --url "$url" --session "$session" \
-          --role "$role" --script "$run_config"
+        run_windows_client join "$target" "$url" "$role" "$session" "$run_config" "$readiness"
       else
+        mark_ready "$readiness"
         exec "$BEVY_BIN" --join "$target" --url "$url" --session "$session" \
           --role "$role" --script "$run_config"
       fi
@@ -325,22 +327,27 @@ mode_host() {
   done
   case "$role" in infiltrator|hacker) ;; *) die "role must be infiltrator or hacker" ;; esac
   preflight_host
-  progress PASS "Host machine, WSLg, dependencies, and tailnet route passed preflight"
+  progress PASS "Host machine, display, dependencies, and local-only profile passed preflight"
   build_seat "${REBUILD:+--rebuild}"
   start_relay
   share_addresses
-  [ -n "${HOST_SHARE_ADDRESS:-}" ] || die "no peer-reachable host address is available"
+  [ "$HOST_SHARE_ADDRESS" = "127.0.0.1" ] || die "local-only relay address is invalid"
   progress PASS "Local-only test relay is ready at $HOST_SHARE_ADDRESS:$PORT"
   say "waiting in the lobby for the other seat… (relay keeps running after you quit;"
   say "'./launcher.sh --stop' ends it)"
   progress PASS "Host seat is launching for session $session as $role"
-  mark_ready "host|$HOST_SHARE_ADDRESS|$PORT|$session|$role"
-  run_seat host "127.0.0.1" "$(seat_url "127.0.0.1:$PORT")" "$role" "$session"
+  run_seat host "127.0.0.1" "$(seat_url "127.0.0.1:$PORT")" "$role" "$session" \
+    "host|$HOST_SHARE_ADDRESS|$PORT|$session|$role"
 }
 
+# Validate and canonicalize the local target before preflight and launch.
+# Unsupported targets and roles terminate the runtime with an error.
 mode_join() {
-  [ $# -ge 1 ] || die "join needs the host's address: join <host|host:port|ws://…> [--role R] [--session S]"
+  [ $# -ge 1 ] || die "join needs a local relay address: join 127.0.0.1[:port] [--role R] [--session S]"
   local target="$1"; shift
+  # Always enforce this, including when the launcher has already completed
+  # preflight. A direct internal invocation must not turn into a remote client.
+  target="$(idaptik_local_target "$target")" || die "join refused: this test relay is local-only"
   local role="hacker" session="$SESSION_DEFAULT"
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -351,11 +358,11 @@ mode_join() {
   done
   case "$role" in infiltrator|hacker) ;; *) die "role must be infiltrator or hacker" ;; esac
   preflight_common join "$target"
-  progress PASS "Join machine, WSLg, dependencies, and host relay passed preflight"
+  progress PASS "Join machine, display, dependencies, and local relay passed preflight"
   build_seat
   progress PASS "Host $target is reachable and the local seat is launching as $role"
-  mark_ready "join|$target|$session|$role"
-  run_seat join "$target" "$(seat_url "$target")" "$role" "$session"
+  run_seat join "$target" "$(seat_url "$target")" "$role" "$session" \
+    "join|$target|$session|$role"
 }
 
 mode_status() {

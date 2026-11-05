@@ -43,7 +43,7 @@
     :toolchain-manager mise
     :rust-toolchain "1.97.1"
     :ci-platform github-actions
-    :last-updated "2026-10-27")
+    :last-updated "2026-11-04")
 
   (ecosystem
     :gameplay-engine "Rust workspace; deterministic simulation and replay are authoritative."
@@ -63,6 +63,7 @@
     :gameplay-authority "The Rust core owns deterministic gameplay state, typed commands/events, replay, and verification."
     :client-boundary "Bevy and TUI adapt input/output; they do not own gameplay rules."
     :network-live-path "The current two-client path uses the Elixir/Phoenix relay; both clients still simulate."
+    :network-safety "The fixed-secret test relay is experimental and local-only. Launcher, diagnostic and runtime join targets are confined to numeric loopback; secure remote admission and exclusive server-side seats remain unimplemented in Burble #254."
     :network-architecture "Peer-to-peer, hosted, and federated profiles are modeled separately from the live relay path."
     :storage-policy "Choose hot state, durability, disposable cache, consistency, partition behavior, and recovery per state class and topology; no single store is imposed."
     :snif-boundary "SNIF guests perform bounded computation over host-marshalled values and buffers; network and database I/O remain outside the guest."
@@ -177,6 +178,7 @@
     :windowed-launch-flow "docs/player-launch-flow.html"
     :runtime-diagnostics "scripts/runtime-doctor.sh"
     :runtime-diagnostic-tests "tests/runtime_doctor_test.sh"
+    :local-session-boundary "scripts/local-session.sh; tests/launcher_fixture_test.sh covers two local process owners, rejection before network probes and independent Windows PID tracking through a simulated Start-Process boundary. These fixtures do not establish native Windows or secure remote session conformance."
     :wslg-copy-mode "Use the existing troubleshooting and launcher recovery guidance; do not duplicate it in metadata." )
 
   (contractiles

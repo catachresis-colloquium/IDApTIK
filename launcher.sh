@@ -27,16 +27,35 @@ else
   REPO_DIR="$SCRIPT_DIR"
 fi
 
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/$APP_NAME"
-PID_FILE="$RUNTIME_DIR/$APP_NAME-server.pid"
-LOG_FILE="$STATE_DIR/game.log"
-PROGRESS_FILE="$STATE_DIR/startup.progress"
-READY_FILE="$STATE_DIR/startup.ready"
 PORT="${IDAPTIK_PORT:-4000}"
 MULTIPLAYER_RUNTIME="$REPO_DIR/scripts/multiplayer-runtime.sh"
 RUNTIME_DOCTOR="$REPO_DIR/scripts/runtime-doctor.sh"
 WINDOWS_INTEROP_LIB="$REPO_DIR/scripts/windows-interop.sh"
+LOCAL_SESSION_LIB="$REPO_DIR/scripts/local-session.sh"
+
+if [ -r "$LOCAL_SESSION_LIB" ]; then
+  # shellcheck source=scripts/local-session.sh
+  . "$LOCAL_SESSION_LIB"
+else
+  printf 'error: shared local-session boundary missing: %s\n' "$LOCAL_SESSION_LIB" >&2
+  exit 1
+fi
+RUNTIME_DIR="$(idaptik_runtime_root)"
+
+# Each local seat owns its process, log and startup channel. Starting the
+# second client must not overwrite or impersonate the host's readiness.
+# Select the paths for solo, infiltrator, or hacker; exit for any other seat.
+seat_paths() {
+  case "$1" in solo|infiltrator|hacker) ;; *) die "invalid local seat: $1" ;; esac
+  SEAT="$1"
+  SEAT_STATE_DIR="$STATE_DIR/seats/$SEAT"
+  PID_FILE="$RUNTIME_DIR/$SEAT.pid"
+  LOG_FILE="$SEAT_STATE_DIR/game.log"
+  PROGRESS_FILE="$SEAT_STATE_DIR/startup.progress"
+  READY_FILE="$SEAT_STATE_DIR/startup.ready"
+}
+seat_paths solo
 
 # Windows interop discovery is shared with the runtime doctor and the
 # installer, so "can we run the Windows client?" has one answer. The library
@@ -149,7 +168,7 @@ print_renderer() { # $1 = AdapterInfo line
 report_renderer() { # $1 = pid
   local pid="$1" waited=0 limit="${IDAPTIK_RENDERER_WAIT:-6}" line
   while [ "$waited" -lt "$limit" ]; do
-    if line="$(renderer_line)"; then
+    if line="$(renderer_line "$LOG_FILE")"; then
       print_renderer "$line"
       if [ "${IDAPTIK_CLIENT_PLATFORM:-linux}" != "windows" ]; then
         sleep 1
@@ -171,23 +190,42 @@ report_renderer() { # $1 = pid
 # Report the first adapter line in the last client log, or say none is available.
 show_last_renderer() {
   local line
-  if line="$(renderer_line)"; then
+  if line="$(renderer_line "$LOG_FILE")"; then
     print_renderer "$line"
   else
     say "renderer: no adapter line in $LOG_FILE yet"
   fi
 }
 
+# kill -0 also succeeds for an exited child awaiting its parent's wait().
+# Only a confirmed zombie is additional evidence of exit: failed or empty
+# process inspection must never authorize dropping a potentially live record.
+# Return success if kill -0 fails or ps identifies a zombie; otherwise return 1.
+pid_has_exited() {
+  kill -0 "$1" 2>/dev/null || return 0
+  local state
+  state="$(ps -p "$1" -o stat= 2>/dev/null)" || return 1
+  state="${state//[[:space:]]/}"
+  case "$state" in Z*) return 0 ;; *) return 1 ;; esac
+}
+
+# Inspect the selected seat's PID record. Return 0 if the PID passes the
+# liveness check and its command matches a game; return 1 for a missing,
+# unreadable, or invalid record, a failed liveness check, or a zombie; return 2
+# when ownership of the remaining PID cannot be verified.
 pid_is_game() {
   [ -f "$PID_FILE" ] || return 1
   local pid command
   IFS= read -r pid < "$PID_FILE" || return 1
   case "$pid" in *[!0-9]*|'') return 1 ;; esac
-  kill -0 "$pid" 2>/dev/null || return 1
-  command="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  pid_has_exited "$pid" && return 1
+  # A live PID with unknown ownership is not a stale record. In particular,
+  # missing/broken process inspection must not let a second launch overwrite
+  # it, or let --stop signal an unrelated process after PID reuse.
+  command="$(ps -p "$pid" -o args= 2>/dev/null)" || return 2
   case "$command" in
     *idaptik-bevy*|*launcher.sh\ __run-*|*scripts/multiplayer-runtime.sh*) return 0 ;;
-    *) return 1 ;;
+    *) return 2 ;;
   esac
 }
 
@@ -196,6 +234,7 @@ require_repo() {
   [ -x "$MULTIPLAYER_RUNTIME" ] || die "internal multiplayer runtime missing or not executable: $MULTIPLAYER_RUNTIME"
   [ -x "$RUNTIME_DOCTOR" ] || die "runtime diagnostics missing or not executable: $RUNTIME_DOCTOR"
   [ -r "$WINDOWS_INTEROP_LIB" ] || die "shared launch library missing: $WINDOWS_INTEROP_LIB (incomplete checkout)"
+  [ -r "$LOCAL_SESSION_LIB" ] || die "shared local-session boundary missing: $LOCAL_SESSION_LIB (incomplete checkout)"
 }
 
 runtime_preflight() {
@@ -265,16 +304,21 @@ show_progress_line() {
   esac
 }
 
+# Start the selected seat using profile, target, display label, and seat name,
+# followed by the command to launch. Refuse a running or unverified PID.
+# Wait for readiness; on timeout return 1 and leave the process tracked.
 start_game() {
+  local profile="$1" target="$2" label="$3" seat="$4"
+  shift 4
+  seat_paths "$seat"
   if pid_is_game; then
-    say "game already running (PID $(<"$PID_FILE")); stop it first with --stop"
-    return 0
+    die "$seat seat already running (PID $(<"$PID_FILE")); use --status or --stop"
+  elif [ "$?" -eq 2 ]; then
+    die "$seat PID is live but ownership cannot be verified; inspect $PID_FILE before relaunching"
   fi
 
-  local profile="$1" target="$2" label="$3"
-  shift 3
   runtime_preflight "$profile" "$target"
-  mkdir -p "$STATE_DIR"
+  idaptik_private_dirs "$RUNTIME_DIR" "$SEAT_STATE_DIR"
   : > "$LOG_FILE"
   : > "$PROGRESS_FILE"
   rm -f "$READY_FILE"
@@ -382,17 +426,19 @@ client_failed_hint() {
 }
 
 start_solo() {
-  start_game solo "" "solo (controls both roles)" "$REPO_DIR/launcher.sh" __run-solo
+  start_game solo "" "solo (controls both roles)" solo "$REPO_DIR/launcher.sh" __run-solo
 }
 
 start_host() {
   local role="$1"
-  start_game host "" "multiplayer host · $role" "$MULTIPLAYER_RUNTIME" host --role "$role"
+  start_game host "" "multiplayer host · $role" "$role" "$MULTIPLAYER_RUNTIME" host --role "$role"
 }
 
+# Reject unsupported targets before preflight, then launch the requested local seat.
 start_join() {
   local host="$1" role="$2"
-  start_game join "$host" "multiplayer join · $role · $host" "$MULTIPLAYER_RUNTIME" join "$host" --role "$role"
+  host="$(idaptik_local_target "$host")" || die "join refused: this test relay is local-only"
+  start_game join "$host" "local multiplayer join · $role · $host" "$role" "$MULTIPLAYER_RUNTIME" join "$host" --role "$role"
 }
 
 choose_role() {
@@ -418,7 +464,7 @@ menu() {
 IDApTIK — launch menu
 
   1) Solo GUI         Control both sides of Ghost Lobby locally
-  2) Multiplayer GUI  Host or join a two-player session
+  2) Multiplayer GUI  Host or join two clients on this computer
   3) Status
   4) Diagnostics and safe repair
   5) Quit
@@ -429,7 +475,7 @@ MENU
       1|s|S|solo) start_solo; return 0 ;;
       2|m|M|multiplayer)
         printf '\n  1) Host — start the relay and create a session\n' >&2
-        printf '  2) Join — connect to another player\n' >&2
+        printf '  2) Join — open the other local seat on this computer\n' >&2
         while true; do
           read -rp 'Multiplayer [1-2]: ' action
           case "$action" in
@@ -439,7 +485,7 @@ MENU
               return 0
               ;;
             2|j|J|join)
-              read -rp 'Host address (name, IP, host:port, or ws:// URL): ' host
+              read -rp 'Local relay (127.0.0.1[:port] or localhost[:port]): ' host
               [ -n "$host" ] || { warn "host address cannot be empty"; continue; }
               role="$(choose_role)"
               start_join "$host" "$role"
@@ -452,7 +498,7 @@ MENU
       3|status) mode_status; return $? ;;
       4|d|D|doctor|diagnostics)
         "$RUNTIME_DOCTOR" report all || true
-        printf '\n  r) Attempt safe dependency/network repair\n' >&2
+        printf '\n  r) Attempt safe dependency repair\n' >&2
         printf '  f) Open the friendly troubleshooting flowchart\n' >&2
         printf '  Enter) Return to the shell\n' >&2
         read -rp 'Diagnostics action [r/f/Enter]: ' action
@@ -468,60 +514,78 @@ MENU
   done
 }
 
+# Stop the selected seat and remove its PID and startup records. Leave them
+# in place and return 1 if ownership is unverified or the stop times out.
 stop_game() {
   if pid_is_game; then
     local pid
     IFS= read -r pid < "$PID_FILE"
-    say "stopping game (PID $pid)"
+    say "stopping $SEAT game (PID $pid)"
     kill "$pid"
     local waited=0
-    while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 10 ]; do
+    while ! pid_has_exited "$pid" && [ "$waited" -lt 10 ]; do
       sleep 1
       waited=$((waited + 1))
     done
-    if kill -0 "$pid" 2>/dev/null; then
+    if ! pid_has_exited "$pid"; then
       warn "game did not stop within 10 seconds (PID $pid)"
       return 1
     fi
+  elif [ "$?" -eq 2 ]; then
+    warn "$SEAT PID is live but ownership cannot be verified; refusing to signal it or discard $PID_FILE"
+    return 1
   else
     say "game is not running"
   fi
   rm -f "$PID_FILE" "$READY_FILE" "$PROGRESS_FILE"
 }
 
+# Attempt to stop every seat and, when available, the relay. Return 1 if any
+# stop fails, while still attempting the remaining stops.
 stop_all() {
-  local status=0
-  stop_game || status=1
+  local status=0 seat
+  for seat in solo infiltrator hacker; do
+    seat_paths "$seat"
+    stop_game || status=1
+  done
   if [ -x "$MULTIPLAYER_RUNTIME" ]; then
     IDAPTIK_INTERNAL_RUNTIME=1 "$MULTIPLAYER_RUNTIME" __relay-stop || status=1
   fi
   return "$status"
 }
 
+# Report each seat and its last renderer, plus relay status when available.
+# Return 1 for unverified seat ownership; otherwise return 0 if a seat is
+# running or the relay status command succeeds, and 1 if neither applies.
 mode_status() {
-  local status=1
-  if pid_is_game; then
-    say "game: running (PID $(<"$PID_FILE"))"
-    say "log: $LOG_FILE"
-    if [ -r "$READY_FILE" ]; then
-      say "readiness: $(<"$READY_FILE")"
+  local status=1 seat unverified=0
+  for seat in solo infiltrator hacker; do
+    seat_paths "$seat"
+    if pid_is_game; then
+      say "$seat game: running (PID $(<"$PID_FILE"))"
+      say "log: $LOG_FILE"
+      if [ -r "$READY_FILE" ]; then
+        say "readiness: $(<"$READY_FILE")"
+      else
+        say "readiness: startup incomplete — joiners must wait"
+      fi
+      status=0
+    elif [ "$?" -eq 2 ]; then
+      warn "$seat game: live PID with unverified ownership; no readiness claim ($PID_FILE)"
+      unverified=1
     else
-      say "readiness: startup incomplete — joiners must wait"
+      say "$seat game: stopped"
+      [ ! -e "$READY_FILE" ] || say "readiness: stale record present (run --stop before relaunching)"
     fi
-    status=0
-  else
-    say "game: stopped"
-    [ ! -e "$READY_FILE" ] || say "readiness: stale record present (run --stop before relaunching)"
-  fi
-  # Report the adapter the last client actually chose, running or not: this is
-  # the question "am I on the GPU or on llvmpipe?" that a build success cannot
-  # answer.
-  show_last_renderer
+    # Report the adapter each client actually chose, including its last run.
+    [ ! -r "$LOG_FILE" ] || show_last_renderer
+  done
   if [ -x "$MULTIPLAYER_RUNTIME" ]; then
     IDAPTIK_INTERNAL_RUNTIME=1 "$MULTIPLAYER_RUNTIME" __relay-status && status=0 || true
   else
     say "relay: unavailable (internal multiplayer runtime not found)"
   fi
+  [ "$unverified" -eq 0 ] || return 1
   return "$status"
 }
 
@@ -743,9 +807,10 @@ Usage: $0 [MODE] [OPTIONS]
 Player modes:
   --auto, --browser, --web  Open the interactive launch menu (default)
   --solo                    Launch the solo Bevy GUI (controls both roles)
-  --host [--role ROLE]      Start the relay and host in the Bevy GUI
-  --join HOST [--role ROLE] Join HOST in the Bevy GUI
+  --host [--role ROLE]      Start a local-only test relay and the first GUI
+  --join HOST [--role ROLE] Open the second GUI on this computer only
                             ROLE is infiltrator or hacker
+                            HOST is 127.0.0.1[:port] or localhost[:port]
 
 Client selection (WSL2):
   --windows-client          Build and run the native Windows Bevy client
@@ -765,31 +830,34 @@ Renderer evidence:
   --status reports the same line from the last run's log.
 
 Readiness choreography:
-  A host may invite the other player only after ● READY FOR JOINERS.
-  A joiner starts Bevy only after its build and exact relay probe pass.
+  Wait for ● READY FOR LOCAL JOINER ONLY before opening the second local seat.
+  Each seat has independent process, log and readiness records.
+  The HTTP probe checks reachability; it does not prove session admission.
+  Remote LAN, Tailscale and public play remain gated on authenticated hosting.
   ✓ means passed, ! means non-blocking degradation, ✗ means stop/no launch.
 
 Diagnostics and recovery:
   --doctor                  Machine/OS/WSL, coprocessor, dependency, audio,
-                            Tailscale, route, and display health report
-  --repair                  Install pinned dependencies; guide Tailscale/WSL repair
+                            local-only relay and display health report
+  --repair                  Install pinned dependencies; guide WSL recovery
   --flowdiags               Open the friendly HTML troubleshooting flowchart
   --man                     Display the complete section-1 manual
 
 Standard lifecycle modes:
   --start                   Launch the solo Bevy GUI without opening the menu
-  --stop                    Stop the game and a relay started by this project
+  --stop                    Stop all tracked local seats and our relay
   --status                  Report game, relay, binary, and log status
   --integ [--force]         Install desktop/start-menu integration
   --disinteg                Remove installed integration; preserve config/logs
   --help, -h                Show this help and the files read/written
   --version, -V             Print launcher version/build/platform
 
-Two-machine example:
+Two-client example (one computer):
   Host:    $0 --host --role infiltrator
-           Wait for ● READY FOR JOINERS, then share its tailnet address.
-  Joiner:  $0 --join HOST --role hacker
+           Wait for ● READY FOR LOCAL JOINER ONLY.
+  Joiner:  $0 --join 127.0.0.1:$PORT --role hacker
            Run only after the host is green; wait for ● READY — JOINING HOST NOW.
+           Do not forward or tunnel this test-profile port to another machine.
 
 Recovery example:
   $0 --doctor
@@ -805,10 +873,10 @@ Environment:
 
 Files:
   reads  $REPO_PATH_FILE
-  writes $PID_FILE
-         $LOG_FILE
-         $PROGRESS_FILE
-         $READY_FILE
+  writes $RUNTIME_DIR/{solo,infiltrator,hacker,relay}.pid
+         $STATE_DIR/seats/{solo,infiltrator,hacker}/game.log
+         $STATE_DIR/seats/{solo,infiltrator,hacker}/startup.progress
+         $STATE_DIR/seats/{solo,infiltrator,hacker}/startup.ready
 
 Detected platform: $(platform)
 Repository: $REPO_DIR

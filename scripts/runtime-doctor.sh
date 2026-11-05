@@ -9,6 +9,13 @@
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -r "$REPO_DIR/scripts/local-session.sh" ]; then
+  # shellcheck source=scripts/local-session.sh
+  . "$REPO_DIR/scripts/local-session.sh"
+else
+  printf 'error: shared local-session boundary missing\n' >&2
+  exit 1
+fi
 
 # Windows interop discovery is shared with the launcher and the installer.
 # Sourcing it is what stops the doctor from claiming a working WSL2 machine has
@@ -46,7 +53,7 @@ windows_interop_available() { hp_windows_interop; }
 # reports the *OpenGL* renderer, which is not necessarily what wgpu picked —
 # the observed failure this machine hit was WSLg Vulkan on llvmpipe while the
 # GL probe reported D3D12/NVIDIA. Report both rather than conflating them.
-game_log="${IDAPTIK_DIAG_GAME_LOG:-${XDG_STATE_HOME:-$HOME/.local/state}/idaptik/game.log}"
+game_log="${IDAPTIK_DIAG_GAME_LOG:-${XDG_STATE_HOME:-$HOME/.local/state}/idaptik/seats/solo/game.log}"
 
 check_bevy_renderer() {
   local line name backend
@@ -150,6 +157,14 @@ check_tools() {
       pass "Windows linker" "MinGW cross-linker resolves"
     else
       fail "Windows linker" "x86_64-w64-mingw32-gcc is missing; run 'just windows-client-deps' (installs gcc-mingw-w64-x86-64)"
+    fi
+    if [ "$PROFILE" = "host" ] || [ "$PROFILE" = "join" ] || [ "$PROFILE" = "all" ]; then
+      local helper_status
+      if helper_status="$(hp_windows_script_preflight "$REPO_DIR/scripts/start-windows-client.ps1" 2>&1)"; then
+        pass "Windows seat owner" "the helper's policy probe completed without starting a client"
+      else
+        fail "Windows seat owner" "$helper_status"
+      fi
     fi
   fi
 
@@ -263,30 +278,17 @@ check_display() {
   info "extended coprocessors" "QPU/APU/IOPU/vector/physics/math/tensor/neural/crypto suite is not required by this release"
 }
 
+# Check the local relay port for host/all profiles, or validate and probe the
+# local target for join. Record failures in FAILURES; an HTTP response does
+# not establish session admission or game readiness.
 check_network() {
   [ "$PROFILE" = "host" ] || [ "$PROFILE" = "join" ] || [ "$PROFILE" = "all" ] || return
 
   if [ "$PROFILE" = "host" ] || [ "$PROFILE" = "all" ]; then
-    local lan=""
-    lan="${IDAPTIK_DIAG_LAN_ADDRESS:-$(ip -4 route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1 || true)}"
-    if [ -z "$lan" ]; then
-      fail reachability "no usable IPv4 route was found; connect the machine to a network before hosting"
-    elif is_wsl; then
-      case "$lan" in
-        172.1[6-9].*|172.2[0-9].*|172.3[01].*)
-          if ! command -v tailscale >/dev/null 2>&1; then
-            fail tailscale "required behind WSL2 NAT but not installed; select Diagnostics → safe repair"
-          elif [ -z "$(tailscale ip -4 2>/dev/null | head -1 || true)" ]; then
-            fail tailscale "installed but not connected/authenticated; run './launcher.sh --repair'"
-          else
-            pass tailscale "connected as $(tailscale ip -4 2>/dev/null | head -1)"
-            pass reachability "WSL2 NAT is bypassed by the active tailnet route"
-          fi
-          ;;
-        *) pass reachability "host address $lan is not a WSL2 NAT address" ;;
-      esac
+    if idaptik_local_port "${IDAPTIK_PORT:-4000}" >/dev/null; then
+      pass reachability "local-only profile uses 127.0.0.1; no external route or Tailscale is required"
     else
-      pass reachability "host has an IPv4 route via $lan"
+      fail "relay port" "IDAPTIK_PORT must be between 1 and 65535"
     fi
   fi
 
@@ -295,17 +297,15 @@ check_network() {
       fail "host target" "no host address was supplied"
       return
     fi
-    local authority host port scheme
-    authority="${TARGET#ws://}"
-    authority="${authority#wss://}"
-    authority="${authority%%/*}"
-    host="${authority%%:*}"
-    if [ "$authority" = "$host" ]; then port="${IDAPTIK_PORT:-4000}"; else port="${authority##*:}"; fi
-    case "$TARGET" in wss://*) scheme=https ;; *) scheme=http ;; esac
-    if command -v curl >/dev/null 2>&1 && curl -fsS --connect-timeout 4 --max-time 6 "$scheme://$host:$port/" >/dev/null 2>&1; then
-      pass "host relay" "$host:$port is answering; the host has reached READY FOR JOINERS"
+    local authority
+    if ! authority="$(idaptik_local_target "$TARGET")"; then
+      fail "host target" "join refused: this test relay is local-only"
+      return
+    fi
+    if command -v curl >/dev/null 2>&1 && curl --noproxy '*' -fsS --connect-timeout 4 --max-time 6 "http://$authority/" >/dev/null 2>&1; then
+      pass "host relay" "$authority answers HTTP; session admission and game readiness are not established by this probe"
     else
-      fail "host relay" "$host:$port is not reachable; wait for the host's green READY FOR JOINERS message"
+      fail "host relay" "$authority is not reachable; wait for the host's READY FOR LOCAL JOINER ONLY message on this computer"
     fi
   fi
 }
@@ -352,46 +352,7 @@ repair() {
       "  Then reopen Debian and run './launcher.sh --doctor'."
   fi
 
-  if is_wsl; then
-    local lan=""
-    lan="${IDAPTIK_DIAG_LAN_ADDRESS:-$(ip -4 route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1 || true)}"
-    case "$lan" in
-      172.1[6-9].*|172.2[0-9].*|172.3[01].*)
-        if ! command -v tailscale >/dev/null 2>&1; then
-          if [ -t 0 ]; then
-            local answer installer
-            read -rp 'Tailscale is required to host through WSL2 NAT. Install it from tailscale.com now? [y/N]: ' answer
-            case "$answer" in
-              y|Y|yes|YES)
-                installer="$(mktemp)"
-                if curl -fsSL https://tailscale.com/install.sh -o "$installer" && sudo sh "$installer"; then
-                  pass tailscale "installed from the official Tailscale installer"
-                else
-                  fail tailscale "installation failed; see https://tailscale.com/download/linux"
-                fi
-                rm -f -- "$installer"
-                ;;
-              *) warn tailscale "not installed; hosting remains unavailable behind WSL2 NAT" ;;
-            esac
-          else
-            warn tailscale "not installed; rerun './launcher.sh --repair' interactively to bootstrap it"
-          fi
-        fi
-        if command -v tailscale >/dev/null 2>&1 && [ -z "$(tailscale ip -4 2>/dev/null | head -1 || true)" ]; then
-          if [ -t 0 ]; then
-            info tailscale "starting authentication; follow the URL Tailscale prints"
-            if sudo tailscale up; then
-              pass tailscale "connected as $(tailscale ip -4 2>/dev/null | head -1)"
-            else
-              fail tailscale "could not authenticate/start the tailnet connection"
-            fi
-          else
-            warn tailscale "installed but disconnected; run 'sudo tailscale up'"
-          fi
-        fi
-        ;;
-    esac
-  fi
+  info multiplayer "the test profile is local-only; no network or Tailscale installation is needed"
 
   [ "$FAILURES" -eq 0 ]
 }
