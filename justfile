@@ -96,7 +96,7 @@ devcontainer-build:
 runtime-doctor:
     @bash scripts/runtime-doctor.sh report all
 
-# Install pinned repository dependencies and guide host/network recovery.
+# Install pinned repository dependencies and guide host/display recovery.
 repair:
     @bash scripts/runtime-doctor.sh repair all
 
@@ -111,6 +111,11 @@ runtime-doctor-test:
 # evidence from the client log (software adapters must be named as such).
 launcher-fixture-test:
     bash tests/launcher_fixture_test.sh
+
+# Real PowerShell helper with a simulated process API; native Windows/WSL
+# end-to-end behaviour remains a distinct platform validation.
+windows-client-contract-test:
+    pwsh -NoProfile -NonInteractive -File tests/windows_client_test.ps1
 
 # Fixture coverage for the bevy_winit vendor gate (issue #105).
 vendor-winit-test:

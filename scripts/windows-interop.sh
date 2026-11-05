@@ -97,6 +97,38 @@ hp_windows_tool() {
   return 1
 }
 
+# Ask Windows to run only the helper's side-effect-free policy probe through
+# its normal -File entry point. Windows retains authority over script policy,
+# Authenticode trust, zone markings and application controls. Never execute
+# the helper body as inline code or change the effective execution policy.
+# Return 0 only for the expected completion marker; otherwise print a
+# diagnostic to stderr and return 1.
+hp_windows_script_preflight() { # <helper path>
+  local helper="$1" powershell translated output policy
+  [ -r "$helper" ] || { printf 'Windows helper is missing: %s\n' "$helper" >&2; return 1; }
+  powershell="$(hp_windows_tool powershell.exe)" || {
+    printf 'powershell.exe is required for independent local multiplayer clients\n' >&2
+    return 1
+  }
+  if ! translated="$(wslpath -w "$helper" 2>/dev/null)" || [ -z "$translated" ]; then
+    printf 'wslpath could not resolve the Windows client helper\n' >&2
+    return 1
+  fi
+  if output="$("$powershell" -NoProfile -NonInteractive -File "$translated" -PolicyCheck 2>&1)"; then
+    output="$(printf '%s' "$output" | tr -d '\r')"
+    if [ "$output" = IDAPTIK_WINDOWS_HELPER_ALLOWED ]; then return 0; fi
+    printf 'Windows helper policy probe returned no recognised completion marker; no client was started\n' >&2
+    return 1
+  fi
+  # This command only reads policy for the diagnostic. It does not execute
+  # the helper or replace Windows' actual authorization decision above.
+  policy="$("$powershell" -NoProfile -NonInteractive -Command Get-ExecutionPolicy 2>/dev/null)" || policy=unavailable
+  policy="$(printf '%s' "$policy" | tr -d '\r\n')"
+  printf 'Windows helper could not run under the effective PowerShell policy (%s). Use a helper signed by a publisher trusted under this machine\047s approved policy, or ask its administrator to approve script execution. The Linux/WSL client remains available; no execution policy was changed.\n' "${policy:-unavailable}" >&2
+  printf '%s\n' "$output" >&2
+  return 1
+}
+
 # Return success when the WSL detection and cmd.exe execution probe succeed.
 # IDAPTIK_DIAG_WINDOWS_INTEROP overrides the verdict. Otherwise the verdict is
 # cached in the current shell; the probe times out after 10 seconds if timeout

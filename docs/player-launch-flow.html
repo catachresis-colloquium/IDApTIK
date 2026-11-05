@@ -25,23 +25,23 @@
 </head>
 <body><main>
   <h1>IDApTIK launch flow</h1>
-  <p class="lead">Follow the ticks. A red cross stops the flow. Never tell the joiner to start until the host displays the green readiness message.</p>
+  <p class="lead">Two clients on one computer: this experimental test relay is local-only. Follow the ticks. A red cross stops the flow. Open the second client only after the host displays the green readiness message.</p>
 
   <h2>Host</h2>
   <section class="flow">
-    <div class="node pass"><strong>1. Runtime diagnosis</strong><br>Machine, OS/kernel, WSLg transport, graphics, audio, Rust, Elixir, network route and Tailscale are checked before anything launches.</div>
-    <div class="node warn"><strong>If WSLg enters <code>[WARN: COPY MODE]</code></strong><br>The launcher uses a native Windows Bevy client when Windows interop and its cross-build tools are available. The relay and Tailscale route remain in WSL. If fallback prerequisites fail, in Windows PowerShell as Administrator run:<pre>wsl --update
+    <div class="node pass"><strong>1. Runtime diagnosis</strong><br>Machine, OS/kernel, WSLg transport, graphics, audio, Rust and Elixir are checked before anything launches. Loopback hosting needs no external route or Tailscale connection.</div>
+    <div class="node warn"><strong>If WSLg enters <code>[WARN: COPY MODE]</code></strong><br>The launcher uses a native Windows Bevy client when Windows interop and its cross-build tools are available. The relay remains in WSL, reached through localhost. If fallback prerequisites fail, in Windows PowerShell as Administrator run:<pre>wsl --update
 wsl --shutdown</pre>Reopen Debian. Restart Windows if it remains.</div>
     <div class="node pass"><strong>2. Build</strong><br>Wait for <em>✓ Bevy GUI build is complete</em>. Cargo may take several minutes on the first machine. Do not invite anyone while it says building.</div>
-    <div class="node pass"><strong>3. Relay and route</strong><br>The Phoenix/Bandit relay must answer on port 4000. Under WSL2 NAT, Tailscale must be installed, running and authenticated.</div>
-    <div class="node ready"><strong>● READY FOR JOINERS</strong><br>Only now share the displayed tailnet address.</div>
+    <div class="node pass"><strong>3. Local relay</strong><br>The launcher binds its test relay to <code>127.0.0.1</code>, usually port 4000, and refuses an already-answering unknown relay. Do not forward this port to another machine.</div>
+    <div class="node ready"><strong>● READY FOR LOCAL JOINER ONLY</strong><br>Open another terminal on this computer and run the printed command, for example:<pre>./launcher.sh --join 127.0.0.1:4000 --role hacker</pre>Each seat has its own process, log and readiness record.</div>
   </section>
 
   <h2>Joiner</h2>
   <section class="flow">
-    <div class="node warn"><strong>1. Wait for the host</strong><br>The host must explicitly say that their screen shows <em>READY FOR JOINERS</em>.</div>
+    <div class="node warn"><strong>1. Wait for the local host</strong><br>The first terminal must show <em>READY FOR LOCAL JOINER ONLY</em>. Use the other role in the second terminal on this computer.</div>
     <div class="node pass"><strong>2. Runtime diagnosis and local build</strong><br>The same machine/display/dependency checks run locally. Wait until the joiner's GUI build has a tick.</div>
-    <div class="node pass"><strong>3. Exact relay probe</strong><br>The launcher tests the supplied host and port. An unreachable relay is a cross, not a half-started game.</div>
+    <div class="node pass"><strong>3. Exact loopback probe</strong><br>The launcher rejects remote targets before probing. An HTTP answer shows local reachability; it does not prove session admission, peer delivery or applied game state.</div>
     <div class="node ready"><strong>● READY — JOINING HOST NOW</strong><br>The client starts only after all gates pass.</div>
   </section>
 
@@ -52,8 +52,8 @@ wsl --shutdown</pre>Reopen Debian. Restart Windows if it remains.</div>
     <div class="node warn"><strong>Software renderer / llvmpipe</strong><br>The game may run slowly. The launcher prints the adapter Bevy chose and warns when it is software; <code>./launcher.sh --status</code> repeats it. Update the Windows GPU driver and verify <code>/dev/dxg</code>.</div>
     <div class="node warn"><strong>No audio device</strong><br>Non-blocking. WSLg audio is unavailable; gameplay and networking can continue.</div>
     <div class="node fail"><strong>Dependency missing</strong><br>Run <code>./launcher.sh --repair</code>, then <code>./launcher.sh --doctor</code>.</div>
-    <div class="node fail"><strong>Tailscale unavailable</strong><br>Choose safe repair. Follow its install/login prompt. Both players must be on the intended tailnet.</div>
-    <div class="node fail"><strong>Host relay unreachable</strong><br>Do not launch repeatedly. Confirm the host is green, the address is current, and Tailscale is connected on both machines.</div>
+    <div class="node fail"><strong>Remote target refused</strong><br>Use the printed loopback command on this computer. LAN, Tailscale and public hosting require a separate authenticated service and remain unavailable in this test profile.</div>
+    <div class="node fail"><strong>Local relay unreachable</strong><br>Do not launch repeatedly. Confirm the host is green and use its exact local port. Under WSL, diagnose Windows-to-WSL localhost access; do not expose the relay on all interfaces.</div>
     <div class="node fail"><strong>Build still running</strong><br>Wait. Read the displayed checklist or the reported log. Readiness never means “PID exists.”</div>
     <div class="node warn"><strong>Extended coprocessor suite</strong><br>QPU/APU/IOPU/vector/physics/math/tensor/neural/crypto backends are not dependencies of this release and are not claimed as active.</div>
   </section>

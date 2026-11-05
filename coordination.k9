@@ -5,7 +5,7 @@ metadata:
   schema: k9-coordination
   schema_version: 1.2.0
   generated_by: manual
-  last_updated: 2026-10-25
+  last_updated: 2026-11-04
 
 project:
   name: "IDApTIK"
@@ -70,6 +70,10 @@ invariants:
   - id: implementation-evidence
     rule: "Describe peer-to-peer transport, hosted authority, federation routing, and GSA runtime integration as unimplemented until code and tests prove otherwise."
     reason: "The current live multiplayer path is relay-only and both clients simulate."
+    severity: critical
+  - id: legacy-session-boundary
+    rule: "Keep the fixed-secret test relay and its launcher clients local-only. Reject unsupported targets before network operations. HTTP reachability and local process ownership are not authenticated admission, exclusive server-side seats, durable commits, peer delivery, or applied state."
+    reason: "Issue #211 and Burble #254 require separate evidence for each capability before remote hosting is released."
     severity: critical
   - id: license-review
     rule: "Preserve the repository's code, documentation, and workflow license boundaries; ask before changing licensing terms."

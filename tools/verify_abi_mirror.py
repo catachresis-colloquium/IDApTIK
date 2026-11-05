@@ -100,15 +100,23 @@ class Layout:
 
 
 def main():
+    """Compare the header and Rust mirror named in argv; return 0 on a match, 1 for drift.
+
+    Print usage and exit for an incorrect argument count. File and UTF-8
+    decoding errors propagate to the caller.
+    """
     if len(sys.argv) != 3:
         sys.exit(__doc__)
-    header = parse_structs(open(sys.argv[1]).read(), C_TYPES,
+    with open(sys.argv[1], encoding="utf-8") as source:
+        header_text = source.read()
+    with open(sys.argv[2], encoding="utf-8") as source:
+        rust_text = source.read()
+    header = parse_structs(header_text, C_TYPES,
                            r"\s*(\w+)\s+(\w+)\s*;")
-    rust = parse_structs(open(sys.argv[2]).read(), RUST_TYPES,
+    rust = parse_structs(rust_text, RUST_TYPES,
                          r"pub\s+(\w+)\s*:\s*(\w+),")
 
     # The fixed-point type: the header defines it as a signed 32-bit.
-    header_text = open(sys.argv[1]).read()
     if re.search(r"typedef\s+int32_t\s+ee_fx\s*;", header_text):
         C_TYPES["ee_fx"] = (4, 4)
     hl = lay_out(header, C_TYPES)
