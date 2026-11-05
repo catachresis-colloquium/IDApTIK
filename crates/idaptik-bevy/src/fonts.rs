@@ -163,6 +163,7 @@ mod tests {
             assert_eq!(f.family(), family, "{name}");
             assert_eq!(f.file(), file, "{name}");
             assert_eq!(f.grid(), grid_px as f32, "{name}");
+            assert!(grid_px > 0, "{name}: snap divides by the grid");
             assert_eq!(f == UiFont::DEFAULT, default, "{name}");
         }
         for f in UiFont::ALL {

@@ -219,7 +219,9 @@ frontend does not draw it today.
 | `signal` on deck glass | 13.23 | pass | pass | the infiltrator's estimate (`screen.rs`) |
 | dimmed `phosphor` on deck glass | 4.72 or better | pass | pass | room names, 55 % alpha (`screen.rs`) |
 | **`alarm` on deck glass** | **4.27** | **fail** | pass | **live text:** as on `pitch` (`screen.rs`) |
-| deck glass on `phosphor` | 13.53 | pass | pass | the verb on the deck card (`deck.rs`) |
+| deck glass on `phosphor` | 13.53 | pass | pass | the verb on the ready deck button (`deck.rs`) |
+| **deck glass on `alarm`** | **4.27** | **fail** | pass | **live text:** the verb on the ready button for an OT action (`deck.rs`) |
+| **deck glass on the not-ready button** | **1.35** (2.77 linear) | **fail** | **fail** | **live control:** the verb on a button that is still pressable (`deck.rs`, `FAINT`) |
 | `phosphor` on `slate` | 10.63 | pass | pass | support meter fill (`hud.rs`) |
 | **`cobalt` on `slate`** | **2.58** | fail | **fail** | **bandwidth meter fill** (`hud.rs`) |
 | `alarm` on `slate` | 3.35 | fail | pass | alert meter fill (`hud.rs`) |
@@ -237,13 +239,24 @@ The deck glass is `screen::DECK_GLASS`, `#07110d`, an off-palette literal.
 Its rows are pinned in `idaptik-bevy`'s palette tests, which can read it; the
 rest are pinned in `crates/idaptik-brand/tests/legibility.rs`.
 
-**Two live failures, flagged and not changed** (handoff rule 3), both open
-decisions in `inventory.md`:
+**Four live failures, flagged and not changed** (handoff rule 3), each an
+open decision in `inventory.md`:
 
 - **Alarm red as text.** The `LOCKED` / `NO POWER` labels and the `GUARD`
   estimate are alarm red at 16 px: 4.35:1 on night, 4.27:1 on the deck glass.
+- **The OT deck button.** An OT action turns the ready button alarm red and
+  keeps the verb in glass: 4.27:1. No palette colour reaches 4.5:1 on alarm
+  red (`pitch` is closest at 4.35:1), so relabelling cannot fix it.
+- **The not-ready deck button.** It is faint, and its verb is about 1.35:1.
+  It looks disabled but is not: pressing it still sends the hack, and the
+  simulation counts a failed action and announces `NetHackDenied`. So WCAG's
+  exemption for inactive controls does not apply. (#220 first recorded it as
+  exempt; Codex review on #220 caught the live press path.)
 - **The bandwidth bar.** `cobalt` on the `slate` track is 2.58:1, below the
   glyph bar, so the bar's fill level is hard to read.
+
+Translucent pairs are composited with the alpha the frontend really uses
+(`ROOM_NAME_ALPHA`, `FAINT`), so retuning either one moves its verdict.
 
 **Approved text pairs.** A new text site uses one of these and nothing else:
 

@@ -35,6 +35,11 @@ use crate::wiring::Wiring;
 pub const SCREEN_AT: Vec2 = Vec2::new(0.0, -6000.0);
 /// Where the hacker's deck schematic is drawn, for the deck camera.
 pub const DECK_AT: Vec2 = Vec2::new(0.0, -9000.0);
+/// How faint the room names are on a schematic: phosphor at this alpha over
+/// the glass. Read by the deck-glass contrast test in `palette.rs`, so a
+/// change here moves that verdict instead of slipping past it.
+pub const ROOM_NAME_ALPHA: f32 = 0.55;
+
 /// The deck's phosphor-black glass.
 pub const DECK_GLASS: Color = Color::srgb(0.027, 0.067, 0.051);
 
@@ -260,7 +265,7 @@ fn spawn_view_text(commands: &mut Commands, sim: &SimState, view: &ScreenView) {
             Transform::from_translation(at.extend(8.0)),
         )
     };
-    let dim = palette::PHOSPHOR.with_alpha(0.55);
+    let dim = palette::PHOSPHOR.with_alpha(ROOM_NAME_ALPHA);
     commands.spawn(text(
         format!(
             "{}   trace {:.0}%   hops {}   bandwidth {:.0}",

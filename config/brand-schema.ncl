@@ -16,6 +16,7 @@
 #     end in `_file` or `_grid_px` (the generator derives `<NAME>_FILE` and
 #     `<NAME>_GRID_PX` from each font name);
 #   - exactly one font is the default, so `font::DEFAULT` is never a guess;
+#   - a font grid is at least 1 px (it is the divisor sizes snap to);
 #   - pixel values are non-negative integers (the art is on a pixel grid).
 #
 # Records are closed: an unknown field is rejected, which catches typos.
@@ -114,6 +115,12 @@ in
       ),
       std.contract.from_predicate (fun family =>
         std.array.all (fun t => !(std.string.is_match "_(file|grid_px)$" t.name)) family.tokens
+      ),
+      # A font grid is a divisor: `fonts::UiFont::snap` divides by it, and a
+      # zero grid snaps every size to 0 px, so the text disappears. Other pixel
+      # tokens (a radius, a gap) may legitimately be 0; a font grid may not.
+      std.contract.from_predicate (fun family =>
+        std.array.all (fun t => t.grid_px > 0) family.tokens
       ),
     ],
 
