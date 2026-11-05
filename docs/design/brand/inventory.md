@@ -68,7 +68,7 @@ None of the following was changed on this branch.
 ## Open decisions (yours to make; nothing was changed)
 
 Handoff rule 3 says flag contrast failures rather than silently change the
-brand, so all three live failures are pinned as they are. Each option below is a
+brand, so all four live failures are pinned as they are. Each option below is a
 real change to what the game draws; pick one and the tests and §5 of the book
 move with it.
 
@@ -89,7 +89,16 @@ Codex review on #207.
 | B. Darker button red | A deeper red fill that a light label clears at 4.5:1. | A new colour, so it needs your sign-off under rule 1. |
 | C. Accept and document | Keep the red button; record the exception. | 4.27:1 on the hacker's riskiest action. |
 
-**3. The bandwidth bar** (`cobalt` on `slate`, 2.58:1).
+**3. The not-ready deck button** (glass verb on `FAINT`, about 1.35:1, still
+pressable). Found by Codex review on #220.
+
+| Option | Change | Trade-off |
+|---|---|---|
+| A. Make it really disabled | `card_press` ignores the button while it is not ready; the faint style then marks a true inactive control, which WCAG exempts. | One guard in `deck.rs`. Changes input: a premature click no longer costs a failed action. Recommended. |
+| B. Keep it live, make it legible | The not-ready verb uses a readable colour, for example `dust` on the glass (5.89:1). | The button keeps its current behaviour; loses some of the "greyed out" look. |
+| C. Accept and document | Keep both the faint label and the live press. | A pressable control the player can barely read, with a real penalty. |
+
+**4. The bandwidth bar** (`cobalt` on `slate`, 2.58:1).
 
 | Option | Change | Trade-off |
 |---|---|---|

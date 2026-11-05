@@ -180,12 +180,14 @@ mod tests {
                 false,
                 true,
             ),
-            // A not-ready button is FAINT (phosphor at 14 %): the verb is
-            // about 1.35:1, 2.77:1 in a linear blend. The sim refuses the
-            // action and the card's note line says why, so this is a disabled
-            // control, which WCAG 1.4.3 exempts. Recorded, not flagged.
+            // FLAGGED, live: a not-ready button is FAINT (phosphor at 14 %)
+            // and its verb is about 1.35:1 (2.77:1 in a linear blend). It is
+            // NOT a disabled control: `card_press` still queues the NetHack,
+            // and the sim counts a failed action and emits NetHackDenied, so
+            // WCAG 1.4.3's inactive-control exemption does not apply. Open
+            // decision in inventory.md; not changed (rule 3).
             (
-                "glass-coloured verb on the not-ready button (disabled), deck.rs",
+                "glass-coloured verb on the not-ready button (live, pressable), deck.rs",
                 glass,
                 faint,
                 false,
