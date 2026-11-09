@@ -1,0 +1,114 @@
+(* #"crates/idaptik-kernel/src/contrast.rs" 67 0 67 56 *)
+
+let%span scontrast = "crates/idaptik-kernel/src/contrast.rs" 69 15 69 21
+let%span scontrast'0 = "crates/idaptik-kernel/src/contrast.rs" 69 4 69 22
+let%span scontrast'1 = "crates/idaptik-kernel/src/contrast.rs" 69 4 69 37
+let%span scontrast'2 = "crates/idaptik-kernel/src/contrast.rs" 69 51 69 57
+let%span scontrast'3 = "crates/idaptik-kernel/src/contrast.rs" 69 41 69 58
+let%span scontrast'4 = "crates/idaptik-kernel/src/contrast.rs" 69 41 69 73
+let%span scontrast'5 = "crates/idaptik-kernel/src/contrast.rs" 61 50 61 94
+let%span scontrast'6 = "crates/idaptik-kernel/src/contrast.rs" 62 50 62 100
+let%span scontrast'7 = "crates/idaptik-kernel/src/contrast.rs" 64 4 64 83
+let%span scontrast'8 = "crates/idaptik-kernel/src/contrast.rs" 66 4 66 82
+let%span scontrast'9 = "crates/idaptik-kernel/src/contrast.rs" 36 38 36 40
+let%span scontrast'10 = "crates/idaptik-kernel/src/contrast.rs" 36 20 36 40
+let%span scontrast'11 = "crates/idaptik-kernel/src/contrast.rs" 36 20 36 35
+let%span scontrast'12 = "crates/idaptik-kernel/src/contrast.rs" 28 42 28 54
+let%span scontrast'13 = "crates/idaptik-kernel/src/contrast.rs" 28 33 28 39
+let%span scontrast'14 = "crates/idaptik-kernel/src/contrast.rs" 28 33 28 54
+let%span scontrast'15 = "crates/idaptik-kernel/src/contrast.rs" 67 0 67 56
+let%span sord = "../../../.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/creusot-std-0.14.0/src/logic/ord.rs" 34 8 34 21
+
+use creusot.int.UInt64
+use creusot.prelude.Any
+use creusot.int.UInt32
+use int.Int
+
+type tup2_u64_u64 = { f0: UInt64.t; f1: UInt64.t }
+
+constant const_LINEAR_SCALE: UInt64.t = [%#scontrast'15] (1000000: UInt64.t)
+
+type tup2_u64_bool = { f0'0: UInt64.t; f1'0: bool }
+
+constant const_LUMINANCE_SCALE [#"crates/idaptik-kernel/src/contrast.rs" 28 0 28 30] : UInt64.t
+
+let set_LUMINANCE_SCALE (return) = bb0
+  [ bb0 = s0
+    [ s0 =
+      [ &_1 <- let (_fst, _snd) = UInt64.mul_with_overflow ([%#scontrast'13] (10000: UInt64.t)) ([%#scontrast'12] const_LINEAR_SCALE) in { f0'0 = _fst;
+                                                                                                                                           f1'0 = _snd } ]
+      s1
+    | s1 = {[@expl:Mul overflow] [%#scontrast'14] not _1.f1'0} s2
+    | s2 = [ &_ret <- _1.f0'0 ] s3
+    | s3 = return {_ret} ] ] [ & _ret: UInt64.t = Any.any_l () | & _1: tup2_u64_bool = Any.any_l () ]
+  [ return (_const: UInt64.t) -> -{const_LUMINANCE_SCALE = _const}- return ]
+
+constant const_OFFSET [#"crates/idaptik-kernel/src/contrast.rs" 36 0 36 17] : UInt64.t
+
+let set_OFFSET (return) = bb0
+  [ bb0 = s0
+    [ s0 = [ &_1 <- ([%#scontrast'9] (20: UInt64.t)) = ([%#scontrast'10] (0: UInt64.t)) ] s1
+    | s1 = {[@expl:division by zero] [%#scontrast'10] not _1} s2
+    | s2 = UInt64.div [%#scontrast'10] {[%#scontrast'11] const_LUMINANCE_SCALE} {[%#scontrast'9] (20: UInt64.t)}
+        (fun (_x: UInt64.t) -> [ &_ret <- _x ] s3)
+    | s3 = return {_ret} ] ] [ & _ret: UInt64.t = Any.any_l () | & _1: bool = Any.any_l () ]
+  [ return (_const: UInt64.t) -> -{const_OFFSET = _const}- return ]
+
+predicate ge_log_Int [@inline:trivial] (self: int) (other: int) = [%#sord] other <= self
+
+meta "rewrite_def" predicate ge_log_Int
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let meets [#"crates/idaptik-kernel/src/contrast.rs" 67 0 67 56] (a: UInt64.t) (b: UInt64.t) (num: UInt32.t)
+  (den: UInt32.t) (return (x: bool)) =
+{[@stop_split] [@expl:meets requires] ([@stop_split] [@expl:meets requires #0] [%#scontrast'5] UInt64.t'int a
+      <= 10000000000
+    /\ UInt64.t'int b <= 10000000000)
+  /\ ([@stop_split] [@expl:meets requires #1] [%#scontrast'6] 0 < UInt32.t'int den
+  /\ UInt32.t'int den <= 1000000 /\ UInt32.t'int num <= 1000000)}
+  (! set_LUMINANCE_SCALE
+    (set_OFFSET
+      (bb0
+      [ bb0 = s0
+        [ s0 = [ &_24 <- UInt64.ge a b ] s1 | s1 = any [ br0 -> {_24 = false} (! bb2) | br1 -> {_24} (! bb1) ] ]
+      | bb1 = s0 [ s0 = [ &_23 <- { f0 = a; f1 = b } ] s1 | s1 = bb3 ]
+      | bb2 = s0 [ s0 = [ &_23 <- { f0 = b; f1 = a } ] s1 | s1 = bb3 ]
+      | bb3 = s0
+        [ s0 = [ &lighter <- _23.f0 ] s1
+        | s1 = [ &darker <- _23.f1 ] s2
+        | s2 = UInt64.add [%#scontrast'0] {lighter} {[%#scontrast] const_OFFSET}
+            (fun (_x: UInt64.t) -> [ &_32 <- _x ] s3)
+        | s3 = [ &_34 <- UInt64.of_int (UInt32.t'int den) ] s4
+        | s4 = UInt64.mul [%#scontrast'1] {_32} {_34} (fun (_x: UInt64.t) -> [ &_31 <- _x ] s5)
+        | s5 = UInt64.add [%#scontrast'3] {darker} {[%#scontrast'2] const_OFFSET}
+            (fun (_x: UInt64.t) -> [ &_37 <- _x ] s6)
+        | s6 = [ &_39 <- UInt64.of_int (UInt32.t'int num) ] s7
+        | s7 = UInt64.mul [%#scontrast'4] {_37} {_39} (fun (_x: UInt64.t) -> [ &_36 <- _x ] s8)
+        | s8 = [ &_ret <- UInt64.ge _31 _36 ] s9
+        | s9 = return {_ret} ] ]
+      [ & _ret: bool = Any.any_l ()
+      | & a: UInt64.t = a
+      | & b: UInt64.t = b
+      | & num: UInt32.t = num
+      | & den: UInt32.t = den
+      | & lighter: UInt64.t = Any.any_l ()
+      | & darker: UInt64.t = Any.any_l ()
+      | & _23: tup2_u64_u64 = Any.any_l ()
+      | & _24: bool = Any.any_l ()
+      | & _31: UInt64.t = Any.any_l ()
+      | & _32: UInt64.t = Any.any_l ()
+      | & _34: UInt64.t = Any.any_l ()
+      | & _36: UInt64.t = Any.any_l ()
+      | & _37: UInt64.t = Any.any_l ()
+      | & _39: UInt64.t = Any.any_l () ])))
+  [ return (result: bool) ->
+  {[@stop_split] [@expl:meets ensures] ([@stop_split] [@expl:meets ensures #0] [%#scontrast'7] ge_log_Int (UInt64.t'int a) (UInt64.t'int b)
+      -> result
+      = ge_log_Int ((UInt64.t'int a + 500000000) * UInt32.t'int den) ((UInt64.t'int b + 500000000) * UInt32.t'int num))
+    /\ ([@stop_split] [@expl:meets ensures #1] [%#scontrast'8] UInt64.t'int a < UInt64.t'int b
+    -> result
+    = ge_log_Int ((UInt64.t'int b + 500000000) * UInt32.t'int den) ((UInt64.t'int a + 500000000) * UInt32.t'int num))}
+    (! return {result}) ]

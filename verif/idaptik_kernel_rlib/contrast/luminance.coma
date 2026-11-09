@@ -1,0 +1,53 @@
+(* #"crates/idaptik-kernel/src/contrast.rs" 47 0 47 47 *)
+
+let%span scontrast = "crates/idaptik-kernel/src/contrast.rs" 48 4 48 8
+let%span scontrast'0 = "crates/idaptik-kernel/src/contrast.rs" 48 4 48 21
+let%span scontrast'1 = "crates/idaptik-kernel/src/contrast.rs" 48 24 48 28
+let%span scontrast'2 = "crates/idaptik-kernel/src/contrast.rs" 48 24 48 41
+let%span scontrast'3 = "crates/idaptik-kernel/src/contrast.rs" 48 4 48 41
+let%span scontrast'4 = "crates/idaptik-kernel/src/contrast.rs" 48 44 48 47
+let%span scontrast'5 = "crates/idaptik-kernel/src/contrast.rs" 48 44 48 60
+let%span scontrast'6 = "crates/idaptik-kernel/src/contrast.rs" 48 4 48 60
+let%span scontrast'7 = "crates/idaptik-kernel/src/contrast.rs" 44 50 44 103
+let%span scontrast'8 = "crates/idaptik-kernel/src/contrast.rs" 45 49 45 92
+let%span scontrast'9 = "crates/idaptik-kernel/src/contrast.rs" 46 49 46 74
+
+use creusot.int.UInt32
+use creusot.int.UInt64
+use creusot.prelude.Any
+use int.Int
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let luminance [#"crates/idaptik-kernel/src/contrast.rs" 47 0 47 47] (r: UInt32.t) (g: UInt32.t) (b: UInt32.t)
+  (return (x: UInt64.t)) = {[@stop_split] [@expl:luminance requires] [%#scontrast'7] UInt32.t'int r <= 1000000
+  /\ UInt32.t'int g <= 1000000 /\ UInt32.t'int b <= 1000000}
+  (! bb0
+  [ bb0 = s0
+    [ s0 = [ &_15 <- UInt64.of_int (UInt32.t'int r) ] s1
+    | s1 = UInt64.mul [%#scontrast'0] {[%#scontrast] (2126: UInt64.t)} {_15} (fun (_x: UInt64.t) -> [ &_14 <- _x ] s2)
+    | s2 = [ &_18 <- UInt64.of_int (UInt32.t'int g) ] s3
+    | s3 = UInt64.mul [%#scontrast'2] {[%#scontrast'1] (7152: UInt64.t)} {_18} (fun (_x: UInt64.t) -> [ &_17 <- _x ] s4)
+    | s4 = UInt64.add [%#scontrast'3] {_14} {_17} (fun (_x: UInt64.t) -> [ &_13 <- _x ] s5)
+    | s5 = [ &_21 <- UInt64.of_int (UInt32.t'int b) ] s6
+    | s6 = UInt64.mul [%#scontrast'5] {[%#scontrast'4] (722: UInt64.t)} {_21} (fun (_x: UInt64.t) -> [ &_20 <- _x ] s7)
+    | s7 = UInt64.add [%#scontrast'6] {_13} {_20} (fun (_x: UInt64.t) -> [ &_ret <- _x ] s8)
+    | s8 = return {_ret} ] ]
+  [ & _ret: UInt64.t = Any.any_l ()
+  | & r: UInt32.t = r
+  | & g: UInt32.t = g
+  | & b: UInt32.t = b
+  | & _13: UInt64.t = Any.any_l ()
+  | & _14: UInt64.t = Any.any_l ()
+  | & _15: UInt64.t = Any.any_l ()
+  | & _17: UInt64.t = Any.any_l ()
+  | & _18: UInt64.t = Any.any_l ()
+  | & _20: UInt64.t = Any.any_l ()
+  | & _21: UInt64.t = Any.any_l () ])
+  [ return (result: UInt64.t) ->
+  {[@stop_split] [@expl:luminance ensures] ([@stop_split] [@expl:luminance ensures #0] [%#scontrast'8] UInt64.t'int result
+      = 2126 * UInt32.t'int r + 7152 * UInt32.t'int g + 722 * UInt32.t'int b)
+    /\ ([@stop_split] [@expl:luminance ensures #1] [%#scontrast'9] UInt64.t'int result <= 10000000000)}
+    (! return {result}) ]
