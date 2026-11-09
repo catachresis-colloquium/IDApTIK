@@ -204,43 +204,43 @@ A receipt is the CI job that checks the row and the run and commit it was last o
 
 === CR-RNG-NEW
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-RNG-NEXT
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-RNG-EQ
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-TRACE-NEW
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-TRACE-ADVANCE
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-TRACE-ACCESSORS
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-TRACE-EQ
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-KERNEL-DERIVES
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-CONTRAST-LUMINANCE
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === CR-CONTRAST-MEETS
 
-* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42627445885 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/creusot-proof.yml`, job "Creusot proof", run 42629156882 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === VE-KERNEL-RNG-TRACE
 
@@ -279,51 +279,50 @@ A receipt is the CI job that checks the row and the run and commit it was last o
 
 === ID-ABI-OWNERSHIP
 
-* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42621975041 at `a62cc9f9949f556f751597e71be55f18512a0287`.
+* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === ID-ABI-STRINGS
 
-* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42621975041 at `a62cc9f9949f556f751597e71be55f18512a0287`.
+* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === ID-ABI-WIRE
 
-* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42621975041 at `a62cc9f9949f556f751597e71be55f18512a0287`.
+* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === ID-ABI-RUN
 
-* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42621975041 at `a62cc9f9949f556f751597e71be55f18512a0287`.
+* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === ID-HEADER-PARITY
 
-* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42621975041 at `a62cc9f9949f556f751597e71be55f18512a0287`.
+* Receipt: `.github/workflows/ci.yml`, job "abi-model (Idris2 gate)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === TE-DETERMINISM
 
-* Receipt: `.github/workflows/ci.yml`, job "test-ghost (core/tui/ffi + clippy + fmt)", run 42627446144 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/ci.yml`, job "test-ghost (core/tui/ffi + clippy + fmt)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === TE-NETPLAY-LOOPBACK
 
-* Receipt: `.github/workflows/ci.yml`, job "session-loopback (Burble relay + two-seat determinism gate)", run 42627446144 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/ci.yml`, job "session-loopback (Burble relay + two-seat determinism gate)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === TE-FRONTEND-PARITY
 
-* Receipt: `.github/workflows/ci.yml`, job "bevy-frontend (tests + clippy)", run 42621975041 at `a62cc9f9949f556f751597e71be55f18512a0287`.
+* Receipt: `.github/workflows/ci.yml`, job "bevy-frontend (tests + clippy)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === TE-SRGB-LINEAR
 
-* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42627446144 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === TE-BRAND-VERDICTS
 
-* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42627446144 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 * Depends on: CR-CONTRAST-MEETS, CR-CONTRAST-LUMINANCE, TE-SRGB-LINEAR, BR-CONTRAST-RATIO.
 
 === TE-BRAND-TOKENS
 
-* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42627446144 at `ec1f89a1dc3cc4a78f15ee829d789e289dd08e93`.
+* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 
 === TE-PROOF-LEDGER
 
-* Receipt: none.
-* Next action: Record a receipt from the first CI run that includes this gate (config-scenario-check runs `just proof-ledger-check` from PR #222 on).
+* Receipt: `.github/workflows/ci.yml`, job "config-scenario-check (Nickel negative fixtures + round-trip)", run 42629156912 at `c6b519d5e8e75dc8b5b754f119589abb99f2814e`.
 

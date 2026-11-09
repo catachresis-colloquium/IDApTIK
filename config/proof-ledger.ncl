@@ -14,26 +14,22 @@
 
 let S = import "proof-ledger-schema.ncl" in
 
-# The commits receipts were observed on (PR #222): a62cc9f widened meets's
-# precondition and added the contrast mutants; ec1f89a closed the four live
-# contrast failures. Each receipt names the newest commit its job was seen
-# passing on when the row was written.
-let at_a62cc9f = { sha = "a62cc9f9949f556f751597e71be55f18512a0287", ci_run = 42621975041 } in
-let at_ec1f89a = { sha = "ec1f89a1dc3cc4a78f15ee829d789e289dd08e93", ci_run = 42627446144 } in
+# The commit every receipt was observed on: c6b519d (PR #222), the first head
+# with this ledger, on which every job named below passed (CI run
+# 42629156912, Creusot run 42629156882).
+let observed = { sha = "c6b519d5e8e75dc8b5b754f119589abb99f2814e", ci_run = 42629156912 } in
 let creusot_receipt = {
   workflow = ".github/workflows/creusot-proof.yml",
   job = "Creusot proof",
-  run = 42627445885,
-  commit = at_ec1f89a.sha,
+  run = 42629156882,
+  commit = observed.sha,
 } in
-let ci_at = fun at => fun name => {
+let ci = fun name => {
   workflow = ".github/workflows/ci.yml",
   job = name,
-  run = at.ci_run,
-  commit = at.sha,
+  run = observed.ci_run,
+  commit = observed.sha,
 } in
-let ci = ci_at at_ec1f89a in
-let ci_earlier = ci_at at_a62cc9f in
 let creusot_checker = "Creusot 0.14.0 (65349025c67e69fcd7479f1f420fa5904f69bc27), Pearlite contracts, Why3 with alt-ergo, cvc4, cvc5 and z3 as provisioned by creusot-install; proof sessions in verif/" in
 let creusot_boundary = "Safe Rust in crates/idaptik-kernel only; the Rust compiler, Creusot's translation and the SMT provers are trusted; callers outside the kernel are not verified." in
 let idris_checker = "Idris2 0.8.0 (Chez backend), %default total, escape scan, proof mutants; scripts/abi_model_check.sh" in
@@ -202,28 +198,28 @@ let idris_boundary = "A model of the C ABI, not the Rust implementation in idapt
       obligation = "O1: no operation takes a freed handle back to live, and every complete session frees its handle exactly once (noResurrection, completeFreesExactlyOnce).",
       kind = "engineering", verifier = "idris2", status = "proven",
       where = "crates/idaptik-ffi/abi/src/Idaptik/Abi/Protocol.idr",
-      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci_earlier "abi-model (Idris2 gate)",
+      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci "abi-model (Idris2 gate)",
     },
     {
       id = "ID-ABI-STRINGS",
       obligation = "O2: at every prefix of a session, strings handed out balance strings freed; a complete session frees exactly as many as it was given (sessionBalance, completeBalancesStrings).",
       kind = "engineering", verifier = "idris2", status = "proven",
       where = "crates/idaptik-ffi/abi/src/Idaptik/Abi/Protocol.idr",
-      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci_earlier "abi-model (Idris2 gate)",
+      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci "abi-model (Idris2 gate)",
     },
     {
       id = "ID-ABI-WIRE",
       obligation = "O3: rendered results close their delimiters, a tick result's first character identifies its shape, and a rendered snapshot holds no interior NUL (snapshotOfIsNulFree).",
       kind = "engineering", verifier = "idris2", status = "proven",
       where = "crates/idaptik-ffi/abi/src/Idaptik/Abi/Json.idr",
-      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci_earlier "abi-model (Idris2 gate)",
+      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci "abi-model (Idris2 gate)",
     },
     {
       id = "ID-ABI-RUN",
       obligation = "O4 and snapshots: the frame clock advances by the frame count, restore refuses a foreign format, and a snapshot restores to exactly itself (snapshotRoundTrip).",
       kind = "engineering", verifier = "idris2", status = "proven",
       where = "crates/idaptik-ffi/abi/src/Idaptik/Abi/Run.idr",
-      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci_earlier "abi-model (Idris2 gate)",
+      checker = idris_checker, trust_boundary = idris_boundary, receipt = ci "abi-model (Idris2 gate)",
     },
     {
       id = "ID-HEADER-PARITY",
@@ -232,7 +228,7 @@ let idris_boundary = "A model of the C ABI, not the Rust implementation in idapt
       where = "scripts/abi_model_check.sh (steps 4 and 5)",
       checker = "Text diff in CI, on every push",
       trust_boundary = "A syntactic diff of names and one constant, not of behaviour.",
-      receipt = ci_earlier "abi-model (Idris2 gate)",
+      receipt = ci "abi-model (Idris2 gate)",
     },
 
     # --- Tests standing where the repository says "enforced" or "proves" ------
@@ -261,7 +257,7 @@ let idris_boundary = "A model of the C ABI, not the Rust implementation in idapt
       where = "crates/idaptik-bevy/tests/parity.rs",
       checker = "cargo test in CI",
       trust_boundary = "The command scripts the test drives.",
-      receipt = ci_earlier "bevy-frontend (tests + clippy)",
+      receipt = ci "bevy-frontend (tests + clippy)",
     },
 
     # --- The brand (docs/design/brand) ----------------------------------------
@@ -300,7 +296,7 @@ let idris_boundary = "A model of the C ABI, not the Rust implementation in idapt
       where = "config/proof-ledger-schema.ncl, config/proof-ledger-fixtures/, just proof-ledger-check",
       checker = "Nickel 1.16 contracts and cargo test in CI",
       trust_boundary = "The schema checks the ledger's shape and its stated dependencies; whether a row's claim is true is the receipt's business.",
-      next_action = "Record a receipt from the first CI run that includes this gate (config-scenario-check runs `just proof-ledger-check` from PR #222 on).",
+      receipt = ci "config-scenario-check (Nickel negative fixtures + round-trip)",
     },
   ],
 } | S.Ledger
