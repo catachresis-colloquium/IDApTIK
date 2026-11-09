@@ -16,8 +16,10 @@
 #     that checks it, and the run and commit it was last seen passing on);
 #   - an `open` row without a next action: an unrun check is never silent;
 #   - a duplicate id, or a `depends_on` / `covers` naming no row;
-#   - a `proven` row resting on a step that is not itself proven: a row is
-#     only as strong as the weakest step it depends on (README-EXPLAINME §5);
+#   - a `proven` row resting on a step that is not itself `proven` (a
+#     `proven-with-postulates` step included), or a `proven-with-postulates`
+#     row resting on anything weaker: a row is only as strong as the weakest
+#     step it depends on (README-EXPLAINME §5);
 #   - a Creusot row that no Verus row covers: PROOF-POLICY §1.2 makes both
 #     verifiers the default for first-party Rust, so each Creusot obligation
 #     has a planned Verus leg, `open` with its reason until it runs;
@@ -138,8 +140,11 @@ let Rows =
     std.contract.from_validator (fun rows =>
       all_rows
         (fun r =>
+          # `proven` rests only on `proven`; `proven-with-postulates` may also
+          # rest on another postulated step, whose axioms it then inherits.
+          let allowed = if r.status == "proven" then ["proven"] else strong in
           !(std.array.elem r.status strong)
-          || std.array.all (fun d => std.array.elem (status_of rows d) strong) r.depends_on
+          || std.array.all (fun d => std.array.elem (status_of rows d) allowed) r.depends_on
         )
         "a proven row depends on a step that is not proven (README-EXPLAINME §5: a row is only as strong as its weakest step)"
         rows
