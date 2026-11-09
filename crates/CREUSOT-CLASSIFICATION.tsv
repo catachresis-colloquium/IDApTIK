@@ -56,6 +56,7 @@ D	crates/idaptik-brand/src/lib.rs	the brand tokens as a typed model over tokens.
 D	crates/idaptik-brand/src/canonical.rs	I-JSON/JCS canonicaliser for the one token file; refuses what it cannot render exactly, vectors in its tests
 D	crates/idaptik-brand/src/srgb.rs	the one float step of the contrast rule (sRGB linearisation) scaled to the kernel's integers; tested against the transfer function
 D	crates/idaptik-brand/src/generated.rs	GENERATED constants from tokens.json (declared in .gitattributes); a stale copy fails generated_rs_matches_tokens_json
+D	crates/idaptik-proof-ledger/src/lib.rs	the proof ledger as a typed model over docs/status/proof-ledger.json, plus the renderer that writes PROOF-STATUS.adoc; drift between config/proof-ledger.ncl, the JSON and the page is caught by its own tests
 T	crates/idaptik-brand/tests/legibility.rs	pins the WCAG verdict of every pair the HUD draws, failures included, so the brand book cannot drift from the palette
 T	crates/idaptik-bevy/examples/brand_sheet.rs	draws every colour token and the type ramp with the real frontend; --screenshot renders the brand book's sheets
 L	crates/idaptik-core/src/interp.rs	pose/door interpolation; parity-tested against the Bevy frontend

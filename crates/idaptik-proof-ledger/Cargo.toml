@@ -1,0 +1,16 @@
+[package]
+name = "idaptik-proof-ledger"
+description = "The IDApTIK proof ledger as data (docs/status/proof-ledger.json, I-JSON/JCS) and as the rendered docs/status/PROOF-STATUS.adoc, with the drift gate between them and config/proof-ledger.ncl."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The estate's I-JSON/JCS canonicaliser lives with the brand tokens, its first
+# user; the ledger is its second.
+idaptik-brand = { workspace = true }

@@ -3686,6 +3686,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "idaptik-proof-ledger"
+version = "0.1.0"
+dependencies = [
+ "idaptik-brand",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "idaptik-tui"
 version = "0.1.0"
 dependencies = [

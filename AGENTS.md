@@ -41,10 +41,13 @@ Invariants (see `coordination.k9` and the K9 contractiles):
 - Contributions come in under DCO 1.1 — sign commits with `git commit -s`
   (see `CONTRIBUTING.md`).
 
-Do not edit generated files directly. Two are declared (in `.gitattributes`):
+Do not edit generated files directly. Four are declared (in `.gitattributes`):
 `crates/idaptik-brand/tokens.json` and `crates/idaptik-brand/src/generated.rs`,
 both rendered from `config/brand-tokens.ncl` by `just brand-regen` and checked
-by `just brand-check`. Change the Nickel, regenerate, commit all three. Do not
+by `just brand-check`; and `docs/status/proof-ledger.json` and
+`docs/status/PROOF-STATUS.adoc`, rendered from `config/proof-ledger.ncl` by
+`just proof-ledger-regen` and checked by `just proof-ledger-check`. Change the
+Nickel, regenerate, commit the source and what it renders. Do not
 change licences, upstream coined names, or evidence-status labels (in
 `docs/PROJECT-ASSURANCE-PROFILE.adoc`) as a side effect of an unrelated change.
 
@@ -172,7 +175,11 @@ this is only a summary of it:
 In this repository the Creusot scope is `crates/idaptik-kernel`, proved by
 `.github/workflows/creusot-proof.yml`; the classification and debt ledgers are
 `crates/CREUSOT-CLASSIFICATION.tsv` and `crates/CREUSOT-PROOF-DEBT.tsv`, and
-the proof sessions are committed under `verif/`. Callers outside the kernel
+the proof sessions are committed under `verif/`. Every proof obligation the
+repository speaks about, with its status and receipt, is a row of the machine
+proof ledger `config/proof-ledger.ncl`, rendered to
+`docs/status/PROOF-STATUS.adoc`; add or change a row there in the same change
+as the proof. Callers outside the kernel
 are not verified, so they check a kernel function's precondition themselves
 (see `crates/idaptik-brand/src/srgb.rs`).
 

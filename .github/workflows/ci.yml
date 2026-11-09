@@ -7,6 +7,9 @@
 #                                 validator AND every bad_*.ncl fixture is rejected
 #   just brand-check          -> brand tokens: Nickel export vs committed
 #                                 tokens.json/generated.rs, bad fixtures rejected
+#   just proof-ledger-check   -> proof ledger: Nickel export vs committed
+#                                 proof-ledger.json/PROOF-STATUS.adoc, bad fixtures
+#                                 rejected for their stated reason
 #   Bevy frontend             -> selected renderer tests + warnings-as-errors Clippy
 #   session loopback          -> relay tests + two-seat determinism/resync
 #   fixture suites            -> offline shell, toolchain, coordination, and migration fixtures
@@ -782,3 +785,10 @@ jobs:
       # rejected. `cargo test` alone (in test-ghost) cannot see that drift.
       - name: just brand-check
         run: just brand-check
+      # The proof ledger: config/proof-ledger.ncl against its schema (closed
+      # status words, receipts on proven rows, a Verus leg for every proven
+      # Creusot row), every bad fixture rejected for the reason it names, and
+      # the committed proof-ledger.json and PROOF-STATUS.adoc equal to a fresh
+      # export and rendering.
+      - name: just proof-ledger-check
+        run: just proof-ledger-check

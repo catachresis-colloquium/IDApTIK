@@ -252,8 +252,8 @@ test:
 # to notice that a run does not replay to the state it claims -- a test gate that
 # skips it is a gate that skips the invariant.
 test-ghost:
-    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist -p idaptik-brand
-    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist -p idaptik-brand --all-targets -- -D warnings
+    cargo test -p idaptik-core -p idaptik-tui -p idaptik-ffi -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist -p idaptik-brand -p idaptik-proof-ledger
+    cargo clippy -p idaptik-core -p idaptik-tui -p idaptik-net -p idaptik-evil-weevil -p idaptik-persist -p idaptik-brand -p idaptik-proof-ledger --all-targets -- -D warnings
     cargo fmt --all -- --check
 
 # The Evil Weevil adversarial-testing gate (ADR-0017): offline, sans-IO
@@ -335,7 +335,7 @@ vendor-winit-watch:
 # failure, not a skip: run `just setup` first.
 config-check:
     @command -v nickel >/dev/null 2>&1 || { echo "nickel is not installed: run 'just setup'" >&2; exit 1; }
-    nickel export config/default.ncl >/dev/null && nickel export config/grounded_slice.ncl >/dev/null && nickel export config/ghost_lobby_floor.ncl >/dev/null && just config-scenario-check && just brand-check && echo "config: ok (schema applied)"
+    nickel export config/default.ncl >/dev/null && nickel export config/grounded_slice.ncl >/dev/null && nickel export config/ghost_lobby_floor.ncl >/dev/null && just config-scenario-check && just brand-check && just proof-ledger-check && echo "config: ok (schema applied)"
 
 # Check the Nickel-authored scenario against scenario-schema.ncl: the good
 # fixture must export and round-trip through the Rust validator unchanged, and
@@ -407,6 +407,44 @@ brand-regen:
     IDAPTIK_BRAND_EXPORT='{{brand_export}}' cargo test -q -p idaptik-brand regenerate_tokens_json -- --ignored
     cargo test -q -p idaptik-brand regenerate_generated_rs -- --ignored
     @echo "brand: tokens.json and generated.rs regenerated"
+
+proof_ledger_export := justfile_directory() / "target" / "proof-ledger" / "proof_ledger_raw.json"
+
+# The proof-ledger gate: the ledger typechecks against proof-ledger-schema.ncl
+# (closed status words, receipts on proven rows, next actions on open rows, a
+# Verus leg for every proven Creusot row, weakest-step dependencies), the good
+# fixture is accepted, every bad fixture is rejected FOR THE REASON its
+# `# expect:` line names (a fixture rejected for another reason proves
+# nothing), and the committed JSON and PROOF-STATUS.adoc equal a fresh export
+# and rendering. A missing nickel is a failure, not a skip.
+proof-ledger-check:
+    @command -v nickel >/dev/null 2>&1 || { echo "nickel is not installed: run 'just setup'" >&2; exit 1; }
+    mkdir -p "$(dirname '{{proof_ledger_export}}')"
+    nickel export config/proof-ledger.ncl --format json > '{{proof_ledger_export}}'
+    nickel export config/proof-ledger-fixtures/good_minimal.ncl >/dev/null
+    @for f in config/proof-ledger-fixtures/bad_*.ncl; do \
+        want="$(sed -n 's/^# expect: //p' "$f")"; \
+        if [ -z "$want" ]; then echo "FAIL: $f has no '# expect:' line" >&2; exit 1; fi; \
+        if out="$(nickel export "$f" 2>&1)"; then \
+            echo "FAIL: $f exported but proof-ledger-schema.ncl should reject it" >&2; exit 1; \
+        fi; \
+        if ! printf '%s' "$out" | grep -qF -- "$want"; then \
+            echo "FAIL: $f was rejected, but not with: $want" >&2; printf '%s\n' "$out" | head -20 >&2; exit 1; \
+        fi; \
+        echo "rejected as expected: $f"; \
+    done
+    IDAPTIK_PROOF_LEDGER_EXPORT='{{proof_ledger_export}}' cargo test -q -p idaptik-proof-ledger ledger_json_matches_nickel_export -- --ignored
+    cargo test -q -p idaptik-proof-ledger
+    @echo "proof-ledger: ok (proof-ledger.json and PROOF-STATUS.adoc match config/proof-ledger.ncl)"
+
+# Re-export the proof ledger and rewrite both committed artefacts. Run after
+# editing config/proof-ledger.ncl, then `just proof-ledger-check`.
+proof-ledger-regen:
+    mkdir -p "$(dirname '{{proof_ledger_export}}')"
+    nickel export config/proof-ledger.ncl --format json > '{{proof_ledger_export}}'
+    IDAPTIK_PROOF_LEDGER_EXPORT='{{proof_ledger_export}}' cargo test -q -p idaptik-proof-ledger regenerate_ledger_json -- --ignored
+    cargo test -q -p idaptik-proof-ledger regenerate_proof_status_adoc -- --ignored
+    @echo "proof-ledger: proof-ledger.json and PROOF-STATUS.adoc regenerated"
 
 # Render the brand sheet (every colour token and the type ramp in each bundled
 # face) in a window; `--screenshot PATH` saves a PNG after the first frames.
