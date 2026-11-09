@@ -35,8 +35,19 @@ pub fn luminance(rgb: u32) -> u64 {
 }
 
 /// Whether `fg` on `bg` meets the `(num, den)` ratio, decided by the kernel.
+///
+/// This is the unverified side of the kernel's contract, so it checks the
+/// kernel's precondition itself and panics rather than ask for a verdict
+/// outside the proved domain. The channel half of the precondition holds by
+/// construction: [`linear`] never exceeds `LINEAR_SCALE` (tested over all
+/// 256 inputs below).
 pub fn meets(fg: u32, bg: u32, threshold: (u32, u32)) -> bool {
-    contrast::meets(luminance(fg), luminance(bg), threshold.0, threshold.1)
+    let (num, den) = threshold;
+    assert!(
+        den > 0 && num <= contrast::THRESHOLD_TERM_MAX && den <= contrast::THRESHOLD_TERM_MAX,
+        "threshold {num}/{den} is outside idaptik_kernel::contrast::meets's precondition"
+    );
+    contrast::meets(luminance(fg), luminance(bg), num, den)
 }
 
 /// The contrast ratio in f64, for reporting (never for the verdict).
@@ -69,6 +80,27 @@ mod tests {
             assert!(v > prev, "channel {c}: {v} <= {prev}");
             prev = v;
         }
+    }
+
+    #[test]
+    fn every_channel_is_inside_the_kernel_precondition() {
+        // contrast::luminance requires each channel <= LINEAR_SCALE. The
+        // domain is all of u8, so this is the whole domain, not a sample.
+        for c in 0..=255u8 {
+            assert!(linear(c) <= contrast::LINEAR_SCALE as u32, "channel {c}");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "outside idaptik_kernel::contrast::meets's precondition")]
+    fn a_zero_denominator_is_refused_before_the_kernel() {
+        let _ = meets(0xffffff, 0x000000, (3, 0));
+    }
+
+    #[test]
+    #[should_panic(expected = "outside idaptik_kernel::contrast::meets's precondition")]
+    fn an_oversized_threshold_is_refused_before_the_kernel() {
+        let _ = meets(0xffffff, 0x000000, (contrast::THRESHOLD_TERM_MAX + 1, 1));
     }
 
     #[test]

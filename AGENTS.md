@@ -151,6 +151,31 @@ A check that cannot fail is not a check. Do not add a test that reports success
 without running anything, and do not add a gate that exits 0 when its tool is
 missing — an absent toolchain is a failure, not a skip.
 
+## Proofs follow the estate proof policy
+
+Which prover carries which obligation is decided by the estate's
+`3-practice/PROOF-POLICY.adoc` in `metadatastician/standards` (read at
+`9bdf864cc7f2c8e24b4df84bf00d04158eee3ad5`); that file is normative and
+this is only a summary of it:
+
+- First-party **Rust** is verified with **Creusot**, whose contracts are
+  written in **Pearlite**, and with **Verus**. Both verifiers are planned by
+  default. Where one has not run, the proof-status record says why and what
+  happens next; an unrun verifier is never reported as a pass.
+- **Idris2** carries interface, ABI and wire-format contracts
+  (`crates/idaptik-ffi/abi`). **Agda**, rechecked in Rocq and Lean, carries
+  theory that would be true of any implementation.
+- Status words are the closed set `proven`, `proven-with-postulates`,
+  `tested-only`, `argued`, `open`. Proof Witness Grades (`PWG-…`) apply to
+  theory theorems only, never to Creusot or Verus results.
+
+In this repository the Creusot scope is `crates/idaptik-kernel`, proved by
+`.github/workflows/creusot-proof.yml`; the classification and debt ledgers are
+`crates/CREUSOT-CLASSIFICATION.tsv` and `crates/CREUSOT-PROOF-DEBT.tsv`, and
+the proof sessions are committed under `verif/`. Callers outside the kernel
+are not verified, so they check a kernel function's precondition themselves
+(see `crates/idaptik-brand/src/srgb.rs`).
+
 ## Building
 
 Run `mise trust` first. An untrusted mise config is *silently ignored*, so the

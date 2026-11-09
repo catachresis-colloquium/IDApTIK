@@ -240,10 +240,58 @@ jobs:
           echo "mutant correctly rejected by the PROVER, on the advance contract"
           restore
 
+      # The same control for the brand's contrast kernel. The contracts on
+      # luminance() and meets() state what each computes, so a wrong verdict
+      # must be unprovable, not merely untested. Two mutants, one per contract,
+      # each held to the same standard as the trace mutant above: it must
+      # translate, and the prover must name that function's goal.
+      #   luminance: one WCAG weight off by one in the body (7152 -> 7153 G),
+      #              while the ensures still states 7152.
+      #   meets:     the 0.05 offset computed at 1/21 instead of 1/20, while
+      #              the ensures still states 500_000_000.
+      - name: Control -- contrast mutants must fail the PROOF, not the build
+        run: |
+          set -euo pipefail
+          f=crates/idaptik-kernel/src/contrast.rs
+          cp "$f" /tmp/contrast.orig
+          restore() { cp /tmp/contrast.orig "$f"; }
+          trap restore EXIT
+          plant() { # name sed-expression goal
+            local name="$1" expr="$2" goal="$3"
+            restore
+            sed -i "$expr" "$f"
+            if git diff --quiet "$f"; then
+              echo "::error::contrast mutant '$name' did not apply -- the control is vacuous"; exit 1
+            fi
+            touch crates/idaptik-kernel/src/lib.rs
+            if ! cargo creusot -p idaptik-kernel --only coma --span-mode relative > "mutant-contrast-$name-coma.log" 2>&1; then
+              echo "::error::contrast mutant '$name' failed to TRANSLATE, so it cannot show a proof failure"
+              tail -40 "mutant-contrast-$name-coma.log"; exit 1
+            fi
+            if cargo creusot --only prove > "mutant-contrast-$name.log" 2>&1; then
+              echo "::error::THE CONTRAST GATE HAS NO TEETH -- mutant '$name' still proved"
+              cat "mutant-contrast-$name.log"; exit 1
+            fi
+            if ! grep -q "Goal Coma.$goal" "mutant-contrast-$name.log"; then
+              echo "::error::contrast mutant '$name' failed, but NOT on Coma.$goal"
+              tail -40 "mutant-contrast-$name.log"; exit 1
+            fi
+            if ! grep -q 'unproved file' "mutant-contrast-$name.log"; then
+              echo "::error::contrast mutant '$name' failed without an unproved-file verdict"
+              tail -40 "mutant-contrast-$name.log"; exit 1
+            fi
+            grep "Goal Coma.$goal" "mutant-contrast-$name.log"
+            echo "contrast mutant '$name' rejected by the PROVER, on $goal"
+          }
+          plant luminance 's|7152 \* (g as u64)|7153 * (g as u64)|' vc_luminance
+          plant meets 's|const OFFSET: u64 = LUMINANCE_SCALE / 20;|const OFFSET: u64 = LUMINANCE_SCALE / 21;|' vc_meets
+          restore
+          git diff --quiet "$f" || { echo "::error::contrast.rs not restored"; exit 1; }
+
       - name: Positive control -- clean tree proves again after revert
         run: |
           set -euo pipefail
-          git diff --quiet crates/idaptik-kernel/src/trace.rs || { echo "::error::tree not restored"; exit 1; }
+          git diff --quiet crates/idaptik-kernel/src/trace.rs crates/idaptik-kernel/src/contrast.rs || { echo "::error::tree not restored"; exit 1; }
           touch crates/idaptik-kernel/src/lib.rs
           cargo creusot -p idaptik-kernel --only coma --span-mode relative >/dev/null
           cargo creusot --only prove 2>&1 | tee restored.log
@@ -269,7 +317,7 @@ jobs:
           set +e
           {
             echo '## Creusot'
-            for log in coma.log prove.log mutant-coma.log mutant.log restored.log; do
+            for log in coma.log prove.log mutant-coma.log mutant.log mutant-contrast-*.log restored.log; do
               if test -f "$log"; then
                 echo "### ${log%.log}"
                 echo '```text'
@@ -305,6 +353,7 @@ jobs:
           announce prove.log
           announce mutant-coma.log
           announce mutant.log
+          for log in mutant-contrast-*.log; do announce "$log"; done
           test -f coma.log || echo '::error::the kernel never reached a translator run'
           exit 0
 
@@ -318,6 +367,7 @@ jobs:
             prove.log
             mutant.log
             mutant-coma.log
+            mutant-contrast-*.log
             restored.log
             verif/
           # `warn`, not `error`: with `if: always()` a bootstrap failure reaches
