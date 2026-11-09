@@ -53,26 +53,28 @@ equivalent; the *shape* of the data is the one the handoff asked for.
 ## Divergences found while deriving the tokens (flagged, not fixed)
 
 Handoff rule 1 and rule 3: values are taken exactly and failures are flagged.
-None of the following was changed on this branch.
+None of the following was changed when it was found; rows marked **Decided** have
+since been closed by an owner decision.
 
 | Finding | Where | Suggested closing move |
 |---|---|---|
-| **Alarm red is live text and fails 4.5:1.** `screen.rs` draws the `LOCKED` / `NO POWER` device labels and the `GUARD` estimate in `alarm` at 16 px: 4.35:1 on night, 4.27:1 on the deck glass. (The first version of this book said alarm was never drawn as text; Codex review on #206 caught it.) | `screen.rs`; pinned in `legibility.rs` and `palette.rs` tests | **Open decision**, see below. |
+| **Alarm red is live text and fails 4.5:1.** `screen.rs` draws the `LOCKED` / `NO POWER` device labels and the `GUARD` estimate in `alarm` at 16 px: 4.35:1 on night, 4.27:1 on the deck glass. (The first version of this book said alarm was never drawn as text; Codex review on #206 caught it.) | `screen.rs`; pinned in `legibility.rs` and `palette.rs` tests | **Decided 2026-11-09** (decision 1 below): labels in `bone`, threat as an alarm-red mark. |
 | **Dust on slab is 3.69:1**: legible as a glyph, not as text. | `legibility.rs` | Never set dust type on a slab surface; use bone. |
-| **The bandwidth bar does not read.** Its `cobalt` fill sits on the `slate` meter track at 2.58:1, under even the 3:1 glyph bar. (First reported against `pitch`, 3.34:1; CodeRabbit review on #206 pointed at the real track.) | `hud.rs`; pinned in `legibility.rs` | **Open decision**, see below. |
+| **The bandwidth bar does not read.** Its `cobalt` fill sits on the `slate` meter track at 2.58:1, under even the 3:1 glyph bar. (First reported against `pitch`, 3.34:1; CodeRabbit review on #206 pointed at the real track.) | `hud.rs`; pinned in `legibility.rs` and `hud.rs` | **Decided 2026-11-09** (decision 4 below): the track is `pitch`. |
 | **The type ramp collapses in the default face.** VT323 snaps to a 16 px grid, so seven of the eight requested sizes (10–22 px) all draw at 16 px and only 24 px steps up to 32 px. On the 8 px faces the ramp is 8 / 16 / 24. | `fonts::UiFont::snap`, tabulated in the brand book | Either request grid-aligned sizes in the code (so what is typed is what is drawn) or accept a two-step ramp as the brand. |
 | **Off-palette literals.** `sprites.rs` colours devices by kind with a Material-design set (`#2196f3`, `#ff9800`, `#d32f2f`, `#9c27b0`, `#f44336`, `#4caf50`, `#ffeb3b`, `#795548`, `#757575`, `#fff59d`, `#616161`), pure green LEDs and console text (`0,1,0`), and ad-hoc greys; `net_view.rs` and `netplay/ui/role_select.rs` use their own greys, white and tints; `backdrop.rs` has two tint constants; `scene.rs` has three door colours (`DOOR_SHUT`, `DOOR_ROUTING`, `DOOR_OPEN`) beside the two palette ones; `screen.rs` has `DECK_GLASS` (`#07110d`), the background of every hacker screen. | those files | Migrate each to a token (new tokens where a role is real, e.g. a device-kind family), then add a test that `idaptik-bevy` names no `Color::srgb*` literal outside `palette.rs`. Not done here: it changes what the game draws, which is a design decision, not a token extraction. |
 | **The landing-page outline uses a different palette** (teal/cyan ground `#071014`, `--cyan #58e0da`, `--amber #e5b95d`, Inter and a mono stack). | `docs/design/idaptik-landing-page.html` | Decide whether the web surface follows the game palette (then `tokens.css` closes it) or stays its own; today they do not match. |
 | **The sprites' "38-colour palette" is 36 (sprites) and 30 (backdrops) as measured.** | `assets/sprites/README.md` | Commit the measured palette with a gate (above) and correct the README from the gate's count. |
 
-## Open decisions (yours to make; nothing was changed)
+## Decided (2026-11-09)
 
 Handoff rule 3 says flag contrast failures rather than silently change the
-brand, so all four live failures are pinned as they are. Each option below is a
-real change to what the game draws; pick one and the tests and §5 of the book
-move with it.
+brand, so all four live failures were pinned and put to the owner as options.
+The owner chose on 2026-11-09; each choice is now drawn, and the tests and §5 of
+the book moved with it. The option tables are kept as the record of what was
+weighed.
 
-**1. Alarm red as screen text** (`LOCKED`, `NO POWER`, `GUARD`).
+**1. Alarm red as screen text** (`LOCKED`, `NO POWER`, `GUARD`). **Chosen: A.** `screen::THREAT_TEXT` is `bone`; the device square and the guard ring stay alarm red.
 
 | Option | Change | Trade-off |
 |---|---|---|
@@ -81,7 +83,7 @@ move with it.
 | C. Accept and document | Keep alarm text; record the exception. | Fails WCAG for the hacker's most urgent labels. |
 
 **2. The OT deck button** (glass verb on an `alarm` fill, 4.27:1). Found by
-Codex review on #207.
+Codex review on #207. **Chosen: A.** The button stays `phosphor`; OT is a 2 px `alarm` border (`deck::verb_style`), 3.16:1 or better against both neighbours.
 
 | Option | Change | Trade-off |
 |---|---|---|
@@ -90,7 +92,7 @@ Codex review on #207.
 | C. Accept and document | Keep the red button; record the exception. | 4.27:1 on the hacker's riskiest action. |
 
 **3. The not-ready deck button** (glass verb on `FAINT`, about 1.35:1, still
-pressable). Found by Codex review on #220.
+pressable). Found by Codex review on #220. **Chosen: B, with `phosphor`.** The button stays pressable and its verb is `phosphor` on the faint fill, 10.04:1. The `dust` example below was measured on bare glass (5.89:1); on the faint fill it is 4.37:1 and fails, so `phosphor` was chosen instead. A was the earlier recommendation and was not taken: it would change what a premature click costs.
 
 | Option | Change | Trade-off |
 |---|---|---|
@@ -98,7 +100,7 @@ pressable). Found by Codex review on #220.
 | B. Keep it live, make it legible | The not-ready verb uses a readable colour, for example `dust` on the glass (5.89:1). | The button keeps its current behaviour; loses some of the "greyed out" look. |
 | C. Accept and document | Keep both the faint label and the live press. | A pressable control the player can barely read, with a real penalty. |
 
-**4. The bandwidth bar** (`cobalt` on `slate`, 2.58:1).
+**4. The bandwidth bar** (`cobalt` on `slate`, 2.58:1). **Chosen: A, `pitch`.** `hud::METER_TRACK` is `pitch`; every fill clears 3:1 (cobalt, the lowest, 3.34:1; `ink2` would give 3.14:1).
 
 | Option | Change | Trade-off |
 |---|---|---|

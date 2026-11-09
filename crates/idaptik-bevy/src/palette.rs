@@ -62,18 +62,24 @@ pub const GRADE: Color = hex(tok::GRADE);
 pub const DOOR_LOCKED: Color = hex(tok::DOOR_LOCKED);
 pub const DOOR_UNLOCKED: Color = hex(tok::DOOR_UNLOCKED);
 
+/// A colour as the 8-bit sRGB bytes it renders to, `0xRRGGBB`, ignoring
+/// alpha. For the contrast tests here and in `hud.rs`.
+#[cfg(test)]
+pub(crate) fn srgb_bytes(c: Color) -> u32 {
+    let s = c.to_srgba();
+    (u32::from((s.red * 255.0).round() as u8) << 16)
+        | (u32::from((s.green * 255.0).round() as u8) << 8)
+        | u32::from((s.blue * 255.0).round() as u8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use bevy::color::Alpha;
     use idaptik_brand::srgb::{self, BODY, LARGE};
 
-    /// A colour as the 8-bit sRGB bytes it renders to, `0xRRGGBB`.
     fn bytes(c: Color) -> u32 {
-        let s = c.to_srgba();
-        (u32::from((s.red * 255.0).round() as u8) << 16)
-            | (u32::from((s.green * 255.0).round() as u8) << 8)
-            | u32::from((s.blue * 255.0).round() as u8)
+        srgb_bytes(c)
     }
 
     #[test]
@@ -116,9 +122,38 @@ mod tests {
             ch(16) | ch(8) | ch(0)
         };
         let dim = over(PHOSPHOR.with_alpha(crate::screen::ROOM_NAME_ALPHA), glass);
-        let faint = over(crate::deck::FAINT, glass);
+        // A colour as drawn on the glass: composited when translucent.
+        let on_glass = |c: Color| {
+            if c.alpha() < 1.0 {
+                over(c, glass)
+            } else {
+                bytes(c)
+            }
+        };
 
-        let rows: [(&str, u32, u32, bool, bool); 9] = [
+        // The deck button's look, read from the function the deck draws with
+        // (inventory.md decisions 2 and 3).
+        use crate::deck::verb_style;
+        let ready = verb_style(true, false);
+        let not_ready = verb_style(false, false);
+        let ot_ready = verb_style(true, true);
+        let ot_not_ready = verb_style(false, true);
+        // OT changes only the border: the verb never sits on red.
+        assert_eq!((ot_ready.fill, ot_ready.text), (ready.fill, ready.text));
+        assert_eq!(
+            (ot_not_ready.fill, ot_not_ready.text),
+            (not_ready.fill, not_ready.text)
+        );
+        assert_eq!(ot_ready.border, ALARM);
+        // Threat labels are not alarm red (inventory.md decision 1).
+        use crate::screen::{THREAT_TEXT, device_label_colour};
+        for status in ["LOCKED", "NO POWER"] {
+            assert_eq!(device_label_colour(status, PHOSPHOR), THREAT_TEXT);
+        }
+        assert_eq!(device_label_colour("OPEN", PHOSPHOR), PHOSPHOR);
+        assert_ne!(THREAT_TEXT, ALARM);
+
+        let rows: &[(&str, u32, u32, bool, bool)] = &[
             (
                 "phosphor device labels, screen.rs",
                 bytes(PHOSPHOR),
@@ -140,20 +175,60 @@ mod tests {
                 true,
                 true,
             ),
-            // FLAGGED, live: LOCKED / NO POWER labels and the GUARD estimate
-            // (4.27:1). Open decision in inventory.md; not changed (rule 3).
             (
-                "alarm LOCKED / NO POWER / GUARD text, screen.rs",
+                "LOCKED / NO POWER / GUARD labels in THREAT_TEXT, screen.rs",
+                bytes(THREAT_TEXT),
+                glass,
+                true,
+                true,
+            ),
+            // Alarm red stays the threat colour as a mark (the device square,
+            // the guard ring): a glyph, so 3:1 is the bar. Not text: 4.27:1.
+            (
+                "alarm-red threat marks on the glass, screen.rs",
                 bytes(ALARM),
                 glass,
                 false,
                 true,
             ),
             (
-                "glass-coloured verb on the phosphor card, deck.rs",
-                glass,
-                bytes(PHOSPHOR),
+                "verb on the ready button, deck.rs",
+                bytes(ready.text),
+                on_glass(ready.fill),
                 true,
+                true,
+            ),
+            // The not-ready button stays pressable (card_press still queues
+            // the hack and the sim counts a failed action), so its verb is
+            // held to 4.5:1 like any live text: phosphor on the faint fill.
+            (
+                "verb on the not-ready button (pressable), deck.rs",
+                bytes(not_ready.text),
+                on_glass(not_ready.fill),
+                true,
+                true,
+            ),
+            // The OT mark is a 2 px border: a UI glyph, held to 3:1 against
+            // both of its neighbours, the glass outside and the fill inside.
+            (
+                "OT border against the glass, deck.rs",
+                bytes(ot_ready.border),
+                glass,
+                false,
+                true,
+            ),
+            (
+                "OT border against the ready fill, deck.rs",
+                bytes(ot_ready.border),
+                on_glass(ot_ready.fill),
+                false,
+                true,
+            ),
+            (
+                "OT border against the not-ready fill, deck.rs",
+                bytes(ot_not_ready.border),
+                on_glass(ot_not_ready.fill),
+                false,
                 true,
             ),
             (
@@ -170,31 +245,31 @@ mod tests {
                 true,
                 true,
             ),
-            // FLAGGED, live: an OT verb turns the ready button alarm red with
-            // the verb still in glass (4.27:1). No palette colour reaches
-            // 4.5:1 on alarm red. Open decision in inventory.md.
+            // Recorded: the two button looks this replaced, so the verdicts
+            // the inventory quotes for them stay checked.
             (
-                "glass-coloured OT verb on the alarm button, deck.rs",
+                "recorded: glass verb on an alarm fill (the old OT button)",
                 glass,
                 bytes(ALARM),
                 false,
                 true,
             ),
-            // FLAGGED, live: a not-ready button is FAINT (phosphor at 14 %)
-            // and its verb is about 1.35:1 (2.77:1 in a linear blend). It is
-            // NOT a disabled control: `card_press` still queues the NetHack,
-            // and the sim counts a failed action and emits NetHackDenied, so
-            // WCAG 1.4.3's inactive-control exemption does not apply. Open
-            // decision in inventory.md; not changed (rule 3).
             (
-                "glass-coloured verb on the not-ready button (live, pressable), deck.rs",
+                "recorded: glass verb on the faint fill (the old not-ready button)",
                 glass,
-                faint,
+                on_glass(not_ready.fill),
                 false,
                 false,
             ),
+            (
+                "recorded: dust verb on the faint fill (fails; why phosphor)",
+                bytes(DUST),
+                on_glass(not_ready.fill),
+                false,
+                true,
+            ),
         ];
-        for (what, fg, bg, body, glyph) in rows {
+        for &(what, fg, bg, body, glyph) in rows {
             let r = srgb::ratio(fg, bg);
             assert_eq!(srgb::meets(fg, bg, BODY), body, "{what}: {r:.2}:1 at 4.5:1");
             assert_eq!(srgb::meets(fg, bg, LARGE), glyph, "{what}: {r:.2}:1 at 3:1");

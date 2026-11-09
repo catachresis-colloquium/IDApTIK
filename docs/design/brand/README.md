@@ -49,9 +49,9 @@ reader can tell whose UI they are looking at from the accent alone.
 
 | Token | Hex | Group | Seat | Use |
 |---|---|---|---|---|
-| `pitch` | `#0c0c0e` | ground | — | Base night; interiors unlit. Off-black, not blue. The window clear colour. |
+| `pitch` | `#0c0c0e` | ground | — | Base night; interiors unlit. Off-black, not blue. The window clear colour and the meter track. |
 | `ink2` | `#141416` | ground | — | Second ink: the floor tile's seam line and the building's shell. |
-| `slate` | `#26262a` | ground | — | Concrete, road, structure. The meter track. |
+| `slate` | `#26262a` | ground | — | Concrete, road, structure. |
 | `slab` | `#36363b` | ground | — | Door frames, props, the roof slab, the overlay panel's border. |
 | `dust` | `#8e8e94` | ground | — | Key hints, the isolation meter, edges and trims on concrete; dead view cones. |
 | `bone` | `#f2f0ea` | ground | — | Paper, type, fiche. The HUD's text colour. |
@@ -107,17 +107,19 @@ Don't:
 ### 2.3 Worked examples
 
 The HUD status line is `bone` type on the `pitch` clear colour, with five
-meters as flat bars on a `slate` track: support `phosphor`, bandwidth
-`cobalt`, alert `alarm`, isolation `dust`, trace `neon`, each alone on its own
-bar (`hud.rs`). The bandwidth bar is the one that does not read: `cobalt` on
-`slate` is under even the 3:1 glyph bar (§5, flagged). A locked door is a
+meters as flat bars on a `pitch` track (`hud::METER_TRACK`): support
+`phosphor`, bandwidth `cobalt`, alert `alarm`, isolation `dust`, trace `neon`,
+each alone on its own bar (`hud.rs`). Every fill clears the 3:1 glyph bar on
+it; `cobalt`, the lowest, is 3.34:1 (on the earlier `slate` track it was
+2.58:1, §5). A locked door is a
 `door_locked` slab in a `slab` frame; when the hacker unlocks it the slab
 turns `door_unlocked`, the cobalt family saying "passage" without a word. The
 hacker's screens are `phosphor` on the deck's dark glass (`screen.rs`,
 `wiring.rs`): device labels, ports, dimmed room names. `signal` marks the
 infiltrator's estimate and `alarm` marks threat: the guard's estimate, a
-camera that is watching, and devices that read `LOCKED` or `NO POWER`. Those
-alarm labels are text, and alarm red fails 4.5:1 as text (§5, flagged).
+camera that is watching, and devices that read `LOCKED` or `NO POWER`. It
+marks them as a glyph (a square, a ring); the words beside the mark are
+`bone`, because alarm red fails 4.5:1 as text (§5).
 
 ## 3. Type
 
@@ -213,20 +215,23 @@ frontend does not draw it today.
 | `neon` on `pitch` | 17.21 | pass | pass | end-of-run overlay text (`hud.rs`) |
 | `dust` on `pitch` | 6.00 | pass | pass | key hints (`hud.rs`) |
 | `phosphor` / `signal` on `pitch` | 13.79 / 13.48 | pass | pass | recorded |
-| **`alarm` on `pitch`** | **4.35** | **fail** | pass | **live text:** `LOCKED` / `NO POWER` labels, `GUARD` estimate (`screen.rs`) |
-| `cobalt` on `pitch` | 3.34 | fail | pass | recorded |
+| `alarm` on `pitch` | 4.35 | fail | pass | recorded: never set as text (threat labels are `bone`) |
 | `phosphor` on deck glass | 13.53 | pass | pass | device labels (`screen.rs`) |
 | `signal` on deck glass | 13.23 | pass | pass | the infiltrator's estimate (`screen.rs`) |
 | dimmed `phosphor` on deck glass | 4.72 or better | pass | pass | room names, 55 % alpha (`screen.rs`) |
-| **`alarm` on deck glass** | **4.27** | **fail** | pass | **live text:** as on `pitch` (`screen.rs`) |
-| deck glass on `phosphor` | 13.53 | pass | pass | the verb on the ready deck button (`deck.rs`) |
-| **deck glass on `alarm`** | **4.27** | **fail** | pass | **live text:** the verb on the ready button for an OT action (`deck.rs`) |
-| **deck glass on the not-ready button** | **1.35** (2.77 linear) | **fail** | **fail** | **live control:** the verb on a button that is still pressable (`deck.rs`, `FAINT`) |
-| `phosphor` on `slate` | 10.63 | pass | pass | support meter fill (`hud.rs`) |
-| **`cobalt` on `slate`** | **2.58** | fail | **fail** | **bandwidth meter fill** (`hud.rs`) |
-| `alarm` on `slate` | 3.35 | fail | pass | alert meter fill (`hud.rs`) |
-| `dust` on `slate` | 4.63 | pass | pass | isolation meter fill (`hud.rs`) |
-| `neon` on `slate` | 13.27 | pass | pass | trace meter fill (`hud.rs`) |
+| `bone` on deck glass | 16.83 | pass | pass | `LOCKED` / `NO POWER` labels, `GUARD` estimate (`screen::THREAT_TEXT`) |
+| `alarm` on deck glass | 4.27 | fail | pass | threat marks, a glyph: the locked device's square, the guard's ring (`screen.rs`) |
+| deck glass on `phosphor` | 13.53 | pass | pass | the verb on the ready deck button, OT or not (`deck::verb_style`) |
+| `phosphor` on the not-ready button | 10.04 | pass | pass | the verb on a not-ready button, which stays pressable (`deck::verb_style`, `FAINT`) |
+| `alarm` border on deck glass / ready fill / not-ready fill | 4.27 / 3.17 / 3.16 | fail | pass | the OT mark, a 2 px border, a glyph (`deck::verb_style`) |
+| deck glass on `alarm` | 4.27 | fail | pass | recorded: the old OT button (red fill), replaced |
+| deck glass / `dust` on the not-ready button | 1.35 / 4.37 | fail | fail / pass | recorded: the old not-ready verb, and why `dust` was not used |
+| `phosphor` on `pitch` | 13.79 | pass | pass | support meter fill (`hud.rs`, track `METER_TRACK`) |
+| `cobalt` on `pitch` | 3.34 | fail | pass | bandwidth meter fill (`hud.rs`) |
+| `alarm` on `pitch` | 4.35 | fail | pass | alert meter fill (`hud.rs`) |
+| `dust` on `pitch` | 6.00 | pass | pass | isolation meter fill (`hud.rs`) |
+| `neon` on `pitch` | 17.21 | pass | pass | trace meter fill (`hud.rs`) |
+| `cobalt` on `slate` | 2.58 | fail | fail | recorded: the old bandwidth track, replaced |
 | `bone` on `slate` / `slab` | 13.23 / 10.54 | pass | pass | recorded |
 | `dust` on `slab` | 3.69 | fail | pass | recorded: never set dust type on slab |
 | `bone` on `room_fill` / `room_fill_lit` | 15.55 / 14.25 | pass | pass | recorded |
@@ -239,21 +244,26 @@ The deck glass is `screen::DECK_GLASS`, `#07110d`, an off-palette literal.
 Its rows are pinned in `idaptik-bevy`'s palette tests, which can read it; the
 rest are pinned in `crates/idaptik-brand/tests/legibility.rs`.
 
-**Four live failures, flagged and not changed** (handoff rule 3), each an
-open decision in `inventory.md`:
+**No live failures.** Four were flagged (handoff rule 3) and decided by the
+owner on 2026-11-09 (`inventory.md`, "Decided"):
 
-- **Alarm red as text.** The `LOCKED` / `NO POWER` labels and the `GUARD`
-  estimate are alarm red at 16 px: 4.35:1 on night, 4.27:1 on the deck glass.
-- **The OT deck button.** An OT action turns the ready button alarm red and
-  keeps the verb in glass: 4.27:1. No palette colour reaches 4.5:1 on alarm
-  red (`pitch` is closest at 4.35:1), so relabelling cannot fix it.
-- **The not-ready deck button.** It is faint, and its verb is about 1.35:1.
-  It looks disabled but is not: pressing it still sends the hack, and the
-  simulation counts a failed action and announces `NetHackDenied`. So WCAG's
-  exemption for inactive controls does not apply. (#220 first recorded it as
-  exempt; Codex review on #220 caught the live press path.)
-- **The bandwidth bar.** `cobalt` on the `slate` track is 2.58:1, below the
-  glyph bar, so the bar's fill level is hard to read.
+- **Alarm red as text** (was 4.27:1 on the glass). The `LOCKED` / `NO POWER`
+  labels and the `GUARD` estimate are `bone` (`screen::THREAT_TEXT`); the
+  threat is carried by the alarm-red square and ring beside them, which are
+  glyphs and clear 3:1.
+- **The OT deck button** (was glass on `alarm`, 4.27:1). The button stays
+  `phosphor` and OT is marked by a 2 px `alarm` border, so the verb never
+  sits on red.
+- **The not-ready deck button** (was 1.35:1). It stays pressable (pressing it
+  still sends the hack, and the simulation counts a failed action), so its
+  verb is held to 4.5:1: `phosphor` on the faint fill, 10.04:1. `dust` was
+  considered and fails there (4.37:1).
+- **The bandwidth bar** (was `cobalt` on `slate`, 2.58:1). Every meter's
+  track is `pitch`; the lowest fill, `cobalt`, is 3.34:1.
+
+The deck's button colours come from one function, `deck::verb_style`, and the
+meters' track from `hud::METER_TRACK`; the tests read those, so a change to
+what the game draws moves a verdict here.
 
 Translucent pairs are composited with the alpha the frontend really uses
 (`ROOM_NAME_ALPHA`, `FAINT`), so retuning either one moves its verdict.

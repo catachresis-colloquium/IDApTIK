@@ -8,6 +8,11 @@ use idaptik_core::scenario::common::Channel;
 
 use crate::driver::SimState;
 
+/// The background of every meter's bar. A bar is a UI glyph, so each fill
+/// must clear WCAG's 3:1 on it; the test at the end of this file checks the
+/// fills the HUD really draws against this constant.
+pub const METER_TRACK: Color = crate::palette::PITCH;
+
 /// Which meter a fill node shows.
 #[derive(Clone, Copy)]
 pub enum Meter {
@@ -139,7 +144,10 @@ pub fn setup_hud(mut commands: Commands) {
                             height: Val::Px(10.0),
                             ..Default::default()
                         },
-                        BackgroundColor(crate::palette::SLATE),
+                        // The track is pitch: every fill clears 3:1 on it
+                        // (cobalt, the lowest, is 3.34:1; on slate it was
+                        // 2.58:1). See legibility.rs.
+                        BackgroundColor(METER_TRACK),
                     ))
                     .with_children(|bar| {
                         bar.spawn((
@@ -396,4 +404,28 @@ pub fn update_guard_brain_text(
     text.0 = format!(
         "weevil {profile} v{version}\nsee: {contacts}\nwant: {decision}\nhost: {outcome}{error}"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::palette::srgb_bytes;
+    use idaptik_brand::srgb::{self, LARGE};
+
+    #[test]
+    fn every_meter_fill_clears_three_to_one_on_its_track() {
+        // The fills and the track are read from the code that draws them, so
+        // retuning either moves this verdict (inventory.md decision 4).
+        let track = srgb_bytes(METER_TRACK);
+        for m in Meter::ALL {
+            let fill = srgb_bytes(m.color());
+            let r = srgb::ratio(fill, track);
+            assert!(
+                srgb::meets(fill, track, LARGE),
+                "{} fill is {r:.2}:1 on the meter track, under 3:1",
+                m.label()
+            );
+            assert!((r - 3.0).abs() > 1e-3, "{}: {r} sits on 3:1", m.label());
+        }
+    }
 }

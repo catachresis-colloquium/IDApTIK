@@ -89,13 +89,12 @@ const PAIRS: &[Pair] = &[
         true,
         true,
     ),
-    // FLAGGED, live: screen.rs draws LOCKED / NO POWER device labels and the
-    // GUARD estimate in alarm red at a requested 12-14 px (16 px drawn). It
-    // fails 4.5:1. Open decision in inventory.md; not changed here (rule 3).
+    // Alarm red fails 4.5:1 as text, so it is never set as text: threat
+    // labels are bone beside an alarm-red mark (inventory.md decision 1).
     pair(
         ("alarm", ALARM),
         PITCH_,
-        "screen.rs: LOCKED / NO POWER labels, GUARD estimate (FLAGGED)",
+        "recorded: alarm as text (never drawn; threat labels are bone)",
         false,
         true,
     ),
@@ -106,41 +105,48 @@ const PAIRS: &[Pair] = &[
         false,
         true,
     ),
-    // --- The five HUD meter fills on their slate track (hud.rs). Bars: the
-    // 3:1 glyph bar applies.
+    // --- The five HUD meter fills on their pitch track (hud.rs METER_TRACK;
+    // inventory.md decision 4). Bars: the 3:1 glyph bar applies. hud.rs
+    // checks the same pairs against the constants it draws with.
     pair(
         ("phosphor", PHOSPHOR),
-        SLATE_,
+        PITCH_,
         "hud.rs: support meter fill",
         true,
         true,
     ),
-    // FLAGGED, live: the bandwidth fill is cobalt on the slate track, 2.58:1,
-    // under even the 3:1 glyph bar. Open decision in inventory.md.
+    pair(
+        ("cobalt", COBALT),
+        PITCH_,
+        "hud.rs: bandwidth meter fill",
+        false,
+        true,
+    ),
+    // Recorded: the slate track this replaced, under even the 3:1 bar.
     pair(
         ("cobalt", COBALT),
         SLATE_,
-        "hud.rs: bandwidth meter fill (FLAGGED)",
+        "recorded: cobalt on slate (the old bandwidth track)",
         false,
         false,
     ),
     pair(
         ("alarm", ALARM),
-        SLATE_,
+        PITCH_,
         "hud.rs: alert meter fill",
         false,
         true,
     ),
     pair(
         ("dust", DUST),
-        SLATE_,
+        PITCH_,
         "hud.rs: isolation meter fill",
         true,
         true,
     ),
     pair(
         ("neon", NEON),
-        SLATE_,
+        PITCH_,
         "hud.rs: trace meter fill",
         true,
         true,
