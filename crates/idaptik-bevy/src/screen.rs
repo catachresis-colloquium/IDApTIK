@@ -301,11 +301,7 @@ fn spawn_view_text(commands: &mut Commands, sim: &SimState, view: &ScreenView) {
     }
     for d in &view.devices {
         let (y, color) = device_row(d.kind, floor);
-        let c = if d.status == "LOCKED" || d.status == "NO POWER" {
-            palette::ALARM
-        } else {
-            color
-        };
+        let c = device_label_colour(&d.status, color);
         commands.spawn(text(
             format!("{}\n{}", d.node, d.status),
             12.0,
@@ -325,7 +321,26 @@ fn spawn_view_text(commands: &mut Commands, sim: &SimState, view: &ScreenView) {
         person(e, "INF", palette::SIGNAL);
     }
     if let Some(e) = &view.billy {
-        person(e, "GUARD", palette::ALARM);
+        // The guard is a threat, and the schematic marks it with an
+        // alarm-red ring; the words are bone so they stay readable.
+        person(e, "GUARD", THREAT_TEXT);
+    }
+}
+
+/// The colour threat labels are set in. Alarm red is the brand's threat
+/// colour, but as text it is 4.27:1 on the glass, under WCAG's 4.5:1, so the
+/// threat is carried by an alarm-red mark (the device square, the guard
+/// ring) and the words beside it are bone (16.83:1).
+pub const THREAT_TEXT: Color = palette::BONE;
+
+/// The colour of a device's label on the schematic: its row colour, or
+/// [`THREAT_TEXT`] for a `LOCKED` or `NO POWER` device, whose square is
+/// drawn alarm red.
+pub fn device_label_colour(status: &str, row: Color) -> Color {
+    if status == "LOCKED" || status == "NO POWER" {
+        THREAT_TEXT
+    } else {
+        row
     }
 }
 

@@ -221,9 +221,13 @@ pub fn setup_deck(mut commands: Commands) {
                         UiButton,
                         Node {
                             padding: UiRect::axes(Val::Px(8.0), Val::Px(2.0)),
+                            // Carries the OT mark (see `verb_style`); the
+                            // same colour as the fill otherwise.
+                            border: UiRect::all(Val::Px(2.0)),
                             ..Default::default()
                         },
                         BackgroundColor(PHOSPHOR),
+                        BorderColor::all(PHOSPHOR),
                     ))
                     .with_children(|b| {
                         b.spawn((CardText::Verb, line("", DECK_GLASS)));
@@ -269,7 +273,11 @@ fn place(node: &mut Node, r: Option<Rect>) {
 type VerbButton<'w, 's> = Query<
     'w,
     's,
-    (&'static mut Node, &'static mut BackgroundColor),
+    (
+        &'static mut Node,
+        &'static mut BackgroundColor,
+        &'static mut BorderColor,
+    ),
     (
         With<CardVerb>,
         Without<Divider>,
@@ -300,6 +308,7 @@ pub fn update_deck(
     mut chrome: ChromeNodes,
     mut hint: Query<&mut Visibility, With<DeckHint>>,
     mut texts: Query<(&CardText, &mut Text)>,
+    mut colours: Query<(&CardText, &mut TextColor)>,
     mut verb: VerbButton,
 ) {
     let panes = seats.as_ref().map(|s| s.panes).unwrap_or_default();
@@ -349,7 +358,7 @@ pub fn update_deck(
             CardText::Note,
             "Click a door, a camera, a light or the vacuum on the schematic.".into(),
         );
-        if let Ok((mut node, _)) = verb.single_mut() {
+        if let Ok((mut node, _, _)) = verb.single_mut() {
             node.display = Display::None;
         }
         return;
@@ -385,14 +394,45 @@ pub fn update_deck(
         CardText::Note,
         format!("bandwidth {:.0}   {}\n{}", c::NET_HACK_COST, why, v.note),
     );
-    if let Ok((mut node, mut bg)) = verb.single_mut() {
+    let style = verb_style(ready, v.ot);
+    if let Ok((mut node, mut bg, mut border)) = verb.single_mut() {
         node.display = Display::Flex;
-        let base = if v.ot {
-            crate::palette::ALARM
-        } else {
-            PHOSPHOR
-        };
-        bg.0 = if ready { base } else { FAINT };
+        bg.0 = style.fill;
+        *border = BorderColor::all(style.border);
+    }
+    for (field, mut colour) in &mut colours {
+        if *field == CardText::Verb && colour.0 != style.text {
+            colour.0 = style.text;
+        }
+    }
+}
+
+/// How the card's verb button is drawn: its fill, its border and the colour
+/// of the verb on it. One function, so the palette tests check the colours
+/// the deck really draws (`palette.rs`), not a copy of them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct VerbStyle {
+    pub fill: Color,
+    pub border: Color,
+    pub text: Color,
+}
+
+/// The button's look for a verb that is or is not `ready`, on an operational
+/// technology device (`ot`) or not.
+///
+/// * Ready: glass verb on a phosphor fill (13.53:1).
+/// * Not ready: the button stays pressable (`card_press` still queues the
+///   hack, and the sim counts a failed action), so its verb must stay
+///   legible: phosphor on the faint fill (about 10:1), the outline inverse
+///   of the ready button.
+/// * OT: alarm red marks it as a border, never as the fill, so the verb never
+///   sits on red (glass on alarm was 4.27:1). Red stays a mark of threat.
+pub(crate) fn verb_style(ready: bool, ot: bool) -> VerbStyle {
+    let fill = if ready { PHOSPHOR } else { FAINT };
+    VerbStyle {
+        fill,
+        border: if ot { crate::palette::ALARM } else { fill },
+        text: if ready { DECK_GLASS } else { PHOSPHOR },
     }
 }
 

@@ -10,6 +10,7 @@ resolver = "2"
 members = [
     "crates/idaptik-kernel",
     "crates/idaptik-brand",
+    "crates/idaptik-proof-ledger",
     "crates/idaptik-core",
     "crates/idaptik-ffi",
     "crates/idaptik-tui",

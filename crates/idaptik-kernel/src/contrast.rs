@@ -27,6 +27,11 @@ pub const LINEAR_SCALE: u64 = 1_000_000;
 /// so `1.0` luminance is `10_000 * LINEAR_SCALE`.
 pub const LUMINANCE_SCALE: u64 = 10_000 * LINEAR_SCALE;
 
+/// The largest `num` or `den` [`meets`] accepts. It mirrors the literal in
+/// that function's `requires`, which callers outside the proof must respect
+/// themselves: Creusot checks the kernel, not its callers.
+pub const THRESHOLD_TERM_MAX: u32 = 1_000_000;
+
 /// WCAG's `0.05` offset at [`LUMINANCE_SCALE`].
 const OFFSET: u64 = LUMINANCE_SCALE / 20;
 
@@ -48,10 +53,13 @@ pub fn luminance(r: u32, g: u32, b: u32) -> u64 {
 /// `(lighter + 0.05) / (darker + 0.05) >= num / den` cross-multiplied.
 ///
 /// WCAG's thresholds are `45 / 10` for body text and `3 / 1` for large text
-/// and UI glyphs. The ratio is capped at `1000 / 1` and `den` must be
-/// positive; both are stated so the multiplications provably fit in `u64`.
+/// and UI glyphs. `den` must be positive, and `num` and `den` are each at
+/// most `1_000_000` (so `2101 / 100` is in range): with luminances at most
+/// `10^10`, every product stays below `(10^10 + 5 * 10^8) * 10^6`, about
+/// `1.05 * 10^16`, which provably fits in `u64`. The bound is on the two
+/// integers, not on the ratio they form.
 #[cfg_attr(creusot, creusot_std::macros::requires(a@ <= 10_000_000_000 && b@ <= 10_000_000_000))]
-#[cfg_attr(creusot, creusot_std::macros::requires(0 < den@ && den@ <= 1000 && num@ <= 1000))]
+#[cfg_attr(creusot, creusot_std::macros::requires(0 < den@ && den@ <= 1_000_000 && num@ <= 1_000_000))]
 #[cfg_attr(creusot, creusot_std::macros::ensures(
     a@ >= b@ ==> result == ((a@ + 500_000_000) * den@ >= (b@ + 500_000_000) * num@)))]
 #[cfg_attr(creusot, creusot_std::macros::ensures(
@@ -81,6 +89,22 @@ mod tests {
         assert!(meets(black, white, 21, 1), "order must not matter");
         // 21.01 : 1 must fail -- the test is exact, not approximate.
         assert!(!meets(white, black, 2101, 100));
+    }
+
+    #[test]
+    fn the_precondition_corners_do_not_overflow() {
+        // Debug builds panic on overflow, so evaluating every corner of the
+        // `requires` here checks the bound the proof relies on at run time
+        // too: the largest luminances times the largest terms.
+        let top = LUMINANCE_SCALE;
+        let m = THRESHOLD_TERM_MAX;
+        for (a, b) in [(top, top), (top, 0), (0, top), (0, 0)] {
+            for (num, den) in [(m, m), (m, 1), (1, m), (0, 1), (0, m)] {
+                let _ = meets(a, b, num, den);
+            }
+        }
+        assert!(meets(top, 0, m, m), "equal terms are a ratio of 1");
+        assert!(!meets(top, 0, m, 1), "no pair reaches 10^6 : 1");
     }
 
     #[test]

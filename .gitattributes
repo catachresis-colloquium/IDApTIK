@@ -132,6 +132,13 @@ justfile text eol=lf
 crates/idaptik-brand/tokens.json       text eol=lf linguist-generated=true
 crates/idaptik-brand/src/generated.rs  text eol=lf linguist-generated=true
 
+# --- Generated proof-ledger artefacts (just proof-ledger-regen) -------------
+# Rendered from config/proof-ledger.ncl and checked against it by
+# `just proof-ledger-check`. Diffable on purpose: a reviewer must see which
+# row moved and to what status.
+docs/status/proof-ledger.json   text eol=lf linguist-generated=true
+docs/status/PROOF-STATUS.adoc   text eol=lf linguist-generated=true
+
 # ── WHY THE RETIRED `server/mix.lock` LINE IS GONE ──────────────────────────
 # This file carried `server/mix.lock text eol=lf -diff` until 2026-09-27. Issue
 # #74 retired this repository's own Elixir relay in favour of the external
