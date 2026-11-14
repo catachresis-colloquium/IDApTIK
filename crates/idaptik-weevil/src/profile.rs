@@ -176,7 +176,7 @@ impl Profile {
 }
 
 /// A profile that failed validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProfileError {
     WrongFormat { found: String },
     FutureVersion { found: u32, max: u32 },
@@ -228,6 +228,11 @@ pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
     | abi::CAP_VEHICLE_BOARDING
     | abi::CAP_TERRAIN_HEIGHT;
 
+/// Strictly greater than zero. NaN is not, so a NaN scale or limit is refused.
+fn is_positive(v: f64) -> bool {
+    v.partial_cmp(&0.0) == Some(std::cmp::Ordering::Greater)
+}
+
 /// The largest profile version this build understands.
 pub const PROFILE_VERSION_MAX: u32 = 1;
 
@@ -250,7 +255,7 @@ impl Profile {
                 self.capabilities & !KNOWN_CAPABILITIES,
             ));
         }
-        if !(self.host.fx_per_world_unit > 0.0) {
+        if !is_positive(self.host.fx_per_world_unit) {
             return Err(ProfileError::NonPositiveScale(self.host.fx_per_world_unit));
         }
         if self.budget_units == 0 {
@@ -259,7 +264,7 @@ impl Profile {
         if self.max_agents == 0 {
             return Err(ProfileError::ZeroAgents(self.max_agents));
         }
-        if !(self.host.max_speed_world > 0.0) {
+        if !is_positive(self.host.max_speed_world) {
             return Err(ProfileError::NonPositiveMovementLimit(
                 self.host.max_speed_world,
             ));
@@ -294,9 +299,10 @@ impl Profile {
     }
 }
 
-/// The three named profiles the first milestone ships.
+/// The three named profiles the first milestone ships, plus `decoy-lure`, the
+/// sentry with a decoy in its room for the epistemic document.
 ///
-/// They are *not* three behaviour trees. Each is the same kernel utility graph
+/// They are *not* behaviour trees. Each is the same kernel utility graph
 /// fed a different perception policy and applied with different host limits; the
 /// differences are the seams the architecture assigns, and each is observable in
 /// the replay.
@@ -304,6 +310,7 @@ pub struct ProfileSet {
     pub cautious_sentry: Profile,
     pub aggressive_pursuer: Profile,
     pub equipment_specialist: Profile,
+    pub decoy_lure: Profile,
 }
 
 impl ProfileSet {
@@ -363,10 +370,35 @@ impl ProfileSet {
         )
         .expect("canonical specialist profile is valid");
 
+        // The sentry's seams, plus a decoy in its own room. The decoy is
+        // perceived from tick 1 to tick 30 and stands for nothing in the
+        // world's truth, so once it falls silent the kernel investigates a
+        // contact that is not there. This is the run whose epistemic document
+        // shows a belief the world does not hold.
+        let lure = Profile::build(
+            "decoy-lure",
+            abi::CAP_NAVMESH | abi::CAP_LINE_OF_SIGHT,
+            4096,
+            4,
+            HostTuning {
+                decoy: Some(DecoyTuning {
+                    id: 200,
+                    // The corridor reads `origin_world.x` as a world x.
+                    origin_world: Fx2 { x: 150, y: 0 },
+                    active_ticks: 30,
+                    distance_world: 100.0,
+                    threat: crate::fx::to_fx(0.4),
+                }),
+                ..sentry.host.clone()
+            },
+        )
+        .expect("canonical decoy-lure profile is valid");
+
         Self {
             cautious_sentry: sentry,
             aggressive_pursuer: pursuer,
             equipment_specialist: specialist,
+            decoy_lure: lure,
         }
     }
 
@@ -376,16 +408,18 @@ impl ProfileSet {
             "cautious-sentry" => Some(&self.cautious_sentry),
             "aggressive-pursuer" => Some(&self.aggressive_pursuer),
             "equipment-specialist" => Some(&self.equipment_specialist),
+            "decoy-lure" => Some(&self.decoy_lure),
             _ => None,
         }
     }
 
-    /// All three, in a stable order.
-    pub fn all(&self) -> [&Profile; 3] {
+    /// All of them, in a stable order.
+    pub fn all(&self) -> [&Profile; 4] {
         [
             &self.cautious_sentry,
             &self.aggressive_pursuer,
             &self.equipment_specialist,
+            &self.decoy_lure,
         ]
     }
 }

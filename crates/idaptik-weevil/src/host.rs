@@ -22,12 +22,13 @@ use crate::fx::Fx2;
 use crate::intent::Intent;
 use crate::observation::Observation;
 use core::mem::size_of;
+use serde::{Deserialize, Serialize};
 
 /// The kernel-owned memory of one contact it no longer sees: a bearing and an
 /// age. **Not a position.** The kernel has no fixed-point vector arithmetic to
 /// correct a remembered position as the agent moves, so it remembers a direction
 /// (ADR-0009). The host must not treat this as a world coordinate.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Memory {
     /// The remembered direction, Q16.16.
     pub bearing: Fx2,
@@ -53,7 +54,7 @@ impl Memory {
 }
 
 /// The kernel-owned per-agent state, decoded for the host and the replay.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentState {
     pub rng_state: u64,
     pub tick_last: u64,
@@ -135,6 +136,8 @@ impl WeevilHost {
         tick_num: u64,
         tick_den: u64,
     ) -> Result<Self> {
+        // Accepted and deliberately unused: see the doc comment above.
+        let _ = budget_units;
         let desc = EeInitDesc {
             struct_size: size_of::<EeInitDesc>() as u32,
             abi_major: abi::ABI_MAJOR,
@@ -239,7 +242,7 @@ impl WeevilHost {
 
     /// The state of one agent, if it exists.
     pub fn agent(&self, id: u32) -> Option<AgentState> {
-        self.agents.get(id as usize).map(|a| AgentState::from_ee(a))
+        self.agents.get(id as usize).map(AgentState::from_ee)
     }
 
     /// All agents, in slot order.
@@ -348,7 +351,8 @@ impl WeevilHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fx::{FX_ONE, to_fx};
+    use crate::abi::FX_ONE;
+    use crate::fx::to_fx;
 
     /// A minimal observation at the given tick.
     fn obs(id: u32, tick: u64) -> Observation {
@@ -381,7 +385,7 @@ mod tests {
     fn agent_ids_beyond_the_context_are_refused() {
         // Constructed without `init` (which needs the native lib) so the guard
         // paths are exercised on the error side only.
-        let host = WeevilHost {
+        let mut host = WeevilHost {
             ctx: EeContext::default(),
             agents: vec![EeAgent::default(); 2],
             initialized: true,
@@ -403,7 +407,7 @@ mod tests {
         // contract `HostWorld` relies on (it advances to tick 1 before its
         // first observation) and it is enforced here rather than left to the
         // kernel, which records whatever tick it is given.
-        let host = WeevilHost {
+        let mut host = WeevilHost {
             ctx: EeContext::default(),
             agents: vec![EeAgent::default(); 2],
             initialized: true,

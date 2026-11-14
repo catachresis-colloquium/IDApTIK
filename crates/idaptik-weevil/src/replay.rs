@@ -13,7 +13,7 @@
 //! — into one digest.
 
 use crate::abi::EeContext;
-use crate::host::AgentState;
+use crate::host::{AgentState, Memory};
 use crate::intent::Intent;
 use crate::observation::{Contact, ContactSource, Observation};
 use serde::{Deserialize, Serialize};
@@ -292,17 +292,7 @@ pub fn decision_identity(trace: &ReplayTrace) -> u64 {
     for a in &hdr.initial_context.agents {
         mix(a.rng_state);
         mix(a.tick_last);
-        mix(a
-            .memory
-            .map(|m| {
-                (
-                    m.bearing.x as u64,
-                    m.bearing.y as u64,
-                    m.age as u64,
-                    m.target as u64,
-                )
-            })
-            .unwrap_or(0));
+        mix_memory(&mut mix, a.memory, true);
         mix(a.cached_action as u64);
         mix(a.cached_target as u64);
         mix(a.budget_used as u64);
@@ -329,15 +319,11 @@ pub fn decision_identity(trace: &ReplayTrace) -> u64 {
             mix(c.bearing.1 as u64);
             mix(c.distance as u64);
             mix(c.threat as u64);
-            mix((c.confidence.to_bits() as u64) ^ (c.age_ticks as u64));
+            mix(c.confidence.to_bits() ^ (c.age_ticks as u64));
         }
         mix(e.agent_before.rng_state);
         mix(e.agent_before.tick_last);
-        mix(e
-            .agent_before
-            .memory
-            .map(|m| (m.bearing.x as u64, m.bearing.y as u64, m.age as u64))
-            .unwrap_or(0));
+        mix_memory(&mut mix, e.agent_before.memory, false);
         mix(e
             .intent
             .action
@@ -366,6 +352,24 @@ pub fn decision_identity(trace: &ReplayTrace) -> u64 {
             .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(*b as u64)));
     }
     h
+}
+
+/// Fold an optional kernel memory into the identity. `None` and `Some` are
+/// separated by a tag word, so an absent memory never hashes like a memory
+/// whose fields happen to be zero.
+fn mix_memory(mix: &mut impl FnMut(u64), memory: Option<Memory>, with_target: bool) {
+    match memory {
+        None => mix(0),
+        Some(m) => {
+            mix(1);
+            mix(m.bearing.x as u64);
+            mix(m.bearing.y as u64);
+            mix(m.age as u64);
+            if with_target {
+                mix(m.target as u64);
+            }
+        }
+    }
 }
 
 // ── Conversions ─────────────────────────────────────────────────────────────
@@ -451,7 +455,8 @@ pub fn header_from(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fx::{FX_ONE, to_fx};
+    use crate::abi::FX_ONE;
+    use crate::fx::to_fx;
     use crate::observation::Observation;
 
     fn sample_trace(seed: u64) -> ReplayTrace {

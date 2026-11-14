@@ -9,11 +9,18 @@
 //! idaptik-weevil-replay --ticks 200 --profile cautious-sentry --seed 7
 //! idaptik-weevil-replay --ticks 200 --profile aggressive-pursuer --seed 7 --out /tmp/a.json
 //! idaptik-weevil-replay --ticks 200 --profile aggressive-pursuer --seed 7 --check /tmp/a.json
+//! idaptik-weevil-replay --ticks 200 --profile decoy-lure --seed 7 --emit-epistemic /tmp/e.json
 //! ```
+//!
+//! `--emit-epistemic PATH` writes the guard's beliefs as one
+//! `enaction-runner-output/1` document in canonical bytes (see
+//! `idaptik_weevil::epistemic`). It is written only after the two runs below
+//! agree, which is what its `esm/replay-deterministic` guarantee claims.
 
+use idaptik_weevil::epistemic::runner_output;
 use idaptik_weevil::profile::ProfileSet;
 use idaptik_weevil::replay::{ReplayTrace, decision_identity, replay_equal};
-use idaptik_weevil::{Result, WeevilError, run_trace};
+use idaptik_weevil::{Result, WeevilError, run_trace, run_trace_with_truth};
 use std::collections::BTreeMap;
 use std::fs;
 
@@ -31,6 +38,7 @@ fn run() -> Result<()> {
     let mut seed: u64 = 7;
     let mut out: Option<String> = None;
     let mut check: Option<String> = None;
+    let mut emit_epistemic: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -61,6 +69,14 @@ fn run() -> Result<()> {
                 check = args.get(i + 1).cloned();
                 i += 2;
             }
+            "--emit-epistemic" => {
+                let Some(path) = args.get(i + 1).cloned() else {
+                    eprintln!("--emit-epistemic needs a path");
+                    std::process::exit(2);
+                };
+                emit_epistemic = Some(path);
+                i += 2;
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -71,13 +87,13 @@ fn run() -> Result<()> {
     let set = ProfileSet::canonical();
     let Some(profile) = set.get(&profile_id) else {
         eprintln!(
-            "unknown profile '{profile_id}'; known: cautious-sentry, aggressive-pursuer, equipment-specialist"
+            "unknown profile '{profile_id}'; known: cautious-sentry, aggressive-pursuer, equipment-specialist, decoy-lure"
         );
         std::process::exit(2);
     };
 
     // A second run, same configuration: the reproducible half of the check.
-    let first = run_trace(ticks, profile, seed)?;
+    let (first, truth) = run_trace_with_truth(ticks, profile, seed)?;
     let second = run_trace(ticks, profile, seed)?;
     if let Err(m) = replay_equal(&first, &second) {
         eprintln!("NOT REPRODUCIBLE: {m}");
@@ -103,6 +119,11 @@ fn run() -> Result<()> {
         let json = serde_json::to_vec_pretty(&first)
             .map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
         fs::write(&path, json).map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
+        println!("wrote {path}");
+    }
+    if let Some(path) = emit_epistemic {
+        let bytes = runner_output(&first, &truth)?.to_canonical_bytes()?;
+        fs::write(&path, bytes).map_err(|e| WeevilError::Epistemic(e.to_string()))?;
         println!("wrote {path}");
     }
     Ok(())

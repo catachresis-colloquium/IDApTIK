@@ -54,7 +54,9 @@ pub enum Axis {
 /// a NaN has a bug, but the kernel must still receive a well-formed number, and
 /// silently dropping the observation is the host's job higher up.
 pub fn to_fx(v: f64) -> i32 {
-    if !v.is_finite() {
+    // Only NaN has no nearest value. An infinity saturates like any other
+    // out-of-range input, which is what the doc line above promises.
+    if v.is_nan() {
         return 0;
     }
     let scaled = v * FX_ONE as f64;
