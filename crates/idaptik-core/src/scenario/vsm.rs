@@ -423,11 +423,19 @@ impl HypothesisLedger {
     }
 
     /// Ties resolve to declaration order, making the result stable across
-    /// platforms and independent of map iteration order.
+    /// platforms and independent of map iteration order: of several
+    /// hypotheses at the maximum confidence, the first declared wins.
+    ///
+    /// `Iterator::max_by_key` returns the *last* maximum, so it is not used
+    /// here. The fold keeps the incumbent unless a later one is strictly
+    /// greater.
     pub fn most_likely(&self) -> Option<&Hypothesis> {
         self.hypotheses
             .iter()
-            .max_by_key(|hypothesis| hypothesis.confidence)
+            .fold(None, |best, hypothesis| match best {
+                Some(incumbent) if incumbent.confidence >= hypothesis.confidence => Some(incumbent),
+                _ => Some(hypothesis),
+            })
     }
 }
 
@@ -652,6 +660,28 @@ mod tests {
             ledger.hypotheses[0].contrary_events,
             vec!["fridge-note-found"]
         );
+    }
+
+    #[test]
+    fn most_likely_ties_resolve_to_first_declared() {
+        // Three hypotheses, all at the same confidence. The doc comment on
+        // `most_likely` promises declaration order, so the first one wins.
+        let ledger = HypothesisLedger::new([
+            "first_declared".into(),
+            "second_declared".into(),
+            "third_declared".into(),
+        ]);
+        assert_eq!(ledger.most_likely().unwrap().proposition, "first_declared");
+
+        // A tie between two raised hypotheses, with a lower one before them,
+        // must also go to the earlier of the two maxima.
+        let mut ledger = HypothesisLedger::new(["low".into(), "early".into(), "late".into()]);
+        ledger.observe(HypothesisEvidence {
+            event_id: "raise-both".into(),
+            support: vec![("early".into(), 100), ("late".into(), 100)],
+            contrary: vec![("low".into(), 100)],
+        });
+        assert_eq!(ledger.most_likely().unwrap().proposition, "early");
     }
 
     #[test]
