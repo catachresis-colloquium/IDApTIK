@@ -261,10 +261,12 @@ L	crates/idaptik-weevil/src/replay.rs	adapter-side replay and decision-cache ide
 T	crates/idaptik-weevil/src/world.rs	a small deterministic corridor host for headless replay: explicitly not the game, and used only to drive one
 B	crates/idaptik-weevil/src/canonical.rs	RFC 8785 canonical bytes and SHA-256 for documents another process verifies; wire-format safety, held by its JCS vectors and by enaction-validate recomputing the digest
 B	crates/idaptik-weevil/src/epistemic.rs	the enaction-runner-output/1 document the replay driver emits; an interprocess wire contract checked by the Enaction validator and tests/epistemic.rs, not by Creusot
+B	crates/idaptik-weevil/src/mind_trace.rs	the enaction-mind-trace/1 document built from the kernel's ee_mind_trace records; an interprocess wire contract checked by the Enaction validator and tests/mind_trace.rs, not by Creusot
 D	crates/idaptik-weevil/src/error.rs	typed, total error surface over the kernel status codes; no policy of its own
 D	crates/idaptik-weevil/src/lib.rs	crate root: module wiring and documentation
 T	crates/idaptik-weevil/src/bin/weevil_replay.rs	headless replay driver binary
 T	crates/idaptik-weevil/tests/replay_repro.rs	replay reproducibility test over the adapter; observing it would be circular
+T	crates/idaptik-weevil/tests/mind_trace.rs	test of the emitted mind trace and its paired runner output; observing it would be circular
 T	crates/idaptik-weevil/tests/abi_1_1.rs	test of the ABI 1.1 entrance against the linked kernel; observing it would be circular
 T	crates/idaptik-weevil/tests/epistemic.rs	test of the emitted epistemic document; observing it would be circular
 P	crates/idaptik-bevy/src/guard_weevil.rs	the Bevy half of the kernel integration: turns sim perception into observations and the returned intent into the guard action

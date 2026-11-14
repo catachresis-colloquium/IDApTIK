@@ -16,11 +16,17 @@
 //! `enaction-runner-output/1` document in canonical bytes (see
 //! `idaptik_weevil::epistemic`). It is written only after the two runs below
 //! agree, which is what its `esm/replay-deterministic` guarantee claims.
+//!
+//! `--emit-mind-trace PATH`, given with `--emit-epistemic`, runs the guard
+//! through the ABI 1.1 mind (`ee_tick_mind`) and also writes one
+//! `enaction-mind-trace/1` document, whose `caused_by` ids name events of the
+//! runner output written beside it (see `idaptik_weevil::mind_trace`).
 
 use idaptik_weevil::epistemic::runner_output;
+use idaptik_weevil::mind_trace::documents;
 use idaptik_weevil::profile::ProfileSet;
 use idaptik_weevil::replay::{ReplayTrace, decision_identity, replay_equal};
-use idaptik_weevil::{Result, WeevilError, run_trace, run_trace_with_truth};
+use idaptik_weevil::{Result, WeevilError, run_corridor};
 use std::collections::BTreeMap;
 use std::fs;
 
@@ -39,6 +45,7 @@ fn run() -> Result<()> {
     let mut out: Option<String> = None;
     let mut check: Option<String> = None;
     let mut emit_epistemic: Option<String> = None;
+    let mut emit_mind_trace: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -77,6 +84,14 @@ fn run() -> Result<()> {
                 emit_epistemic = Some(path);
                 i += 2;
             }
+            "--emit-mind-trace" => {
+                let Some(path) = args.get(i + 1).cloned() else {
+                    eprintln!("--emit-mind-trace needs a path");
+                    std::process::exit(2);
+                };
+                emit_mind_trace = Some(path);
+                i += 2;
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -87,24 +102,37 @@ fn run() -> Result<()> {
     let set = ProfileSet::canonical();
     let Some(profile) = set.get(&profile_id) else {
         eprintln!(
-            "unknown profile '{profile_id}'; known: cautious-sentry, aggressive-pursuer, equipment-specialist, decoy-lure"
+            "unknown profile '{profile_id}'; known: cautious-sentry, aggressive-pursuer, equipment-specialist, decoy-lure, the-grudge, the-grudge-control, the-flinch, the-flinch-control"
         );
         std::process::exit(2);
     };
 
+    // The mind trace cites events of the runner output of the SAME run, so the
+    // two documents are only ever written together.
+    if emit_mind_trace.is_some() && emit_epistemic.is_none() {
+        eprintln!("--emit-mind-trace needs --emit-epistemic: both documents come from one run");
+        std::process::exit(2);
+    }
+    let mind = emit_mind_trace.is_some();
+
     // A second run, same configuration: the reproducible half of the check.
-    let (first, truth) = run_trace_with_truth(ticks, profile, seed)?;
-    let second = run_trace(ticks, profile, seed)?;
-    if let Err(m) = replay_equal(&first, &second) {
+    let run = run_corridor(ticks, profile, seed, mind)?;
+    let again = run_corridor(ticks, profile, seed, mind)?;
+    if let Err(m) = replay_equal(&run.trace, &again.trace) {
         eprintln!("NOT REPRODUCIBLE: {m}");
         std::process::exit(1);
     }
+    if run.mind != again.mind {
+        eprintln!("NOT REPRODUCIBLE: the mind records differ");
+        std::process::exit(1);
+    }
+    let first = &run.trace;
 
     if let Some(path) = &check {
         let raw = fs::read_to_string(path).map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
         let stored: ReplayTrace =
             serde_json::from_str(&raw).map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
-        match replay_equal(&first, &stored) {
+        match replay_equal(first, &stored) {
             Ok(()) => println!("replay matches {path}"),
             Err(m) => {
                 eprintln!("replay does NOT match {path}: {m}");
@@ -114,17 +142,29 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    print_summary(&first);
+    print_summary(first);
     if let Some(path) = out {
-        let json = serde_json::to_vec_pretty(&first)
+        let json = serde_json::to_vec_pretty(first)
             .map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
         fs::write(&path, json).map_err(|e| WeevilError::ReplayParse(e.to_string()))?;
         println!("wrote {path}");
     }
-    if let Some(path) = emit_epistemic {
-        let bytes = runner_output(&first, &truth)?.to_canonical_bytes()?;
-        fs::write(&path, bytes).map_err(|e| WeevilError::Epistemic(e.to_string()))?;
+    let write = |path: &str, bytes: Vec<u8>| -> Result<()> {
+        fs::write(path, bytes).map_err(|e| WeevilError::Epistemic(e.to_string()))?;
         println!("wrote {path}");
+        Ok(())
+    };
+    match (emit_epistemic, emit_mind_trace) {
+        (Some(epi), Some(mind_path)) => {
+            let (runner, mind) = documents(&run)?;
+            write(&epi, runner.to_canonical_bytes()?)?;
+            write(&mind_path, mind.to_canonical_bytes()?)?;
+        }
+        (Some(epi), None) => write(
+            &epi,
+            runner_output(first, &run.truth)?.to_canonical_bytes()?,
+        )?,
+        _ => {}
     }
     Ok(())
 }
