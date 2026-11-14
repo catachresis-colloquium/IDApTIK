@@ -24,10 +24,12 @@
 //!   is the event the belief cites. A from-memory tick whose target was never
 //!   perceived, or whose target is not the kernel's remembered one, is an
 //!   error rather than a guess.
-//! * **World truth**, from the corridor's own state on the belief's tick
-//!   ([`crate::world::TickTruth`]). For each belief, its proposition is a
-//!   truth atom if and only if the world agrees. A belief whose proposition is
-//!   missing from `world_truth` is one the guard holds wrongly.
+//! * **World truth**, from the corridor's own state on each proposition's tick
+//!   ([`crate::world::TickTruth`]). It is closed over what the package states
+//!   (CAC-KERNEL §9): every proposition a belief or an event states is a truth
+//!   atom if and only if the world agrees, and an absent one is false. A belief
+//!   whose proposition is missing from `world_truth` is one the guard holds
+//!   wrongly; so is an observation of the decoy.
 //!
 //! `world_truth` is a set of atoms with no tick and no negation, so the tick
 //! is part of the proposition: `contact-1 in room-0 at tick 16`. The belief
@@ -270,6 +272,8 @@ struct Sighting {
     room: usize,
     confidence: u16,
     source: String,
+    /// Whether the corridor's own state has the contact in `room` on `tick`.
+    holds: bool,
 }
 
 /// A belief whose source is still a sighting key, before ids are assigned.
@@ -300,7 +304,8 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
     let mut cited: BTreeMap<(u64, usize), Sighting> = BTreeMap::new();
     // Beliefs, with sources as sighting keys until ids are assigned.
     let mut pending: Vec<PendingBelief> = Vec::new();
-    let mut world_truth: Vec<String> = Vec::new();
+    // True belief propositions, merged with the true event propositions below.
+    let mut belief_truth: Vec<String> = Vec::new();
 
     for (entry, now) in trace.entries.iter().zip(truth) {
         if entry.tick != now.tick {
@@ -320,6 +325,7 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
                     room: now.guard_room,
                     confidence: mass(c.confidence)?,
                     source: c.source.clone(),
+                    holds: now.contacts.contains(&(c.id, now.guard_room)),
                 },
             );
         }
@@ -357,7 +363,7 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
         let key = (seen.tick, seen.slot);
         cited.entry(key).or_insert_with(|| seen.clone());
         if now.contacts.contains(&(target, seen.room)) {
-            world_truth.push(proposition.clone());
+            belief_truth.push(proposition.clone());
         }
         pending.push(PendingBelief {
             tick: entry.tick,
@@ -372,9 +378,14 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
     // order, so (tick, sequence) is strictly increasing.
     let mut ids: BTreeMap<(u64, usize), u64> = BTreeMap::new();
     let mut events = Vec::with_capacity(cited.len());
+    let mut event_truth: Vec<String> = Vec::new();
     for (n, (key, s)) in cited.into_iter().enumerate() {
         let id = n as u64 + 1;
         ids.insert(key, id);
+        let proposition = located(s.contact, s.room, s.tick);
+        if s.holds {
+            event_truth.push(proposition.clone());
+        }
         events.push(Event {
             event_id: id,
             sequence: id,
@@ -382,7 +393,7 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
             observer: agent(s.observer),
             subject: Subject::Agent(contact(s.contact)),
             kind: "observation".to_owned(),
-            proposition: located(s.contact, s.room, s.tick),
+            proposition,
             confidence: s.confidence,
             provenance: Provenance {
                 origin: origin(&s.source).to_owned(),
@@ -390,6 +401,18 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
             },
         });
     }
+
+    // World truth is closed over what the package states (CAC-KERNEL §9): every
+    // stated proposition that the world makes true is an atom, and an absent one
+    // is false. A belief and the observation it cites state the same string
+    // when the sighting is on the belief's own tick, so the atoms are deduplicated:
+    // a repeated atom is `DuplicateTruthAtom`.
+    let mut seen_atoms = std::collections::BTreeSet::new();
+    let world_truth: Vec<String> = event_truth
+        .into_iter()
+        .chain(belief_truth)
+        .filter(|p| seen_atoms.insert(p.clone()))
+        .collect();
 
     let beliefs = pending
         .into_iter()
