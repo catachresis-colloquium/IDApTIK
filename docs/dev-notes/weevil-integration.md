@@ -17,6 +17,11 @@ The architectural boundary is unchanged and is the thing to keep intact:
 | Path | What it is |
 | --- | --- |
 | `crates/idaptik-weevil/` | The native adapter: ABI mirror, fx maths, errors, observation/intent conversion, profile, host, replay, and a headless corridor world. |
+| `crates/idaptik-weevil/src/epistemic.rs` | The guard's beliefs as an `enaction-runner-output/1` document (`--emit-epistemic`). |
+| `crates/idaptik-weevil/src/mind_trace.rs` | The kernel's ABI 1.1 trace records as an `enaction-mind-trace/1` document (`--emit-mind-trace`). |
+| `crates/idaptik-weevil/src/canonical.rs` | RFC 8785 canonical bytes and SHA-256 for both documents. |
+| `crates/idaptik-weevil/tests/fixtures/enaction/` | The committed documents of eight runs, pinned to the driver by `tests/golden.rs`. |
+| `tools/verify_abi_mirror.py` | The ABI mirror check: `abi.rs` against the generated `ee.h`, every field, offset and size. |
 | `crates/idaptik-core/src/scenario/guard_brain.rs` | The game's own seam: plain-data perception and decision types, no dependency on the kernel. |
 | `crates/idaptik-core/src/scenario/sim/mod.rs` | `guard_perception`, `is_live_target`, `apply_guard_decision`, `GuardBrainKind` selection. |
 | `crates/idaptik-bevy/src/guard_weevil.rs` | The Bevy driver: owns the `WeevilHost`, converts perception → observation, proposal → decision. |
@@ -82,6 +87,10 @@ cargo --version && rustc --version
 
 ## 1. Build the kernel
 
+The adapter mirrors **ABI 1.1** (evil-weevil ADR-0013, the mind), so it needs
+evil-weevil `main` at `c655f46` or later. A 1.0 kernel does not export
+`ee_tick_mind` and the adapter will not link against it.
+
 Evil Weevil is a Zig + Idris2 project. From a checkout of
 `catachresis-colloquium/evil-weevil`:
 
@@ -96,6 +105,10 @@ just seam-check       # all of the above, plus the negative gates
 committed; if it has been hand-edited, or if the model changed without a
 regeneration, that command fails. The adapter transcribes the *generated*
 header, so a drift there is a build-time problem in the adapter too.
+
+Without `just`, `bash scripts/weevil_kernel.sh build` from this repository
+builds the same library; `scripts/weevil_kernel.sh locate` prints the checkout it
+found.
 
 ## 2. Build the adapter
 
@@ -114,6 +127,19 @@ cargo build -p idaptik-weevil
 It deliberately **does not stub or skip** when the library is missing. A link
 error is the correct outcome: silently falling back would mean shipping an
 adapter that looks built and is not.
+
+Then check the Rust mirror against the header the library was built from:
+
+```sh
+python3 tools/verify_abi_mirror.py \
+    "$(bash scripts/weevil_kernel.sh locate)/include/evil_weevil/ee.h" \
+    crates/idaptik-weevil/src/abi.rs
+```
+
+It lays out all nine structs (the seven 1.0 ones, `ee_mind` and `ee_mind_trace`)
+in both files and fails on any field, offset or size that differs. `abi.rs` also
+carries a compile-time assert for every 1.1 size and offset, so a moved field
+fails the Rust build as well.
 
 ## 3. Run the headless replay
 
@@ -138,6 +164,60 @@ The replay JSON carries the kernel/ABI/profile versions, the initial context and
 per-agent state, the seed and tick rate, and one entry per tick with the
 observation, the agent state before the tick, the returned intent, the host's
 acceptance, and the applied effect.
+
+### 3a. The Enaction documents
+
+The driver can write the run as data for the Enaction Engine's validator. No
+`enaction-*` crate is a dependency (ADR-0009); the wire shape, the canonical
+bytes and the digest are written in this crate and checked by the validator.
+
+```sh
+# the guard's beliefs, through ee_tick
+cargo run -p idaptik-weevil --bin idaptik-weevil-replay -- \
+    --ticks 200 --profile decoy-lure --seed 7 --emit-epistemic /tmp/runner.json
+
+# beliefs and mind, through the ABI 1.1 ee_tick_mind: both documents, one run
+cargo run -p idaptik-weevil --bin idaptik-weevil-replay -- \
+    --ticks 200 --profile the-grudge --seed 7 \
+    --emit-epistemic /tmp/runner.json --emit-mind-trace /tmp/mind.json
+
+# check them with enaction-validate, built from catachresis-colloquium/enaction-engine
+enaction-validate --policies crates/idaptik-weevil/tests/fixtures/enaction-policies.json \
+    --mind-trace /tmp/mind.json < /tmp/runner.json
+```
+
+Both files are written only after the driver's two runs agree, and both are
+RFC 8785 canonical bytes, so two runs in separate processes give identical
+files.
+
+* **`--emit-epistemic`** writes one `enaction-runner-output/1` document for the
+  guard, `guard-0`. Each tick on which the kernel acts from memory
+  (`INTENT_FLAG_FROM_MEMORY`) becomes one belief, `contact-<id> in room-<r> at
+  tick <t>`, citing the last observation of that contact. World truth is taken
+  from the corridor's own state and is closed over every proposition the
+  document states: a stated proposition missing from `world_truth` is false.
+  That is how a reader sees the guard being wrong, as with the decoy in
+  `decoy-lure` from tick 31.
+* **`--emit-mind-trace`** needs `--emit-epistemic` (alone it exits 2), because
+  the mind trace cites events of the runner output written beside it. It runs
+  the guard through `ee_tick_mind` and writes one `enaction-mind-trace/1` record
+  per tick: the affect token, its attention and `caused_by`, the ranking of
+  candidates with the incumbent and the selected one, the target and the
+  tells. There is no score and no reservoir value in it. Commitment override is
+  not asserted; a reader derives it from `ranking`, `incumbent` and `selected`.
+* Each cause the kernel reports for an affect change becomes an event in the
+  runner output: a sighting for a close contact, an `action_outcome` for damage
+  (attributed to the contact the guard perceives hitting it), an observation
+  for a lead that came to nothing, and the guard's own perception for decay.
+
+A mind run records the scenario id `headless-corridor-mind`, so it never
+replays as equal to a plain run of the same profile.
+
+The documents of eight runs are committed under
+`crates/idaptik-weevil/tests/fixtures/enaction/`, with a `SHA256SUMS` and a
+README naming the kernel and validator commits. `tests/golden.rs` fails if the
+built binary no longer writes exactly those bytes; regenerate them with the
+README's commands when the change is intended.
 
 ## 4. Run the game on the kernel
 
@@ -169,9 +249,9 @@ what makes the comparison and the rollback real rather than ceremonial.
 
 ## 6. Profiles
 
-Three canonical profiles ship: `cautious-sentry`, `aggressive-pursuer`,
-`equipment-specialist`. They differ **only** through seams the architecture
-assigns:
+Eight profiles ship. The three canonical guards are `cautious-sentry`,
+`aggressive-pursuer` and `equipment-specialist`. They differ **only** through
+seams the architecture assigns:
 
 * the `capabilities` mask — the kernel's documented degradation ladder downgrades
   `ADVANCE` to `HOLD` when `CAP_NAVMESH` is absent;
@@ -189,6 +269,24 @@ bump is already well-formed; the claim is stated rather than implied.
 
 The kernel's policy weights are **not** profile fields (ADR-0010). Profiles do
 not retune the kernel's numbers.
+
+The other five stage scenarios in the headless corridor and are not read by the
+game:
+
+| Profile | What it stages | Measured, 200 ticks, seed 7 |
+| --- | --- | --- |
+| `decoy-lure` | The sentry with a decoy (id 200) in its room for 30 ticks. | First false belief at tick 31. |
+| `the-grudge` | Evil Weevil's fixture: A (21) hits the guard on ticks 10 to 12 and leaves; B (22), nearer, arrives at tick 20. | Commitment override on 37 ticks, 20 to 56. |
+| `the-grudge-control` | The same cast without `CAP_DAMAGE_EVENTS`. | No override. |
+| `the-flinch` | C (31) close by on ticks 10 to 19. | One startle, at tick 10. |
+| `the-flinch-control` | C at 1.5 fx instead. | No startle. |
+
+The `the-*` profiles carry a `CorridorScript` (`HostTuning::script`): contacts
+present for a window of ticks, standing still, that may hit the guard. The cast
+replaces the corridor's default player and decoy, and is in the world's truth
+while present. The guard holds at x = 50 and each contact stands at the
+fixture's fx distance at the corridor's scale (8 world units to 1.0 fx). The
+override and startle figures are the kernel fixtures' own.
 
 ## 7. The developer view
 
@@ -210,7 +308,24 @@ the replay; they never cross the C ABI, because the kernel has no field for
 them. Perception and truth are therefore recorded separately and can be
 compared after the fact.
 
-## 9. Known limitations
+## 9. The mind (ABI 1.1)
+
+`WeevilHost::tick_mind(obs, damage_source)` is the 1.1 entrance beside `tick`.
+The host owns one zeroed `EeMind` per agent and resets it with the agent; the
+mind's fingerprint (`MIND_FINGERPRINT`, 1047490) is checked on every call,
+because `ee_init` checks only the 1.0 one (18276775, unchanged). The host may
+attribute the tick's damage only to a contact the guard perceives this tick;
+any other id is refused. The kernel's trace is decoded into a range-checked
+`MindRecord`.
+
+`ee_tick` is unchanged by 1.1: on a 1.1 kernel the 1.0 profiles record the same
+entries as on 1.0. Their replays differ only in `header.kernel_version`, which
+`decision_identity` includes on purpose, so a 1.0 replay does not `--check`
+against a 1.1 build.
+
+The Bevy driver still calls `tick` only; the game does not run the mind yet.
+
+## 10. Known limitations
 
 * The ABI bearing is a `u16` the kernel zero-extends to `i32`. A **signed**
   corridor direction is not representable through it. The adapter applies its
@@ -220,4 +335,12 @@ compared after the fact.
 * The kernel's memory is a bearing plus an age (TTL 36 ticks). It is **not** a
   position. `INVESTIGATE` is resolved against the host's own last-known
   position, never against the kernel's memory.
+  In the corridor the remembered bearing reads `(0, 0)`, because of the `u16`
+  truncation above, so a belief's room comes from the observation it cites,
+  never from the kernel's memory.
+* When affect calms by decay, the kernel reports no input. The mind trace
+  still has to name a cause, so it cites the guard's perception on that tick.
+  Enaction ADR-0027 records this as a known limit of version 1.
+* The scripted contacts report `ContactSource::Player`, the closest term the
+  closed vocabulary has for a person who is not the infiltrator.
 * Native pointer checks are not memory isolation.
