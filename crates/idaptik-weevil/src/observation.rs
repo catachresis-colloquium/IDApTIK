@@ -209,7 +209,8 @@ fn checked_u16(kind: &'static str, v: u32) -> Result<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fx::{FX_ONE, to_fx};
+    use crate::abi::FX_ONE;
+    use crate::fx::to_fx;
 
     #[test]
     fn snapshot_carries_contacts_in_order() {

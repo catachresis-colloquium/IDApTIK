@@ -17,7 +17,9 @@ use crate::host::{AgentState, WeevilHost};
 use crate::intent::{Action, Intent};
 use crate::observation::{Contact, ContactSource, Observation};
 use crate::profile::Profile;
-use crate::replay::{AppliedEffect, ContactRecord, ObservationRecord, ReplayEntry, ReplayRecorder};
+use crate::replay::{
+    AppliedEffect, ContactRecord, IntentRecord, ObservationRecord, ReplayEntry, ReplayRecorder,
+};
 
 /// One entity in the world.
 #[derive(Debug, Clone, Copy)]
@@ -379,7 +381,7 @@ impl HostWorld {
             moved,
             speed_applied: applied,
             blocked,
-            reason,
+            reason: reason.to_owned(),
         }
     }
 

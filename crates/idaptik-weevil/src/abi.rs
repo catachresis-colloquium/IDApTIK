@@ -256,7 +256,7 @@ const _: () = assert!(offset_of!(EeContext, ticks_run) == 56, "context.ticks_run
 // returns an intent, and never calls back into the host mid-tick.
 
 #[link(name = "evil_weevil")]
-extern "C" {
+unsafe extern "C" {
     pub fn ee_init(desc: *const EeInitDesc, ctx: *mut EeContext) -> EeStatus;
     pub fn ee_tick(
         ctx: *mut EeContext,

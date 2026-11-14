@@ -176,7 +176,7 @@ impl Profile {
 }
 
 /// A profile that failed validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProfileError {
     WrongFormat { found: String },
     FutureVersion { found: u32, max: u32 },
@@ -228,6 +228,11 @@ pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
     | abi::CAP_VEHICLE_BOARDING
     | abi::CAP_TERRAIN_HEIGHT;
 
+/// Strictly greater than zero. NaN is not, so a NaN scale or limit is refused.
+fn is_positive(v: f64) -> bool {
+    v.partial_cmp(&0.0) == Some(std::cmp::Ordering::Greater)
+}
+
 /// The largest profile version this build understands.
 pub const PROFILE_VERSION_MAX: u32 = 1;
 
@@ -250,7 +255,7 @@ impl Profile {
                 self.capabilities & !KNOWN_CAPABILITIES,
             ));
         }
-        if !(self.host.fx_per_world_unit > 0.0) {
+        if !is_positive(self.host.fx_per_world_unit) {
             return Err(ProfileError::NonPositiveScale(self.host.fx_per_world_unit));
         }
         if self.budget_units == 0 {
@@ -259,7 +264,7 @@ impl Profile {
         if self.max_agents == 0 {
             return Err(ProfileError::ZeroAgents(self.max_agents));
         }
-        if !(self.host.max_speed_world > 0.0) {
+        if !is_positive(self.host.max_speed_world) {
             return Err(ProfileError::NonPositiveMovementLimit(
                 self.host.max_speed_world,
             ));
