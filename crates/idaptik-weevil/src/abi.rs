@@ -29,11 +29,16 @@ use core::mem::{offset_of, size_of};
 
 /// ABI major version this adapter was written against.
 pub const ABI_MAJOR: u32 = 1;
-/// ABI minor version this adapter was written against.
-pub const ABI_MINOR: u32 = 0;
+/// ABI minor version this adapter was written against. 1.1 adds the mind
+/// (evil-weevil ADR-0013) and changes nothing that 1.0 defined.
+pub const ABI_MINOR: u32 = 1;
 /// The layout fingerprint the kernel pins. A host that links a kernel with a
 /// different fingerprint must refuse to run rather than mis-read the structs.
 pub const ABI_FINGERPRINT: u64 = 18276775;
+/// The fingerprint of the two 1.1 structs, `ee_mind` and `ee_mind_trace`, only.
+/// `ABI_FINGERPRINT` still covers exactly the seven 1.0 structs, so a 1.0 host
+/// keeps working against a 1.1 kernel.
+pub const MIND_FINGERPRINT: u64 = 1047490;
 
 // ── Fixed point (Q16.16) ────────────────────────────────────────────────────
 
@@ -89,6 +94,46 @@ pub const INTENT_FLAG_DEGRADED: u32 = 1u32 << 0;
 pub const INTENT_FLAG_NEW_TARGET: u32 = 1u32 << 1;
 pub const INTENT_FLAG_UNREACHABLE: u32 = 1u32 << 2;
 pub const INTENT_FLAG_FROM_MEMORY: u32 = 1u32 << 3;
+// ABI 1.1 tells, set only by `ee_tick_mind`.
+pub const INTENT_FLAG_STARTLE: u32 = 16;
+pub const INTENT_FLAG_HESITATE: u32 = 32;
+pub const INTENT_FLAG_FIXATE: u32 = 64;
+
+// ── ABI 1.1: the mind (evil-weevil ADR-0013) ────────────────────────────────
+
+/// `ee_contact.flags` bit 0: the contact the host attributes this tick's damage
+/// to. Read only by `ee_tick_mind`, and only with `CAP_DAMAGE_EVENTS`.
+pub const CONTACT_FLAG_DAMAGE_SOURCE: u16 = 1;
+
+// `ee_mind_trace.tells`: the intent tell bits shifted down by four.
+pub const TELL_STARTLE: u8 = 1;
+pub const TELL_HESITATE: u8 = 2;
+pub const TELL_FIXATE: u8 = 4;
+
+// `ee_mind.flags`.
+pub const MIND_FLAG_PRIMED: u8 = 1;
+pub const MIND_FLAG_GRUDGE_LEAD: u8 = 2;
+pub const MIND_FLAG_HESITATED: u8 = 4;
+
+// Affect tokens, in declaration (and tie-break) order.
+pub const AFFECT_CALM: u8 = 0;
+pub const AFFECT_WARY: u8 = 1;
+pub const AFFECT_AFRAID: u8 = 2;
+pub const AFFECT_ANGRY: u8 = 3;
+
+// Why the affect token changed. `CAUSE_NONE` exactly when it did not.
+pub const CAUSE_NONE: u8 = 0;
+pub const CAUSE_CLOSE_CONTACT: u8 = 1;
+pub const CAUSE_DAMAGE: u8 = 2;
+pub const CAUSE_CONTRADICTION: u8 = 3;
+pub const CAUSE_LOW_HEALTH: u8 = 4;
+pub const CAUSE_THREATS: u8 = 5;
+pub const CAUSE_NO_AMMO: u8 = 6;
+pub const CAUSE_ATTRIBUTED_DAMAGE: u8 = 7;
+pub const CAUSE_DECAY: u8 = 8;
+
+/// Full scale of `ee_mind_trace.attention`: a mass in 1/10 000.
+pub const MASS_FULL: u16 = 10000;
 
 // ── Agent flags ─────────────────────────────────────────────────────────────
 
@@ -221,6 +266,51 @@ pub struct EeContext {
     pub degraded_ticks: u64,
 }
 
+/// ABI 1.1: one agent's mind, owned by the host, zeroed with `struct_size` set.
+/// The reservoirs live here so the host can read them; they never enter a
+/// trace or a document.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EeMind {
+    pub struct_size: u32,
+    pub arousal: u32,
+    pub seen_ids_lo: u64,
+    pub seen_ids_hi: u64,
+    pub fear: u32,
+    pub grievance: u32,
+    pub last_health: i32,
+    pub grudge_x: i32,
+    pub grudge_y: i32,
+    pub grudge_age: u32,
+    pub grudge_id: u16,
+    pub seen_count: u16,
+    pub token: u8,
+    pub hesitate_left: u8,
+    pub flags: u8,
+    pub reserved0: u8,
+}
+
+/// ABI 1.1: one record of one mind tick. A ranking and a selection, never a
+/// score; a token and an attention mass, never a reservoir value.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EeMindTrace {
+    pub struct_size: u32,
+    pub target_id: u32,
+    pub tick: u64,
+    pub ranking: u32,
+    pub attention: u16,
+    pub cause_contact: u16,
+    pub ranking_count: u8,
+    pub selected: u8,
+    pub incumbent: u8,
+    pub token: u8,
+    pub token_prev: u8,
+    pub cause: u8,
+    pub tells: u8,
+    pub reserved0: u8,
+}
+
 // ── Compile-time layout proofs ──────────────────────────────────────────────
 //
 // These mirror the header's `_Static_assert`s. If the kernel's header moves,
@@ -246,6 +336,55 @@ const _: () = assert!(offset_of!(EeIntent, speed) == 28, "intent.speed");
 const _: () = assert!(offset_of!(EeContext, abi_major) == 0, "context.abi_major");
 const _: () = assert!(offset_of!(EeContext, ticks_run) == 56, "context.ticks_run");
 
+// ABI 1.1, every field, from the header's EE_SIZEOF_* and EE_OFFSET_* defines.
+const _: () = assert!(size_of::<EeMind>() == 56, "ee_mind size");
+const _: () = assert!(offset_of!(EeMind, struct_size) == 0, "mind.struct_size");
+const _: () = assert!(offset_of!(EeMind, arousal) == 4, "mind.arousal");
+const _: () = assert!(offset_of!(EeMind, seen_ids_lo) == 8, "mind.seen_ids_lo");
+const _: () = assert!(offset_of!(EeMind, seen_ids_hi) == 16, "mind.seen_ids_hi");
+const _: () = assert!(offset_of!(EeMind, fear) == 24, "mind.fear");
+const _: () = assert!(offset_of!(EeMind, grievance) == 28, "mind.grievance");
+const _: () = assert!(offset_of!(EeMind, last_health) == 32, "mind.last_health");
+const _: () = assert!(offset_of!(EeMind, grudge_x) == 36, "mind.grudge_x");
+const _: () = assert!(offset_of!(EeMind, grudge_y) == 40, "mind.grudge_y");
+const _: () = assert!(offset_of!(EeMind, grudge_age) == 44, "mind.grudge_age");
+const _: () = assert!(offset_of!(EeMind, grudge_id) == 48, "mind.grudge_id");
+const _: () = assert!(offset_of!(EeMind, seen_count) == 50, "mind.seen_count");
+const _: () = assert!(offset_of!(EeMind, token) == 52, "mind.token");
+const _: () = assert!(
+    offset_of!(EeMind, hesitate_left) == 53,
+    "mind.hesitate_left"
+);
+const _: () = assert!(offset_of!(EeMind, flags) == 54, "mind.flags");
+const _: () = assert!(offset_of!(EeMind, reserved0) == 55, "mind.reserved0");
+const _: () = assert!(size_of::<EeMindTrace>() == 32, "ee_mind_trace size");
+const _: () = assert!(
+    offset_of!(EeMindTrace, struct_size) == 0,
+    "trace.struct_size"
+);
+const _: () = assert!(offset_of!(EeMindTrace, target_id) == 4, "trace.target_id");
+const _: () = assert!(offset_of!(EeMindTrace, tick) == 8, "trace.tick");
+const _: () = assert!(offset_of!(EeMindTrace, ranking) == 16, "trace.ranking");
+const _: () = assert!(offset_of!(EeMindTrace, attention) == 20, "trace.attention");
+const _: () = assert!(
+    offset_of!(EeMindTrace, cause_contact) == 22,
+    "trace.cause_contact"
+);
+const _: () = assert!(
+    offset_of!(EeMindTrace, ranking_count) == 24,
+    "trace.ranking_count"
+);
+const _: () = assert!(offset_of!(EeMindTrace, selected) == 25, "trace.selected");
+const _: () = assert!(offset_of!(EeMindTrace, incumbent) == 26, "trace.incumbent");
+const _: () = assert!(offset_of!(EeMindTrace, token) == 27, "trace.token");
+const _: () = assert!(
+    offset_of!(EeMindTrace, token_prev) == 28,
+    "trace.token_prev"
+);
+const _: () = assert!(offset_of!(EeMindTrace, cause) == 29, "trace.cause");
+const _: () = assert!(offset_of!(EeMindTrace, tells) == 30, "trace.tells");
+const _: () = assert!(offset_of!(EeMindTrace, reserved0) == 31, "trace.reserved0");
+
 // ── Exported entry points ───────────────────────────────────────────────────
 //
 // The kernel performs NO allocation: `ee_context` and the `ee_agent` array are
@@ -267,6 +406,16 @@ unsafe extern "C" {
     pub fn ee_version_info() -> EeVersion;
     pub fn ee_abi_fingerprint() -> u64;
     pub fn ee_status_name(status: EeStatus) -> *const core::ffi::c_char;
+    // ABI 1.1. `trace` may be null; when it is not, its `struct_size` must be set.
+    pub fn ee_tick_mind(
+        ctx: *mut EeContext,
+        snap: *const EeSnapshot,
+        agent: *mut EeAgent,
+        mind: *mut EeMind,
+        out: *mut EeIntent,
+        trace: *mut EeMindTrace,
+    ) -> EeStatus;
+    pub fn ee_mind_fingerprint() -> u64;
 }
 
 /// Translate a status code into a static name, without crossing the FFI again

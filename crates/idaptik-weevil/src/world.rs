@@ -13,10 +13,11 @@
 
 use crate::error::Result;
 use crate::fx::{Fx2, from_fx, to_fx};
+use crate::host::MindRecord;
 use crate::host::{AgentState, WeevilHost};
 use crate::intent::{Action, Intent};
 use crate::observation::{Contact, ContactSource, Observation};
-use crate::profile::Profile;
+use crate::profile::{Profile, ScriptedContact};
 use crate::replay::{
     AppliedEffect, ContactRecord, IntentRecord, ObservationRecord, ReplayEntry, ReplayRecorder,
 };
@@ -62,6 +63,11 @@ pub struct HostWorld {
     player_x: f64,
     /// ABI fx units per world unit, mirrored from the profile.
     profile_scale: f64,
+    /// A scripted cast ([`crate::profile::CorridorScript`]). When it is set it
+    /// IS the cast: there is no default player and no decoy.
+    scripted: Option<Vec<ScriptedContact>>,
+    /// The scripted contacts that hit the guard on the current tick.
+    hits_this_tick: Vec<u32>,
 }
 
 /// The guard's host-side state.
@@ -124,8 +130,15 @@ impl HostWorld {
             player_visible: vec![10, 11, 12, 13, 14, 15],
             player_x: 60.0,
             profile_scale: 1.0,
+            scripted: None,
+            hits_this_tick: Vec::new(),
         };
         w.profile_scale = profile.host.fx_per_world_unit;
+        if let Some(script) = &profile.host.script {
+            w.player_visible.clear();
+            w.decoy = None;
+            w.scripted = Some(script.contacts.clone());
+        }
         w
     }
 
@@ -155,6 +168,39 @@ impl HostWorld {
             self.player = None;
             self.last_seen_ago += 1;
         }
+        // Scripted hits land before the guard observes, so the snapshot of this
+        // tick carries the drop in health, as the kernel's fixture does.
+        self.hits_this_tick.clear();
+        let tick = self.tick;
+        let mut damage = 0.0;
+        for c in self.scripted.iter().flatten() {
+            if !present(c, tick) {
+                continue;
+            }
+            for h in c.hits.iter().filter(|h| h.tick == tick) {
+                damage += h.damage;
+                self.hits_this_tick.push(c.id);
+            }
+        }
+        self.guard.health = (self.guard.health - damage).max(0.0);
+    }
+
+    /// The scripted contact with this id, if it is in the corridor this tick.
+    fn scripted_present(&self, id: u32) -> Option<&ScriptedContact> {
+        self.scripted
+            .iter()
+            .flatten()
+            .find(|c| c.id == id && present(c, self.tick))
+    }
+
+    /// The contact the host attributes this tick's damage to: the first
+    /// scripted contact that hit the guard and that the guard perceives. A hit
+    /// from a contact the guard cannot see is damage with no attribution.
+    pub fn damage_source(&self, obs: &Observation) -> Option<u32> {
+        self.hits_this_tick
+            .iter()
+            .copied()
+            .find(|id| obs.contacts.iter().any(|c| c.id == *id))
     }
 
     /// Whether a closed door lies strictly between two x positions.
@@ -245,6 +291,25 @@ impl HostWorld {
                 confidence: 0.6,
                 age_ticks: 0,
             });
+        }
+        for c in self.scripted.iter().flatten() {
+            if present(c, self.tick) && self.room_at(self.guard.x) == self.room_at(c.x) {
+                let dist = (c.x - self.guard.x).abs();
+                contacts.push(Contact {
+                    id: c.id,
+                    // A scripted contact is a person standing in the corridor:
+                    // the closest source the closed vocabulary has.
+                    source: ContactSource::Player,
+                    bearing: Fx2 {
+                        x: to_fx(if c.x >= self.guard.x { 1.0 } else { -1.0 }),
+                        y: 0,
+                    },
+                    distance: to_fx(dist * profile.host.fx_per_world_unit),
+                    threat: to_fx(c.threat),
+                    confidence: 1.0,
+                    age_ticks: 0,
+                });
+            }
         }
         Observation {
             agent_id: 0,
@@ -402,6 +467,9 @@ impl HostWorld {
         {
             return Some(d.x);
         }
+        if let Some(c) = self.scripted_present(id) {
+            return Some(c.x);
+        }
         None
     }
 
@@ -414,9 +482,24 @@ impl HostWorld {
         profile: &Profile,
         recorder: &mut ReplayRecorder,
     ) -> Result<TickTruth> {
+        self.step_with(host, profile, recorder, false)
+            .map(|(truth, _)| truth)
+    }
+
+    /// [`HostWorld::step`], through `ee_tick` or, with `mind`, through the ABI 1.1
+    /// `ee_tick_mind`, which also returns the tick's mind record. The mind tick
+    /// is told which perceived contact this tick's damage came from.
+    pub fn step_with(
+        &mut self,
+        host: &mut WeevilHost,
+        profile: &Profile,
+        recorder: &mut ReplayRecorder,
+        mind: bool,
+    ) -> Result<(TickTruth, Option<MindRecord>)> {
         self.advance_script();
         let obs = self.observation(profile);
-        let truth = self.truth();
+        let mut truth = self.truth();
+        truth.visible = obs.contacts.iter().map(|c| c.id).collect();
         let agent_before = host.agent(obs.agent_id).unwrap_or(AgentState {
             rng_state: 0,
             tick_last: 0,
@@ -428,14 +511,19 @@ impl HostWorld {
             mode: 0,
             flags: 0,
         });
-        let outcome = host.tick(&obs)?;
+        let (intent, record) = if mind {
+            let m = host.tick_mind(&obs, self.damage_source(&obs))?;
+            (m.intent, Some(m.record))
+        } else {
+            (host.tick(&obs)?.intent, None)
+        };
 
         // Host-side validation of the proposal. The kernel's speed is advisory
         // and the host's movement limit is applied when the effect is applied,
         // so the only speed condition worth refusing on is a negative one.
-        let accepted = self.target_is_live(outcome.intent.target_id) && outcome.intent.speed >= 0;
+        let accepted = self.target_is_live(intent.target_id) && intent.speed >= 0;
         let applied = if accepted {
-            self.apply(&outcome.intent, profile)
+            self.apply(&intent, profile)
         } else {
             AppliedEffect {
                 moved: false,
@@ -450,18 +538,19 @@ impl HostWorld {
             agent_id: obs.agent_id,
             observation: ObservationRecord::from(&obs),
             agent_before,
-            intent: IntentRecord::from(&outcome.intent),
+            intent: IntentRecord::from(&intent),
             accepted,
             applied,
             note: String::new(),
         });
-        Ok(truth)
+        Ok((truth, record))
     }
 
     fn target_is_live(&self, id: u32) -> bool {
         self.player.is_some_and(|p| p.id == id)
             || self.objects.iter().any(|o| o.id == id)
             || self.decoy.is_some_and(|d| d.id == id)
+            || self.scripted_present(id).is_some()
             || id == 0
     }
 }
@@ -478,8 +567,16 @@ pub struct TickTruth {
     /// shared room, so this is also the room of every contact it reports.
     pub guard_room: usize,
     /// `(contact id, room index)` for every entity the world holds, in a
-    /// stable order: the player, then the objects.
+    /// stable order: the player, then the objects, then the scripted cast.
     pub contacts: Vec<(u32, usize)>,
+    /// The ids that perceptibly reached the guard: the contacts in its
+    /// observation this tick, in its order.
+    pub visible: Vec<u32>,
+    /// The scripted contacts that hit the guard this tick.
+    pub hits: Vec<u32>,
+    /// The guard's health and ammunition after this tick's hits, in fx.
+    pub guard_health: i32,
+    pub guard_ammo: i32,
 }
 
 impl HostWorld {
@@ -490,18 +587,37 @@ impl HostWorld {
     ///   script keeps the position between them and resumes from it, so the
     ///   infiltrator is somewhere real while unseen.
     /// * Each object is where it stands.
+    /// * A scripted cast replaces the player: each member is where it stands
+    ///   while present, and absent otherwise.
     /// * The decoy is absent. It is "present to perception (but not to
     ///   truth)" (see [`Decoy`]): no entity stands behind the contact, so a
     ///   belief that it is somewhere is never true.
     pub fn truth(&self) -> TickTruth {
-        let mut contacts = vec![(1, self.room_at(self.player_x))];
+        let mut contacts = Vec::new();
+        if self.scripted.is_none() {
+            contacts.push((1, self.room_at(self.player_x)));
+        }
         contacts.extend(self.objects.iter().map(|o| (o.id, self.room_at(o.x))));
+        for c in self.scripted.iter().flatten() {
+            if present(c, self.tick) {
+                contacts.push((c.id, self.room_at(c.x)));
+            }
+        }
         TickTruth {
             tick: self.tick,
             guard_room: self.room_at(self.guard.x),
             contacts,
+            visible: Vec::new(),
+            hits: self.hits_this_tick.clone(),
+            guard_health: to_fx(self.guard.health),
+            guard_ammo: to_fx(self.guard.ammo),
         }
     }
+}
+
+/// Whether a scripted contact is in the corridor on `tick`.
+fn present(c: &ScriptedContact, tick: u64) -> bool {
+    (c.present_from..c.present_until).contains(&tick)
 }
 
 /// The observation's contact list, exposed for the developer view.

@@ -103,6 +103,11 @@ pub struct HostTuning {
     /// as a `decoy` contact while the world's truth about it is a machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decoy: Option<DecoyTuning>,
+    /// A scripted cast for the headless corridor, replacing its default player
+    /// schedule and decoy. `None` keeps the default corridor. Read only by
+    /// [`crate::world::HostWorld::canonical`]; the running game ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<CorridorScript>,
 }
 
 /// A scripted decoy: a contact that is real in the world (a sensor reading, a
@@ -122,6 +127,40 @@ pub struct DecoyTuning {
     /// The perceived threat, in fx units. The corridor reports a fixed threat
     /// for its decoy, so this is an authoring hint it does not read.
     pub threat: i32,
+}
+
+/// A scripted cast: contacts that are really in the corridor for a window of
+/// ticks and may hit the guard. They are people, not decoys, so they are in
+/// the world's truth while present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CorridorScript {
+    pub contacts: Vec<ScriptedContact>,
+}
+
+/// One scripted contact.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScriptedContact {
+    /// Contact id. Must not collide with the corridor's player (1), its object
+    /// (100) or another scripted contact, and must fit the ABI's `u16`.
+    pub id: u32,
+    /// Where it stands, world x. It does not move.
+    pub x: f64,
+    /// Present on ticks `present_from .. present_until`.
+    pub present_from: u64,
+    pub present_until: u64,
+    /// Perceived threat, `0.0..=1.0` of full.
+    pub threat: f64,
+    /// Ticks on which it hits the guard, and for how much health.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hits: Vec<ScriptedHit>,
+}
+
+/// One hit on the guard.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScriptedHit {
+    pub tick: u64,
+    /// Health removed, `0.0 < damage <= 1.0`.
+    pub damage: f64,
 }
 
 /// A versioned guard profile.
@@ -186,6 +225,7 @@ pub enum ProfileError {
     ZeroAgents(u32),
     NonPositiveMovementLimit(f64),
     DecoyIdCollidesWith(u32),
+    InvalidScript(String),
 }
 
 impl std::fmt::Display for ProfileError {
@@ -210,6 +250,7 @@ impl std::fmt::Display for ProfileError {
             Self::DecoyIdCollidesWith(id) => {
                 write!(f, "decoy contact id {id} collides with a live entity id")
             }
+            Self::InvalidScript(why) => write!(f, "corridor script: {why}"),
         }
     }
 }
@@ -231,6 +272,55 @@ pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
 /// Strictly greater than zero. NaN is not, so a NaN scale or limit is refused.
 fn is_positive(v: f64) -> bool {
     v.partial_cmp(&0.0) == Some(std::cmp::Ordering::Greater)
+}
+
+/// Ids the default corridor already uses: its player and its object.
+const CORRIDOR_RESERVED_IDS: [u32; 2] = [1, 100];
+
+fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
+    let bad = |why: String| Err(ProfileError::InvalidScript(why));
+    let mut seen = std::collections::BTreeSet::new();
+    for c in &script.contacts {
+        if c.id == 0 || c.id > u32::from(u16::MAX) || CORRIDOR_RESERVED_IDS.contains(&c.id) {
+            return bad(format!(
+                "contact id {} is reserved or does not fit the ABI",
+                c.id
+            ));
+        }
+        if !seen.insert(c.id) {
+            return bad(format!("contact id {} appears twice", c.id));
+        }
+        if !(0.0..1000.0).contains(&c.x) {
+            return bad(format!(
+                "contact {} stands outside the corridor at x={}",
+                c.id, c.x
+            ));
+        }
+        if c.present_from >= c.present_until {
+            return bad(format!("contact {} is never present", c.id));
+        }
+        if !(0.0..=1.0).contains(&c.threat) {
+            return bad(format!(
+                "contact {} threat {} is outside 0..=1",
+                c.id, c.threat
+            ));
+        }
+        for h in &c.hits {
+            if !(c.present_from..c.present_until).contains(&h.tick) {
+                return bad(format!(
+                    "contact {} hits on tick {} while absent",
+                    c.id, h.tick
+                ));
+            }
+            if !(h.damage > 0.0 && h.damage <= 1.0) {
+                return bad(format!(
+                    "contact {} hit damage {} is outside (0, 1]",
+                    c.id, h.damage
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The largest profile version this build understands.
@@ -274,6 +364,9 @@ impl Profile {
         {
             return Err(ProfileError::DecoyIdCollidesWith(d.id));
         }
+        if let Some(script) = &self.host.script {
+            validate_script(script)?;
+        }
         Ok(())
     }
 
@@ -300,7 +393,8 @@ impl Profile {
 }
 
 /// The three named profiles the first milestone ships, plus `decoy-lure`, the
-/// sentry with a decoy in its room for the epistemic document.
+/// sentry with a decoy in its room for the epistemic document. The four
+/// `the-*` profiles stage the kernel's mind fixtures in the corridor.
 ///
 /// They are *not* behaviour trees. Each is the same kernel utility graph
 /// fed a different perception policy and applied with different host limits; the
@@ -311,6 +405,10 @@ pub struct ProfileSet {
     pub aggressive_pursuer: Profile,
     pub equipment_specialist: Profile,
     pub decoy_lure: Profile,
+    pub the_grudge: Profile,
+    pub the_grudge_control: Profile,
+    pub the_flinch: Profile,
+    pub the_flinch_control: Profile,
 }
 
 impl ProfileSet {
@@ -330,6 +428,7 @@ impl ProfileSet {
                 patrol_x: vec![250.0, 520.0],
                 report_objects: false,
                 decoy: None,
+                script: None,
             },
         )
         .expect("canonical sentry profile is valid");
@@ -348,6 +447,7 @@ impl ProfileSet {
                 patrol_x: vec![220.0, 560.0, 880.0],
                 report_objects: false,
                 decoy: None,
+                script: None,
             },
         )
         .expect("canonical pursuer profile is valid");
@@ -366,6 +466,7 @@ impl ProfileSet {
                 patrol_x: vec![330.0, 655.0],
                 report_objects: true,
                 decoy: None,
+                script: None,
             },
         )
         .expect("canonical specialist profile is valid");
@@ -394,11 +495,85 @@ impl ProfileSet {
         )
         .expect("canonical decoy-lure profile is valid");
 
+        // The kernel's own mind fixtures (evil-weevil ADR-0013 §10), staged in the
+        // corridor. The guard holds at x = 50 (no patrol); each contact stands
+        // where the fixture puts it, as a world distance at the corridor's scale
+        // of 8 world units to 1.0 fx: 100000 fx is 12.20703125, 40000 fx is
+        // 4.8828125, 98304 fx is 12. The guard is not pinned in place, so once
+        // the host applies a move the distances are the corridor's, not the
+        // fixture's.
+        let damage = abi::CAP_NAVMESH | abi::CAP_LINE_OF_SIGHT | abi::CAP_DAMAGE_EVENTS;
+        let no_damage = abi::CAP_NAVMESH | abi::CAP_LINE_OF_SIGHT;
+        let stage = |id: &str, caps: u32, contacts: Vec<ScriptedContact>| {
+            Profile::build(
+                id,
+                caps,
+                4096,
+                4,
+                HostTuning {
+                    patrol_x: Vec::new(),
+                    decoy: None,
+                    script: Some(CorridorScript { contacts }),
+                    ..sentry.host.clone()
+                },
+            )
+            .expect("canonical mind scenario profile is valid")
+        };
+        // "The grudge": A (21) hits the guard on ticks 10, 11 and 12 and is gone
+        // from tick 13; B (22), nearer and less threatening, arrives at tick 20.
+        let grudge_cast = || {
+            vec![
+                ScriptedContact {
+                    id: 21,
+                    x: 62.207_031_25,
+                    present_from: 0,
+                    present_until: 13,
+                    threat: 0.5,
+                    hits: [10, 11, 12]
+                        .into_iter()
+                        .map(|tick| ScriptedHit {
+                            tick,
+                            damage: 0.125,
+                        })
+                        .collect(),
+                },
+                ScriptedContact {
+                    id: 22,
+                    x: 54.882_812_5,
+                    present_from: 20,
+                    present_until: u64::MAX,
+                    threat: 0.125,
+                    hits: Vec::new(),
+                },
+            ]
+        };
+        // "The flinch": C (31) is there on ticks 10 to 19, close (a surprise) or,
+        // for the control, at 1.5 fx (not one).
+        let flinch_cast = |x: f64| {
+            vec![ScriptedContact {
+                id: 31,
+                x,
+                present_from: 10,
+                present_until: 20,
+                threat: 0.5,
+                hits: Vec::new(),
+            }]
+        };
+        let the_grudge = stage("the-grudge", damage, grudge_cast());
+        // The same cast without the damage capability: grievance cannot form.
+        let the_grudge_control = stage("the-grudge-control", no_damage, grudge_cast());
+        let the_flinch = stage("the-flinch", damage, flinch_cast(54.882_812_5));
+        let the_flinch_control = stage("the-flinch-control", damage, flinch_cast(62.0));
+
         Self {
             cautious_sentry: sentry,
             aggressive_pursuer: pursuer,
             equipment_specialist: specialist,
             decoy_lure: lure,
+            the_grudge,
+            the_grudge_control,
+            the_flinch,
+            the_flinch_control,
         }
     }
 
@@ -409,17 +584,25 @@ impl ProfileSet {
             "aggressive-pursuer" => Some(&self.aggressive_pursuer),
             "equipment-specialist" => Some(&self.equipment_specialist),
             "decoy-lure" => Some(&self.decoy_lure),
+            "the-grudge" => Some(&self.the_grudge),
+            "the-grudge-control" => Some(&self.the_grudge_control),
+            "the-flinch" => Some(&self.the_flinch),
+            "the-flinch-control" => Some(&self.the_flinch_control),
             _ => None,
         }
     }
 
     /// All of them, in a stable order.
-    pub fn all(&self) -> [&Profile; 4] {
+    pub fn all(&self) -> [&Profile; 8] {
         [
             &self.cautious_sentry,
             &self.aggressive_pursuer,
             &self.equipment_specialist,
             &self.decoy_lure,
+            &self.the_grudge,
+            &self.the_grudge_control,
+            &self.the_flinch,
+            &self.the_flinch_control,
         ]
     }
 }

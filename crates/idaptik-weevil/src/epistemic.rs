@@ -50,8 +50,10 @@
 //! the ones `tests/fixtures/enaction-policies.json` declares, and a test keeps
 //! the two equal.
 
+use crate::abi;
 use crate::canonical::{MAX_SAFE_INTEGER, NotCanonical, sha256_hex, to_jcs};
 use crate::error::{Result, WeevilError};
+use crate::host::MindRecord;
 use crate::replay::ReplayTrace;
 use crate::world::TickTruth;
 use serde::Serialize;
@@ -261,35 +263,79 @@ fn origin(source: &str) -> &'static str {
     }
 }
 
-/// One observation of one contact, before ids are assigned.
+/// One stated event before ids are assigned, with whether the world holds it.
 #[derive(Debug, Clone)]
-struct Sighting {
+struct Draft {
     tick: u64,
-    /// Position in that tick's contact list, for a stable order within a tick.
-    slot: usize,
     observer: u32,
-    contact: u32,
-    room: usize,
+    subject: String,
+    kind: &'static str,
+    proposition: String,
     confidence: u16,
-    source: String,
-    /// Whether the corridor's own state has the contact in `room` on `tick`.
+    origin: &'static str,
+    channel: String,
+    /// Whether the corridor's own state makes `proposition` true.
     holds: bool,
 }
 
-/// A belief whose source is still a sighting key, before ids are assigned.
+/// An event's place in the run: `(tick, class, slot)`. Within a tick,
+/// sightings (class 0, by their position in the observation) come before the
+/// inputs the mind reported (class 1 onwards), so ids follow (tick, sequence).
+type DraftKey = (u64, u8, usize);
+
+const CLASS_SIGHTING: u8 = 0;
+const CLASS_DAMAGE: u8 = 1;
+const CLASS_NOT_FOUND: u8 = 2;
+const CLASS_NOTHING_VISIBLE: u8 = 3;
+const CLASS_LOW_HEALTH: u8 = 4;
+const CLASS_NO_AMMO: u8 = 5;
+
+/// A belief whose source is still a draft key, before ids are assigned.
 struct PendingBelief {
     tick: u64,
     bearer: u32,
     proposition: String,
     interval: Interval,
-    source: (u64, usize),
+    source: DraftKey,
 }
 
-/// Build the document for one run.
+/// Build the document for one run through `ee_tick`.
 ///
 /// `truth` is what [`crate::run_trace_with_truth`] returns beside `trace`:
 /// one entry per tick, in the same order.
 pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerOutput> {
+    runner_output_with_causes(trace, truth, &[]).map(|(doc, _)| doc)
+}
+
+/// Build the document for one run, and, for a run through `ee_tick_mind`, the
+/// events behind every affect change the kernel reported.
+///
+/// `mind` is the run's mind records ([`crate::CorridorRun::mind`]), one per
+/// tick, or empty. The second value holds, for each record, the ids of the
+/// events in this document that `caused_by` must name: empty exactly when the
+/// token did not change. Each cause the kernel reports (`cause` and
+/// `cause_contact`) is mapped to the input that produced it:
+///
+/// * `CLOSE_CONTACT`: the sighting of `cause_contact` on that tick.
+/// * `THREATS`: the sightings of every contact perceived on that tick.
+/// * `DAMAGE`: an `action_outcome`, `guard-0 took damage at tick T`.
+/// * `ATTRIBUTED_DAMAGE`: an `action_outcome`,
+///   `contact-X damaged guard-0 at tick T`, with X the attributed contact.
+/// * `CONTRADICTION`: an observation, `contact-X not found at tick T`, with X
+///   `cause_contact`, or when that is 0 the target of the kernel's own 1.0
+///   memory before the tick. A lead with no target is an error.
+/// * `LOW_HEALTH` and `NO_AMMO`: observations of the guard's own state.
+/// * `DECAY`: the guard's perception on that tick, which brought no input:
+///   its sightings, or `no contact visible to guard-0 at tick T` when it saw
+///   nothing.
+///
+/// Every event's proposition is decided against the corridor's truth for its
+/// tick, and is a truth atom exactly when it holds.
+pub fn runner_output_with_causes(
+    trace: &ReplayTrace,
+    truth: &[TickTruth],
+    mind: &[MindRecord],
+) -> Result<(RunnerOutput, Vec<Vec<u64>>)> {
     if trace.entries.len() != truth.len() {
         return Err(epistemic(format!(
             "{} replay entries but {} truth records",
@@ -297,135 +343,299 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
             truth.len()
         )));
     }
+    if !mind.is_empty() && mind.len() != truth.len() {
+        return Err(epistemic(format!(
+            "{} mind records for {} ticks",
+            mind.len(),
+            truth.len()
+        )));
+    }
 
-    // The latest sighting of each contact, as of the tick being read.
-    let mut last_seen: BTreeMap<u32, Sighting> = BTreeMap::new();
-    // Cited sightings, keyed by their place in the run.
-    let mut cited: BTreeMap<(u64, usize), Sighting> = BTreeMap::new();
-    // Beliefs, with sources as sighting keys until ids are assigned.
+    // Every sighting of the run, so a belief or a cause can cite one.
+    let mut sightings: BTreeMap<(u64, u32), (DraftKey, Draft)> = BTreeMap::new();
+    // The latest sighting key of each contact, as of the tick being read.
+    let mut last_seen: BTreeMap<u32, (u64, u32)> = BTreeMap::new();
+    let mut cited: BTreeMap<DraftKey, Draft> = BTreeMap::new();
     let mut pending: Vec<PendingBelief> = Vec::new();
-    // True belief propositions, merged with the true event propositions below.
-    let mut belief_truth: Vec<String> = Vec::new();
+    let mut cause_keys: Vec<Vec<DraftKey>> = Vec::with_capacity(mind.len());
 
-    for (entry, now) in trace.entries.iter().zip(truth) {
+    for (i, (entry, now)) in trace.entries.iter().zip(truth).enumerate() {
         if entry.tick != now.tick {
             return Err(epistemic(format!(
                 "replay tick {} paired with truth tick {}",
                 entry.tick, now.tick
             )));
         }
+        let tick = entry.tick;
+        let guard = entry.agent_id;
         for (slot, c) in entry.observation.contacts.iter().enumerate() {
-            last_seen.insert(
-                c.id,
-                Sighting {
-                    tick: entry.tick,
-                    slot,
-                    observer: entry.agent_id,
-                    contact: c.id,
-                    room: now.guard_room,
-                    confidence: mass(c.confidence)?,
-                    source: c.source.clone(),
-                    holds: now.contacts.contains(&(c.id, now.guard_room)),
-                },
-            );
+            let draft = Draft {
+                tick,
+                observer: guard,
+                subject: contact(c.id),
+                kind: "observation",
+                proposition: located(c.id, now.guard_room, tick),
+                confidence: mass(c.confidence)?,
+                origin: origin(&c.source),
+                channel: c.source.clone(),
+                holds: now.contacts.contains(&(c.id, now.guard_room)),
+            };
+            sightings.insert((tick, c.id), ((tick, CLASS_SIGHTING, slot), draft));
+            last_seen.insert(c.id, (tick, c.id));
+        }
+        let sighting = |id: u32| sightings.get(&(tick, id)).cloned();
+
+        if entry.intent.from_memory {
+            let target = entry.intent.target_id;
+            match entry.agent_before.memory {
+                Some(m) if m.target == target => {}
+                Some(m) => {
+                    return Err(epistemic(format!(
+                        "tick {tick}: the kernel acted from memory on contact {target} but remembers {}",
+                        m.target
+                    )));
+                }
+                None => {
+                    return Err(epistemic(format!(
+                        "tick {tick}: the kernel acted from memory on contact {target} with no memory"
+                    )));
+                }
+            }
+            let Some(seen) = last_seen
+                .get(&target)
+                .and_then(|k| sightings.get(k))
+                .cloned()
+            else {
+                return Err(epistemic(format!(
+                    "tick {tick}: the kernel acted from memory on contact {target}, which the guard never perceived"
+                )));
+            };
+            let (key, draft) = seen;
+            // The room of the sighting the memory rests on.
+            let room = room_of(&draft.proposition);
+            let proposition = located(target, room, tick);
+            let interval = Interval {
+                belief: draft.confidence,
+                plausibility: MASS_FULL,
+            };
+            cited.entry(key).or_insert(draft);
+            pending.push(PendingBelief {
+                tick,
+                bearer: guard,
+                proposition,
+                interval,
+                source: key,
+            });
         }
 
-        if !entry.intent.from_memory {
+        let Some(record) = mind.get(i) else {
             continue;
-        }
-        let target = entry.intent.target_id;
-        match entry.agent_before.memory {
-            Some(m) if m.target == target => {}
-            Some(m) => {
-                return Err(epistemic(format!(
-                    "tick {}: the kernel acted from memory on contact {target} but remembers {}",
-                    entry.tick, m.target
-                )));
-            }
-            None => {
-                return Err(epistemic(format!(
-                    "tick {}: the kernel acted from memory on contact {target} with no memory",
-                    entry.tick
-                )));
-            }
-        }
-        let Some(seen) = last_seen.get(&target) else {
+        };
+        if record.tick != tick {
             return Err(epistemic(format!(
-                "tick {}: the kernel acted from memory on contact {target}, which the guard never perceived",
-                entry.tick
+                "mind record for tick {} at replay tick {tick}",
+                record.tick
             )));
-        };
-        let proposition = located(target, seen.room, entry.tick);
-        let interval = Interval {
-            belief: seen.confidence,
-            plausibility: MASS_FULL,
-        };
-        let key = (seen.tick, seen.slot);
-        cited.entry(key).or_insert_with(|| seen.clone());
-        if now.contacts.contains(&(target, seen.room)) {
-            belief_truth.push(proposition.clone());
         }
-        pending.push(PendingBelief {
-            tick: entry.tick,
-            bearer: entry.agent_id,
-            proposition,
-            interval,
-            source: key,
-        });
+        let mut keys = Vec::new();
+        let mut cite_perception = |keys: &mut Vec<DraftKey>| {
+            for c in &entry.observation.contacts {
+                let (key, draft) = sighting(c.id).expect("every perceived contact was recorded");
+                cited.entry(key).or_insert(draft);
+                keys.push(key);
+            }
+        };
+        let own =
+            |class: u8, kind: &'static str, proposition: String, origin, channel: &str, holds| {
+                (
+                    (tick, class, 0),
+                    Draft {
+                        tick,
+                        observer: guard,
+                        subject: agent(guard),
+                        kind,
+                        proposition,
+                        confidence: MASS_FULL,
+                        origin,
+                        channel: channel.to_owned(),
+                        holds,
+                    },
+                )
+            };
+        let mut extra: Vec<(DraftKey, Draft)> = Vec::new();
+        match record.cause {
+            abi::CAUSE_NONE => {}
+            abi::CAUSE_CLOSE_CONTACT => {
+                let id = u32::from(record.cause_contact);
+                let Some((key, draft)) = sighting(id) else {
+                    return Err(epistemic(format!(
+                        "tick {tick}: close contact {id} is not in the guard's observation"
+                    )));
+                };
+                cited.entry(key).or_insert(draft);
+                keys.push(key);
+            }
+            abi::CAUSE_THREATS => {
+                if entry.observation.contacts.is_empty() {
+                    return Err(epistemic(format!(
+                        "tick {tick}: a threat cause with nothing perceived"
+                    )));
+                }
+                cite_perception(&mut keys);
+            }
+            abi::CAUSE_DAMAGE => extra.push(own(
+                CLASS_DAMAGE,
+                "action_outcome",
+                format!("{} took damage at tick {tick}", agent(guard)),
+                "damage",
+                "health",
+                !now.hits.is_empty(),
+            )),
+            abi::CAUSE_ATTRIBUTED_DAMAGE => {
+                let id = u32::from(record.cause_contact);
+                if id == 0 {
+                    return Err(epistemic(format!(
+                        "tick {tick}: attributed damage with no contact"
+                    )));
+                }
+                let (key, mut draft) = own(
+                    CLASS_DAMAGE,
+                    "action_outcome",
+                    format!("{} damaged {} at tick {tick}", contact(id), agent(guard)),
+                    "damage",
+                    "health",
+                    now.hits.contains(&id),
+                );
+                draft.subject = contact(id);
+                extra.push((key, draft));
+            }
+            abi::CAUSE_CONTRADICTION => {
+                let id = match record.cause_contact {
+                    0 => entry
+                        .agent_before
+                        .memory
+                        .map(|m| m.target)
+                        .filter(|t| *t != 0),
+                    c => Some(u32::from(c)),
+                };
+                let Some(id) = id else {
+                    return Err(epistemic(format!(
+                        "tick {tick}: a lead came to nothing, but the kernel names no contact and holds no memory"
+                    )));
+                };
+                let (key, mut draft) = own(
+                    CLASS_NOT_FOUND,
+                    "observation",
+                    format!("{} not found at tick {tick}", contact(id)),
+                    "sight",
+                    "lead-expired",
+                    !now.visible.contains(&id)
+                        && !now
+                            .contacts
+                            .iter()
+                            .any(|(c, r)| *c == id && *r == now.guard_room),
+                );
+                draft.subject = contact(id);
+                extra.push((key, draft));
+            }
+            abi::CAUSE_LOW_HEALTH => extra.push(own(
+                CLASS_LOW_HEALTH,
+                "observation",
+                format!("{} health below half at tick {tick}", agent(guard)),
+                "proprioception",
+                "health",
+                now.guard_health < abi::FX_ONE / 2,
+            )),
+            abi::CAUSE_NO_AMMO => extra.push(own(
+                CLASS_NO_AMMO,
+                "observation",
+                format!("{} out of ammo at tick {tick}", agent(guard)),
+                "proprioception",
+                "ammo",
+                now.guard_ammo == 0,
+            )),
+            abi::CAUSE_DECAY => {
+                if entry.observation.contacts.is_empty() {
+                    extra.push(own(
+                        CLASS_NOTHING_VISIBLE,
+                        "observation",
+                        format!("no contact visible to {} at tick {tick}", agent(guard)),
+                        "sight",
+                        "none",
+                        !now.contacts.iter().any(|(_, r)| *r == now.guard_room),
+                    ));
+                } else {
+                    cite_perception(&mut keys);
+                }
+            }
+            other => {
+                return Err(epistemic(format!("tick {tick}: unknown cause {other}")));
+            }
+        }
+        for (key, draft) in extra {
+            cited.entry(key).or_insert(draft);
+            keys.push(key);
+        }
+        cause_keys.push(keys);
     }
 
-    // Events in (tick, slot) order: ids and sequences count from 1 in that
-    // order, so (tick, sequence) is strictly increasing.
-    let mut ids: BTreeMap<(u64, usize), u64> = BTreeMap::new();
+    // Ids and sequences count from 1 in (tick, class, slot) order, so
+    // (tick, sequence) is strictly increasing.
+    let mut ids: BTreeMap<DraftKey, u64> = BTreeMap::new();
     let mut events = Vec::with_capacity(cited.len());
-    let mut event_truth: Vec<String> = Vec::new();
-    for (n, (key, s)) in cited.into_iter().enumerate() {
+    // World truth is closed over what the package states (CAC-KERNEL §9):
+    // every stated proposition the world makes true is an atom, and an absent
+    // one is false. A belief and the sighting it cites state one string when
+    // they share a tick, so the atoms are deduplicated: a repeated atom is
+    // `DuplicateTruthAtom`.
+    let mut seen_atoms = std::collections::BTreeSet::new();
+    let mut world_truth: Vec<String> = Vec::new();
+    for (n, (key, d)) in cited.into_iter().enumerate() {
         let id = n as u64 + 1;
         ids.insert(key, id);
-        let proposition = located(s.contact, s.room, s.tick);
-        if s.holds {
-            event_truth.push(proposition.clone());
+        if d.holds && seen_atoms.insert(d.proposition.clone()) {
+            world_truth.push(d.proposition.clone());
         }
         events.push(Event {
             event_id: id,
             sequence: id,
-            tick: s.tick,
-            observer: agent(s.observer),
-            subject: Subject::Agent(contact(s.contact)),
-            kind: "observation".to_owned(),
-            proposition,
-            confidence: s.confidence,
+            tick: d.tick,
+            observer: agent(d.observer),
+            subject: Subject::Agent(d.subject),
+            kind: d.kind.to_owned(),
+            proposition: d.proposition,
+            confidence: d.confidence,
             provenance: Provenance {
-                origin: origin(&s.source).to_owned(),
-                channel: s.source,
+                origin: d.origin.to_owned(),
+                channel: d.channel,
             },
         });
     }
 
-    // World truth is closed over what the package states (CAC-KERNEL §9): every
-    // stated proposition that the world makes true is an atom, and an absent one
-    // is false. A belief and the observation it cites state the same string
-    // when the sighting is on the belief's own tick, so the atoms are deduplicated:
-    // a repeated atom is `DuplicateTruthAtom`.
-    let mut seen_atoms = std::collections::BTreeSet::new();
-    let world_truth: Vec<String> = event_truth
-        .into_iter()
-        .chain(belief_truth)
-        .filter(|p| seen_atoms.insert(p.clone()))
-        .collect();
-
-    let beliefs = pending
-        .into_iter()
-        .enumerate()
-        .map(|(n, p)| Belief {
+    let mut beliefs = Vec::with_capacity(pending.len());
+    for (n, p) in pending.into_iter().enumerate() {
+        let (_, tick) = (p.source, p.tick);
+        let (target, room) = target_room(&p.proposition);
+        let at = truth
+            .iter()
+            .find(|t| t.tick == tick)
+            .expect("a truth record for every tick");
+        if at.contacts.contains(&(target, room)) && seen_atoms.insert(p.proposition.clone()) {
+            world_truth.push(p.proposition.clone());
+        }
+        beliefs.push(Belief {
             belief_id: n as u64 + 1,
             bearer: agent(p.bearer),
             proposition: p.proposition,
             status: Status::of(p.interval),
             confidence: p.interval,
             source_events: vec![ids[&p.source]],
-            valid_from: p.tick,
-        })
+            valid_from: tick,
+        });
+    }
+    let causes = cause_keys
+        .into_iter()
+        .map(|keys| keys.iter().map(|k| ids[k]).collect())
         .collect();
 
     let hdr = &trace.header;
@@ -462,11 +672,30 @@ pub fn runner_output(trace: &ReplayTrace, truth: &[TickTruth]) -> Result<RunnerO
     };
     package.manifest.digest = package_digest(&package)?;
 
-    Ok(RunnerOutput {
-        contract: RUNNER_OUTPUT_CONTRACT.to_owned(),
-        package,
-        world_truth,
-    })
+    Ok((
+        RunnerOutput {
+            contract: RUNNER_OUTPUT_CONTRACT.to_owned(),
+            package,
+            world_truth,
+        },
+        causes,
+    ))
+}
+
+/// The room index in a `located` proposition this module wrote.
+fn room_of(proposition: &str) -> usize {
+    target_room(proposition).1
+}
+
+/// `(contact, room)` from a `located` proposition this module wrote.
+fn target_room(proposition: &str) -> (u32, usize) {
+    let parse = || -> Option<(u32, usize)> {
+        let rest = proposition.strip_prefix("contact-")?;
+        let (id, rest) = rest.split_once(" in room-")?;
+        let (room, _) = rest.split_once(" at tick ")?;
+        Some((id.parse().ok()?, room.parse().ok()?))
+    };
+    parse().expect("a located proposition written by this module")
 }
 
 #[cfg(test)]

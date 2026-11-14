@@ -46,6 +46,7 @@ pub mod error;
 pub mod fx;
 pub mod host;
 pub mod intent;
+pub mod mind_trace;
 pub mod observation;
 pub mod profile;
 pub mod replay;
@@ -53,7 +54,7 @@ pub mod world;
 
 pub use error::{Result, WeevilError};
 pub use fx::Fx2;
-pub use host::{AgentState, Memory, TickOutcome, WeevilHost};
+pub use host::{AgentState, Memory, MindOutcome, MindRecord, TickOutcome, WeevilHost};
 pub use intent::{Action, Intent, IntentFlags};
 pub use observation::{Contact, ContactSource, Observation};
 pub use profile::{HostTuning, Profile, ProfileSet};
@@ -82,6 +83,31 @@ pub fn run_trace_with_truth(
     profile: &Profile,
     seed: u64,
 ) -> Result<(ReplayTrace, Vec<TickTruth>)> {
+    run_corridor(ticks, profile, seed, false).map(|run| (run.trace, run.truth))
+}
+
+/// One headless corridor run: the replay, the world's truth on every tick, and,
+/// when the run went through the ABI 1.1 mind, one record per tick.
+#[derive(Debug, Clone)]
+pub struct CorridorRun {
+    pub trace: ReplayTrace,
+    pub truth: Vec<TickTruth>,
+    /// Empty unless the run used `ee_tick_mind`.
+    pub mind: Vec<host::MindRecord>,
+}
+
+/// The scenario id a corridor run records: a mind run is a different decision
+/// sequence from a plain one, so two of them must never replay as equal.
+pub fn corridor_scenario_id(mind: bool) -> &'static str {
+    if mind {
+        "headless-corridor-mind"
+    } else {
+        "headless-corridor"
+    }
+}
+
+/// Run the corridor through `ee_tick`, or with `mind` through `ee_tick_mind`.
+pub fn run_corridor(ticks: u64, profile: &Profile, seed: u64, mind: bool) -> Result<CorridorRun> {
     let mut host = WeevilHost::init(
         profile.capabilities,
         profile.max_agents,
@@ -96,11 +122,18 @@ pub fn run_trace_with_truth(
         profile,
         seed,
         (60, 1),
-        "headless-corridor",
+        corridor_scenario_id(mind),
     ));
     let mut truth = Vec::with_capacity(ticks as usize);
+    let mut records = Vec::new();
     for _ in 0..ticks {
-        truth.push(world.step(&mut host, profile, &mut recorder)?);
+        let (t, record) = world.step_with(&mut host, profile, &mut recorder, mind)?;
+        truth.push(t);
+        records.extend(record);
     }
-    Ok((recorder.finish(), truth))
+    Ok(CorridorRun {
+        trace: recorder.finish(),
+        truth,
+        mind: records,
+    })
 }
