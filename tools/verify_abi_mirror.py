@@ -34,6 +34,8 @@ C_TO_RUST = {
     "ee_version": "EeVersion", "ee_init_desc": "EeInitDesc",
     "ee_contact": "EeContact", "ee_snapshot": "EeSnapshot",
     "ee_agent": "EeAgent", "ee_intent": "EeIntent", "ee_context": "EeContext",
+    # ABI 1.1 (evil-weevil ADR-0013): the caller-owned mind and its trace record.
+    "ee_mind": "EeMind", "ee_mind_trace": "EeMindTrace",
 }
 
 

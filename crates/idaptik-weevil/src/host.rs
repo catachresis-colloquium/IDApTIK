@@ -16,7 +16,9 @@
 //! unknown agent id is refused, and a restarted or despawned guard gets fresh
 //! state rather than inheriting a predecessor's memory.
 
-use crate::abi::{self, EeAgent, EeContext, EeInitDesc, EeIntent, EeSnapshot, EeVersion};
+use crate::abi::{
+    self, EeAgent, EeContext, EeInitDesc, EeIntent, EeMind, EeMindTrace, EeSnapshot, EeVersion,
+};
 use crate::error::{Result, WeevilError};
 use crate::fx::Fx2;
 use crate::intent::Intent;
@@ -115,6 +117,10 @@ pub struct WeevilHost {
     seed: u64,
     kernel_version: EeVersion,
     kernel_fingerprint: u64,
+    /// ABI 1.1: one host-owned mind per agent slot, used only by
+    /// [`WeevilHost::tick_mind`]. A host that never calls it never reads these.
+    minds: Vec<EeMind>,
+    mind_fingerprint: u64,
 }
 
 impl WeevilHost {
@@ -194,6 +200,8 @@ impl WeevilHost {
             });
         }
 
+        // SAFETY: no arguments, returns by value.
+        let mind_fingerprint = unsafe { abi::ee_mind_fingerprint() };
         let mut agents = vec![EeAgent::default(); max_agents as usize];
         for (i, a) in agents.iter_mut().enumerate() {
             a.rng_state = seed ^ ((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -207,6 +215,8 @@ impl WeevilHost {
             seed,
             kernel_version,
             kernel_fingerprint,
+            minds: vec![fresh_mind(); max_agents as usize],
+            mind_fingerprint,
         })
     }
 
@@ -218,6 +228,17 @@ impl WeevilHost {
     /// The kernel's reported layout fingerprint.
     pub fn kernel_fingerprint(&self) -> u64 {
         self.kernel_fingerprint
+    }
+
+    /// The fingerprint the kernel reports for the 1.1 mind structs.
+    pub fn mind_fingerprint(&self) -> u64 {
+        self.mind_fingerprint
+    }
+
+    /// One agent's mind, as the kernel last left it. Host-side only: the
+    /// reservoirs it holds never go into a trace or a document.
+    pub fn mind(&self, id: u32) -> Option<EeMind> {
+        self.minds.get(id as usize).copied()
     }
 
     /// The context as the kernel last left it (ticks run, degraded ticks, …).
@@ -269,6 +290,7 @@ impl WeevilHost {
         };
         *a = EeAgent::default();
         a.rng_state = self.seed ^ ((id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        self.minds[id as usize] = fresh_mind();
         Ok(())
     }
 
@@ -277,6 +299,9 @@ impl WeevilHost {
         for (i, a) in self.agents.iter_mut().enumerate() {
             *a = EeAgent::default();
             a.rng_state = self.seed ^ ((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        }
+        for m in &mut self.minds {
+            *m = fresh_mind();
         }
         self.ctx.ticks_run = 0;
         self.ctx.degraded_ticks = 0;
@@ -289,21 +314,7 @@ impl WeevilHost {
     /// [`TickOutcome`] is the kernel's *proposal*; the caller decides whether to
     /// accept it and what effect to apply.
     pub fn tick(&mut self, obs: &Observation) -> Result<TickOutcome> {
-        if !self.initialized {
-            return Err(WeevilError::NotInitialized);
-        }
-        let id = obs.agent_id;
-        if id >= self.max_agents {
-            return Err(WeevilError::AgentNotFound(id));
-        }
-        let slot = id as usize;
-        let expected = self.agents[slot].tick_last + 1;
-        if obs.tick != expected {
-            return Err(WeevilError::StaleTick {
-                expected,
-                got: obs.tick,
-            });
-        }
+        let slot = self.check_tick(obs)?;
 
         let snap: EeSnapshot = obs.to_snapshot()?;
         let mut intent = EeIntent::default();
@@ -320,23 +331,7 @@ impl WeevilHost {
             )
         };
         if status != abi::STATUS_OK {
-            return Err(match status {
-                abi::STATUS_BAD_PARAM => WeevilError::BadParam,
-                abi::STATUS_VERSION_MISMATCH => WeevilError::VersionMismatch {
-                    host: abi::ABI_MAJOR,
-                    kernel: self.kernel_version.major as u32,
-                },
-                abi::STATUS_FINGERPRINT_MISMATCH => WeevilError::FingerprintMismatch {
-                    host: abi::ABI_FINGERPRINT,
-                    kernel: self.kernel_fingerprint,
-                },
-                abi::STATUS_BUFFER_TOO_SMALL => WeevilError::BufferTooSmall,
-                abi::STATUS_PANIC_CAUGHT => WeevilError::PanicCaught,
-                abi::STATUS_CAPABILITY_UNSUPPORTED => {
-                    WeevilError::CapabilityUnsupported(obs.capability_mask)
-                }
-                other => WeevilError::UnknownStatus(other),
-            });
+            return Err(self.status_error(status, obs.capability_mask));
         }
 
         let agent = AgentState::from_ee(&self.agents[slot]);
@@ -346,6 +341,234 @@ impl WeevilHost {
             context: self.ctx,
         })
     }
+
+    /// ABI 1.1: run one tick for one guard through the kernel's mind.
+    ///
+    /// The same validation as [`WeevilHost::tick`], then `ee_tick_mind` with this
+    /// agent's host-owned [`EeMind`] and a trace record. `damage_source` is the
+    /// contact the host attributes this tick's damage to. The host may only
+    /// attribute damage to a contact the guard perceives this tick, so an id that
+    /// is not in `obs.contacts` is refused rather than passed on.
+    ///
+    /// The mind's fingerprint is checked on every call, because `ee_init`
+    /// checks only the 1.0 one: a kernel whose mind structs differ from this
+    /// mirror must not be handed them.
+    pub fn tick_mind(
+        &mut self,
+        obs: &Observation,
+        damage_source: Option<u32>,
+    ) -> Result<MindOutcome> {
+        let slot = self.check_tick(obs)?;
+        if self.mind_fingerprint != abi::MIND_FINGERPRINT {
+            return Err(WeevilError::FingerprintMismatch {
+                host: abi::MIND_FINGERPRINT,
+                kernel: self.mind_fingerprint,
+            });
+        }
+        let mut snap: EeSnapshot = obs.to_snapshot()?;
+        if let Some(source) = damage_source {
+            let Some(i) = obs.contacts.iter().position(|c| c.id == source) else {
+                return Err(WeevilError::InvalidTarget(source));
+            };
+            let slot_contact = match i {
+                0 => &mut snap.contact0,
+                1 => &mut snap.contact1,
+                2 => &mut snap.contact2,
+                3 => &mut snap.contact3,
+                4 => &mut snap.contact4,
+                5 => &mut snap.contact5,
+                6 => &mut snap.contact6,
+                _ => &mut snap.contact7,
+            };
+            slot_contact.flags |= abi::CONTACT_FLAG_DAMAGE_SOURCE;
+        }
+        let mut intent = EeIntent::default();
+        let mut trace = EeMindTrace {
+            struct_size: size_of::<EeMindTrace>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: as in `tick`; `self.minds[slot]` and `trace` are valid, owned,
+        // aligned values with `struct_size` set, and the kernel retains none of
+        // the pointers.
+        let status = unsafe {
+            abi::ee_tick_mind(
+                &mut self.ctx as *mut EeContext,
+                &snap as *const EeSnapshot,
+                &mut self.agents[slot] as *mut EeAgent,
+                &mut self.minds[slot] as *mut EeMind,
+                &mut intent as *mut EeIntent,
+                &mut trace as *mut EeMindTrace,
+            )
+        };
+        if status != abi::STATUS_OK {
+            return Err(self.status_error(status, obs.capability_mask));
+        }
+        let record = MindRecord::from_ee(&trace, obs.tick)?;
+        let tells = ((intent.flags >> 4) & 0x7) as u8;
+        if tells != record.tells {
+            return Err(WeevilError::InvalidMindTrace(format!(
+                "intent tells {tells:#x} differ from the trace's {:#x}",
+                record.tells
+            )));
+        }
+        Ok(MindOutcome {
+            intent: Intent::from_ee(&intent)?,
+            agent: AgentState::from_ee(&self.agents[slot]),
+            record,
+        })
+    }
+
+    /// The checks both entrances make before calling the kernel: initialised,
+    /// a known agent, and the tick exactly one past the agent's last.
+    fn check_tick(&self, obs: &Observation) -> Result<usize> {
+        if !self.initialized {
+            return Err(WeevilError::NotInitialized);
+        }
+        let id = obs.agent_id;
+        if id >= self.max_agents {
+            return Err(WeevilError::AgentNotFound(id));
+        }
+        let slot = id as usize;
+        let expected = self.agents[slot].tick_last + 1;
+        if obs.tick != expected {
+            return Err(WeevilError::StaleTick {
+                expected,
+                got: obs.tick,
+            });
+        }
+        Ok(slot)
+    }
+
+    /// A kernel status other than OK, as this crate's error.
+    fn status_error(&self, status: abi::EeStatus, capabilities: u32) -> WeevilError {
+        match status {
+            abi::STATUS_BAD_PARAM => WeevilError::BadParam,
+            abi::STATUS_VERSION_MISMATCH => WeevilError::VersionMismatch {
+                host: abi::ABI_MAJOR,
+                kernel: self.kernel_version.major as u32,
+            },
+            abi::STATUS_FINGERPRINT_MISMATCH => WeevilError::FingerprintMismatch {
+                host: abi::ABI_FINGERPRINT,
+                kernel: self.kernel_fingerprint,
+            },
+            abi::STATUS_BUFFER_TOO_SMALL => WeevilError::BufferTooSmall,
+            abi::STATUS_PANIC_CAUGHT => WeevilError::PanicCaught,
+            abi::STATUS_CAPABILITY_UNSUPPORTED => WeevilError::CapabilityUnsupported(capabilities),
+            other => WeevilError::UnknownStatus(other),
+        }
+    }
+}
+
+/// A zeroed mind with its `struct_size` set, as the kernel requires.
+fn fresh_mind() -> EeMind {
+    EeMind {
+        struct_size: size_of::<EeMind>() as u32,
+        ..Default::default()
+    }
+}
+
+/// The five mode codes the mind ranks, in the kernel's order (ADR-0013 §8).
+pub const MODE_ADVANCE: u8 = 0;
+pub const MODE_ENGAGE: u8 = 1;
+pub const MODE_EVADE: u8 = 2;
+pub const MODE_RELOAD: u8 = 3;
+pub const MODE_INVESTIGATE: u8 = 4;
+
+/// One `ee_mind_trace`, decoded and range-checked.
+///
+/// It is everything the kernel says about one mind tick: a ranking of modes
+/// (best first) and the selected and incumbent modes, the affect token with
+/// the token it replaced and the input that caused the change, the attention
+/// mass, and the tells. No score and no reservoir value are in it, because the
+/// kernel does not put them in the trace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MindRecord {
+    pub tick: u64,
+    pub target_id: u32,
+    /// Mode codes, best first. One or five long.
+    pub ranking: Vec<u8>,
+    pub selected: u8,
+    pub incumbent: u8,
+    pub token: u8,
+    pub token_prev: u8,
+    /// `abi::CAUSE_*`: `CAUSE_NONE` exactly when the token did not change.
+    pub cause: u8,
+    /// The contact behind the cause, or 0.
+    pub cause_contact: u16,
+    /// A mass in 1/10 000.
+    pub attention: u16,
+    /// `abi::TELL_*` bits.
+    pub tells: u8,
+}
+
+impl MindRecord {
+    /// Decode a trace record, refusing any value outside its declared range.
+    fn from_ee(t: &EeMindTrace, tick: u64) -> Result<Self> {
+        let bad = |what: String| Err(WeevilError::InvalidMindTrace(what));
+        if t.tick != tick {
+            return bad(format!("trace tick {} for observation tick {tick}", t.tick));
+        }
+        let count = t.ranking_count as usize;
+        if !(1..=5).contains(&count) {
+            return bad(format!("ranking_count {count}"));
+        }
+        let ranking: Vec<u8> = (0..count)
+            .map(|i| ((t.ranking >> (4 * i)) & 0xF) as u8)
+            .collect();
+        for &mode in ranking.iter().chain([t.selected, t.incumbent].iter()) {
+            if mode > MODE_INVESTIGATE {
+                return bad(format!("mode code {mode}"));
+            }
+        }
+        if t.token > abi::AFFECT_ANGRY || t.token_prev > abi::AFFECT_ANGRY {
+            return bad(format!(
+                "affect token {} (previous {})",
+                t.token, t.token_prev
+            ));
+        }
+        if t.cause > abi::CAUSE_DECAY {
+            return bad(format!("cause {}", t.cause));
+        }
+        if (t.token != t.token_prev) != (t.cause != abi::CAUSE_NONE) {
+            return bad(format!(
+                "token {} -> {} with cause {}",
+                t.token_prev, t.token, t.cause
+            ));
+        }
+        if t.attention > abi::MASS_FULL {
+            return bad(format!("attention {}", t.attention));
+        }
+        if t.tells & !(abi::TELL_STARTLE | abi::TELL_HESITATE | abi::TELL_FIXATE) != 0 {
+            return bad(format!("tells {:#x}", t.tells));
+        }
+        Ok(Self {
+            tick: t.tick,
+            target_id: t.target_id,
+            ranking,
+            selected: t.selected,
+            incumbent: t.incumbent,
+            token: t.token,
+            token_prev: t.token_prev,
+            cause: t.cause,
+            cause_contact: t.cause_contact,
+            attention: t.attention,
+            tells: t.tells,
+        })
+    }
+
+    /// Commitment override, derived as the contract derives it: the selected
+    /// mode is the incumbent and is not first in the ranking.
+    pub fn is_commitment_override(&self) -> bool {
+        self.selected == self.incumbent && self.ranking.first() != Some(&self.selected)
+    }
+}
+
+/// One mind tick's outcome.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MindOutcome {
+    pub intent: Intent,
+    pub agent: AgentState,
+    pub record: MindRecord,
 }
 
 #[cfg(test)]
@@ -393,6 +616,8 @@ mod tests {
             seed: 1,
             kernel_version: EeVersion::default(),
             kernel_fingerprint: 0,
+            minds: vec![fresh_mind(); 2],
+            mind_fingerprint: 0,
         };
         assert_eq!(
             host.tick(&obs(9, 1)).unwrap_err(),
@@ -415,6 +640,8 @@ mod tests {
             seed: 1,
             kernel_version: EeVersion::default(),
             kernel_fingerprint: 0,
+            minds: vec![fresh_mind(); 2],
+            mind_fingerprint: 0,
         };
         assert_eq!(
             host.tick(&obs(0, 0)).unwrap_err(),
