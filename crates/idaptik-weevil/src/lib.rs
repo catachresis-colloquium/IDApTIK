@@ -40,6 +40,8 @@
 //!   in-process seam, not a security boundary against a hostile kernel.
 
 pub mod abi;
+pub mod canonical;
+pub mod epistemic;
 pub mod error;
 pub mod fx;
 pub mod host;
@@ -59,7 +61,7 @@ pub use replay::{
     AppliedEffect, InitialContext, IntentRecord, ObservationRecord, ReplayEntry, ReplayHeader,
     ReplayMismatch, ReplayRecorder, ReplayTrace, decision_identity, header_from, replay_equal,
 };
-pub use world::HostWorld;
+pub use world::{HostWorld, TickTruth};
 
 /// Run a bounded headless trace through the adapter and return the replay.
 ///
@@ -67,6 +69,19 @@ pub use world::HostWorld;
 /// [`world`], recording every observation, proposal, host acceptance and applied
 /// effect. It is the reproducible replay the first milestone ships.
 pub fn run_trace(ticks: u64, profile: &Profile, seed: u64) -> Result<ReplayTrace> {
+    run_trace_with_truth(ticks, profile, seed).map(|(trace, _)| trace)
+}
+
+/// [`run_trace`], also returning the corridor's truth for every tick, taken
+/// when the guard observed.
+///
+/// The trace is the same one [`run_trace`] returns: it is the one loop, and
+/// recording the truth reads the world without changing it.
+pub fn run_trace_with_truth(
+    ticks: u64,
+    profile: &Profile,
+    seed: u64,
+) -> Result<(ReplayTrace, Vec<TickTruth>)> {
     let mut host = WeevilHost::init(
         profile.capabilities,
         profile.max_agents,
@@ -83,8 +98,9 @@ pub fn run_trace(ticks: u64, profile: &Profile, seed: u64) -> Result<ReplayTrace
         (60, 1),
         "headless-corridor",
     ));
+    let mut truth = Vec::with_capacity(ticks as usize);
     for _ in 0..ticks {
-        world.step(&mut host, profile, &mut recorder)?;
+        truth.push(world.step(&mut host, profile, &mut recorder)?);
     }
-    Ok(recorder.finish())
+    Ok((recorder.finish(), truth))
 }

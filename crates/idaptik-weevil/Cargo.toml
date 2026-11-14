@@ -21,6 +21,9 @@ path = "src/bin/weevil_replay.rs"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+# SHA-256 for the `enaction-runner-output/1` package digest. Already in the
+# lock file (0.10.9) through other crates; no new package is resolved.
+sha2 = "0.10"
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -165,7 +165,7 @@ impl HostWorld {
     }
 
     /// The room index containing `x`.
-    fn room_at(&self, x: f64) -> usize {
+    pub fn room_at(&self, x: f64) -> usize {
         self.rooms
             .iter()
             .position(|(l, w)| x >= *l && x < l + w)
@@ -406,15 +406,17 @@ impl HostWorld {
     }
 
     /// One headless tick: advance the script, observe, ask the kernel, validate,
-    /// apply, and record.
+    /// apply, and record. Returns the world's truth at the instant the guard
+    /// observed, before the host applied anything.
     pub fn step(
         &mut self,
         host: &mut WeevilHost,
         profile: &Profile,
         recorder: &mut ReplayRecorder,
-    ) -> Result<()> {
+    ) -> Result<TickTruth> {
         self.advance_script();
         let obs = self.observation(profile);
+        let truth = self.truth();
         let agent_before = host.agent(obs.agent_id).unwrap_or(AgentState {
             rng_state: 0,
             tick_last: 0,
@@ -453,7 +455,7 @@ impl HostWorld {
             applied,
             note: String::new(),
         });
-        Ok(())
+        Ok(truth)
     }
 
     fn target_is_live(&self, id: u32) -> bool {
@@ -461,6 +463,44 @@ impl HostWorld {
             || self.objects.iter().any(|o| o.id == id)
             || self.decoy.is_some_and(|d| d.id == id)
             || id == 0
+    }
+}
+
+/// Where things really are on one tick, as the corridor's own state has them.
+///
+/// This is the world's truth, not the guard's perception, and it is recorded
+/// beside the replay rather than inside it so the replay format is unchanged.
+/// It is what lets a reader see where the guard is wrong.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TickTruth {
+    pub tick: u64,
+    /// The room the guard stands in when it perceives. Perception needs a
+    /// shared room, so this is also the room of every contact it reports.
+    pub guard_room: usize,
+    /// `(contact id, room index)` for every entity the world holds, in a
+    /// stable order: the player, then the objects.
+    pub contacts: Vec<(u32, usize)>,
+}
+
+impl HostWorld {
+    /// The world's truth on the current tick.
+    ///
+    /// * The player is at the scripted `player_x` on every tick. The visible
+    ///   entity (`player`) exists only on the schedule's ticks, but the
+    ///   script keeps the position between them and resumes from it, so the
+    ///   infiltrator is somewhere real while unseen.
+    /// * Each object is where it stands.
+    /// * The decoy is absent. It is "present to perception (but not to
+    ///   truth)" (see [`Decoy`]): no entity stands behind the contact, so a
+    ///   belief that it is somewhere is never true.
+    pub fn truth(&self) -> TickTruth {
+        let mut contacts = vec![(1, self.room_at(self.player_x))];
+        contacts.extend(self.objects.iter().map(|o| (o.id, self.room_at(o.x))));
+        TickTruth {
+            tick: self.tick,
+            guard_room: self.room_at(self.guard.x),
+            contacts,
+        }
     }
 }
 

@@ -48,6 +48,9 @@ pub enum WeevilError {
     ProfileParse(String),
     /// A replay document could not be read back.
     ReplayParse(String),
+    /// A run could not be written as an epistemic document without inventing
+    /// something the kernel or the world did not compute.
+    Epistemic(String),
 }
 
 impl fmt::Display for WeevilError {
@@ -101,6 +104,7 @@ impl fmt::Display for WeevilError {
             Self::UnknownStatus(s) => write!(f, "weevil: unknown status code {s}"),
             Self::ProfileParse(msg) => write!(f, "weevil: malformed profile: {msg}"),
             Self::ReplayParse(msg) => write!(f, "weevil: malformed replay: {msg}"),
+            Self::Epistemic(msg) => write!(f, "weevil: epistemic document: {msg}"),
         }
     }
 }
