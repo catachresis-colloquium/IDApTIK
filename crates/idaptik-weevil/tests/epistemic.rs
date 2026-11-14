@@ -233,3 +233,70 @@ fn two_processes_write_identical_bytes() {
     assert_eq!(outputs[0], outputs[1]);
     assert_eq!(outputs[0], emit("decoy-lure", 200, 7));
 }
+
+/// `(contact, room, tick)` from a stated proposition, in the one form the
+/// emitter writes: `contact-<id> in room-<r> at tick <t>`.
+fn parse_located(p: &str) -> (u32, usize, u64) {
+    let rest = p.strip_prefix("contact-").expect("a contact proposition");
+    let (id, rest) = rest.split_once(" in room-").expect("a room");
+    let (room, tick) = rest.split_once(" at tick ").expect("a tick");
+    (
+        id.parse().expect("an id"),
+        room.parse().expect("a room index"),
+        tick.parse().expect("a tick"),
+    )
+}
+
+/// CAC-KERNEL §9: world truth is closed over the propositions the package
+/// states. A stated proposition absent from `world_truth` is false, so every
+/// proposition a belief or an event states must be in `world_truth` exactly
+/// when the corridor's own state makes it true on its tick.
+#[test]
+fn world_truth_is_closed_over_every_stated_proposition() {
+    let set = ProfileSet::canonical();
+    for profile_id in ["decoy-lure", "cautious-sentry"] {
+        let profile = set.get(profile_id).expect("known profile");
+        let (trace, truth) = run_trace_with_truth(200, profile, 7).expect("a trace runs");
+        let doc = parse(
+            &runner_output(&trace, &truth)
+                .expect("a document")
+                .to_canonical_bytes()
+                .expect("bytes"),
+        );
+        let atoms: BTreeSet<String> = strings(&doc["world_truth"]).into_iter().collect();
+        let pkg = &doc["package"];
+        let stated: BTreeSet<String> = pkg["events"]
+            .as_array()
+            .expect("events")
+            .iter()
+            .chain(pkg["beliefs"].as_array().expect("beliefs"))
+            .map(|x| x["proposition"].as_str().expect("a string").to_owned())
+            .collect();
+        assert!(!stated.is_empty(), "{profile_id} states something");
+        for p in &stated {
+            let (id, room, tick) = parse_located(p);
+            let at = truth
+                .iter()
+                .find(|t| t.tick == tick)
+                .expect("the world was recorded on that tick");
+            let holds = at.contacts.contains(&(id, room));
+            assert_eq!(
+                atoms.contains(p),
+                holds,
+                "{profile_id}: `{p}` is {} in the world but {} world_truth",
+                if holds { "true" } else { "false" },
+                if atoms.contains(p) {
+                    "in"
+                } else {
+                    "absent from"
+                }
+            );
+        }
+        for a in &atoms {
+            assert!(
+                stated.contains(a),
+                "{profile_id}: truth atom `{a}` is stated by nothing"
+            );
+        }
+    }
+}
