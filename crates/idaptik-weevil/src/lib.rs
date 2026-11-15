@@ -38,6 +38,15 @@
 //!   steering. See [`observation`]'s module docs.
 //! * Native pointer checks are not memory isolation. This adapter is an
 //!   in-process seam, not a security boundary against a hostile kernel.
+//!
+//! # Slice 2: the kernel models you (ABI 1.2)
+//!
+//! The kernel holds one belief about another mind, exposure: "a target knows
+//! where I am". The headless corridor states its own rule for what a contact
+//! knows ([`world::knows`]: it observes the guard on that tick, or the guard's
+//! attack on it is applied on that tick), and the runner output states the
+//! contact's own belief beside the guard's model of it, so the two can be
+//! compared ([`epistemic`]).
 
 pub mod abi;
 pub mod canonical;

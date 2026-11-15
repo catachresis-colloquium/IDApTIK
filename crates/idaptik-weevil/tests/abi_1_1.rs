@@ -18,7 +18,7 @@ fn the_linked_kernel_keeps_the_1_1_surface_and_its_mind_fingerprint() {
         (v.major as u32, v.minor as u32),
         (abi::ABI_MAJOR, abi::ABI_MINOR)
     );
-    assert!(abi::ABI_MINOR >= 1, "the mind is there from 1.1 on");
+    assert!(v.minor >= 1, "the linked kernel has the mind, from 1.1 on");
     assert_eq!(host.kernel_fingerprint(), abi::ABI_FINGERPRINT);
     assert_eq!(host.mind_fingerprint(), abi::MIND_FINGERPRINT);
     assert_eq!(abi::MIND_FINGERPRINT, 1_047_490);
