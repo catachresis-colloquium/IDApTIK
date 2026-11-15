@@ -11,9 +11,12 @@ not match the complete sorted file set.
 
 ## Provenance
 
-- Kernel: catachresis-colloquium/evil-weevil `main` at `c655f46` (ABI 1.1,
-  evil-weevil ADR-0013), built with Zig 0.16.0.
-- Validator: catachresis-colloquium/enaction-engine `main` at `03cb27b`,
+- Kernel: catachresis-colloquium/evil-weevil at `1f68271` (ABI 1.2,
+  evil-weevil ADR-0014, draft pull request 11), built with Zig 0.16.0. The
+  eight documents first written on `c655f46` (ABI 1.1) are byte-identical on
+  it except for the kernel version they name: `manifest.source` (and so
+  `manifest.digest`) and the mind trace's `producer.abi`.
+- Validator: catachresis-colloquium/enaction-engine `main` at `81fa3ed`,
   `enaction-validate`. Every document here exits 0 from it.
 - Policies: `../enaction-policies.json`.
 
