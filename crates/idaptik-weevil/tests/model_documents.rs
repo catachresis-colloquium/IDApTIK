@@ -247,9 +247,11 @@ fn false_exposure_holds_a_model_that_outlives_the_contacts_own_belief() {
     let span: Vec<(u64, &str)> = models.iter().map(|b| (tick(b), status(b))).collect();
     assert_eq!(span, [(1, "rejected"), (21, "certain"), (112, "rejected")]);
     let mine: Vec<(u64, &str)> = own.iter().map(|b| (tick(b), status(b))).collect();
-    assert_eq!(mine, [(21, "certain"), (22, "unknown")]);
+    // The contact remembers the glance at 21 for 30 ticks, so its own
+    // belief is superseded by `unknown` on 52, not on 22.
+    assert_eq!(mine, [(21, "certain"), (52, "unknown")]);
     // One model stated at 21 stands until 112, while the contact's own
-    // belief stopped holding at 22: the stale model a reader must see.
+    // belief stopped holding at 52: the stale model a reader must see.
     assert_eq!(models[2]["supersedes"], models[1]["belief_id"]);
     let (_, control, _) = emit("false-exposure-control");
     assert!(self::models(&control).is_empty());

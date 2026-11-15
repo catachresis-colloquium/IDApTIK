@@ -366,8 +366,13 @@ fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
 }
 
 /// The memory window of contact 41 in the six slice 2 model scenarios, the
-/// three scenarios and their controls alike.
-pub const MODEL_CONTACT_MEMORY: u64 = 0;
+/// three scenarios and their controls alike: 30 ticks, half a second at
+/// 60 Hz. It meets both conditions of the scenarios. In `caught` the contact
+/// glances at 101 and the guard's blows land from 116, 15 ticks later, so
+/// the contact still knows when they begin. In `false-exposure` the contact
+/// glances at 21 and forgets on 52, 60 ticks before the kernel lets its
+/// exposure go at 112, so the guard's model still goes stale.
+pub const MODEL_CONTACT_MEMORY: u64 = 30;
 
 /// The largest profile version this build understands.
 pub const PROFILE_VERSION_MAX: u32 = 1;
