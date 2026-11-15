@@ -135,6 +135,24 @@ pub struct DecoyTuning {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CorridorScript {
     pub contacts: Vec<ScriptedContact>,
+    /// ABI 1.2: a mind run of this script goes through the 40-byte model
+    /// record ([`crate::WeevilHost::tick_model`]), and the host gives the
+    /// observation cue on each contact's `observes` ticks. Whether the kernel
+    /// reads the cue is the profile's `CAP_OBSERVATION_CUES`, so a control
+    /// sets this too and withholds only the capability.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cues: bool,
+    /// The kernel fixtures' world rule for slice 2 (evil-weevil ADR-0014 §7):
+    /// while the guard advances or stalks, it closes on the kernel's target by
+    /// the proposed speed over [`crate::world::APPROACH_DIVISOR`], and it
+    /// moves on no other action. Without it, a scripted contact keeps its
+    /// distance, as in the corridor's 1.1 scenarios.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub approach: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// One scripted contact.
@@ -153,6 +171,11 @@ pub struct ScriptedContact {
     /// Ticks on which it hits the guard, and for how much health.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hits: Vec<ScriptedHit>,
+    /// Ticks on which it observes the guard: the world's schedule, read by
+    /// the world's rule of what a contact knows ([`crate::world::knows`]) and
+    /// given to the kernel as the cue in a `cues` script.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observes: Vec<u64>,
 }
 
 /// One hit on the guard.
@@ -306,6 +329,14 @@ fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
                 c.id, c.threat
             ));
         }
+        for t in &c.observes {
+            if !(c.present_from..c.present_until).contains(t) {
+                return bad(format!(
+                    "contact {} observes the guard on tick {t} while absent",
+                    c.id
+                ));
+            }
+        }
         for h in &c.hits {
             if !(c.present_from..c.present_until).contains(&h.tick) {
                 return bad(format!(
@@ -410,6 +441,12 @@ pub struct ProfileSet {
     pub the_grudge_control: Profile,
     pub the_flinch: Profile,
     pub the_flinch_control: Profile,
+    pub the_stalker: Profile,
+    pub the_stalker_control: Profile,
+    pub caught: Profile,
+    pub caught_control: Profile,
+    pub false_exposure: Profile,
+    pub false_exposure_control: Profile,
 }
 
 impl ProfileSet {
@@ -514,7 +551,11 @@ impl ProfileSet {
                 HostTuning {
                     patrol_x: Vec::new(),
                     decoy: None,
-                    script: Some(CorridorScript { contacts }),
+                    script: Some(CorridorScript {
+                        contacts,
+                        cues: false,
+                        approach: false,
+                    }),
                     ..sentry.host.clone()
                 },
             )
@@ -537,6 +578,7 @@ impl ProfileSet {
                             damage: 0.125,
                         })
                         .collect(),
+                    observes: Vec::new(),
                 },
                 ScriptedContact {
                     id: 22,
@@ -545,6 +587,7 @@ impl ProfileSet {
                     present_until: u64::MAX,
                     threat: 0.125,
                     hits: Vec::new(),
+                    observes: Vec::new(),
                 },
             ]
         };
@@ -558,6 +601,7 @@ impl ProfileSet {
                 present_until: 20,
                 threat: 0.5,
                 hits: Vec::new(),
+                observes: Vec::new(),
             }]
         };
         let the_grudge = stage("the-grudge", damage, grudge_cast());
@@ -565,6 +609,55 @@ impl ProfileSet {
         let the_grudge_control = stage("the-grudge-control", no_damage, grudge_cast());
         let the_flinch = stage("the-flinch", damage, flinch_cast(54.882_812_5));
         let the_flinch_control = stage("the-flinch-control", damage, flinch_cast(62.0));
+
+        // Slice 2, "it models you" (evil-weevil ADR-0014 §7), staged in the
+        // corridor. One contact, 41, stands 3.0 fx from the guard (24 world
+        // units at the corridor's scale: x = 74 against the guard's 50), as in
+        // the kernel's fixtures, and is there on every tick. The scenario
+        // declares CAP_OBSERVATION_CUES; its control withholds that one bit
+        // and changes nothing else, cue schedule included. Corridor ticks
+        // count from 1, the fixtures' from 0, so a glance on the fixture's
+        // tick 100 is on the corridor's tick 101.
+        let cues = abi::CAP_NAVMESH | abi::CAP_LINE_OF_SIGHT | abi::CAP_OBSERVATION_CUES;
+        let model = |id: &str, caps: u32, observes: Vec<u64>, approach: bool| {
+            Profile::build(
+                id,
+                caps,
+                4096,
+                4,
+                HostTuning {
+                    patrol_x: Vec::new(),
+                    decoy: None,
+                    script: Some(CorridorScript {
+                        contacts: vec![ScriptedContact {
+                            id: 41,
+                            x: 74.0,
+                            present_from: 0,
+                            present_until: u64::MAX,
+                            threat: 0.5,
+                            hits: Vec::new(),
+                            observes,
+                        }],
+                        cues: true,
+                        approach,
+                    }),
+                    ..sentry.host.clone()
+                },
+            )
+            .expect("canonical model scenario profile is valid")
+        };
+        // "The stalker": the contact never observes the guard, and the guard
+        // closes on it.
+        let the_stalker = model("the-stalker", cues, Vec::new(), true);
+        let the_stalker_control = model("the-stalker-control", no_damage, Vec::new(), true);
+        // "Caught": one glance while the guard stalks.
+        let caught = model("caught", cues, vec![101], true);
+        let caught_control = model("caught-control", no_damage, vec![101], true);
+        // "False exposure": one glance, then the contact looks away and keeps
+        // its distance (no approach, as in the fixture, where the range does
+        // not close).
+        let false_exposure = model("false-exposure", cues, vec![21], false);
+        let false_exposure_control = model("false-exposure-control", no_damage, vec![21], false);
 
         Self {
             cautious_sentry: sentry,
@@ -575,6 +668,12 @@ impl ProfileSet {
             the_grudge_control,
             the_flinch,
             the_flinch_control,
+            the_stalker,
+            the_stalker_control,
+            caught,
+            caught_control,
+            false_exposure,
+            false_exposure_control,
         }
     }
 
@@ -589,12 +688,18 @@ impl ProfileSet {
             "the-grudge-control" => Some(&self.the_grudge_control),
             "the-flinch" => Some(&self.the_flinch),
             "the-flinch-control" => Some(&self.the_flinch_control),
+            "the-stalker" => Some(&self.the_stalker),
+            "the-stalker-control" => Some(&self.the_stalker_control),
+            "caught" => Some(&self.caught),
+            "caught-control" => Some(&self.caught_control),
+            "false-exposure" => Some(&self.false_exposure),
+            "false-exposure-control" => Some(&self.false_exposure_control),
             _ => None,
         }
     }
 
     /// All of them, in a stable order.
-    pub fn all(&self) -> [&Profile; 8] {
+    pub fn all(&self) -> [&Profile; 14] {
         [
             &self.cautious_sentry,
             &self.aggressive_pursuer,
@@ -604,6 +709,12 @@ impl ProfileSet {
             &self.the_grudge_control,
             &self.the_flinch,
             &self.the_flinch_control,
+            &self.the_stalker,
+            &self.the_stalker_control,
+            &self.caught,
+            &self.caught_control,
+            &self.false_exposure,
+            &self.false_exposure_control,
         ]
     }
 }

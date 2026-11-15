@@ -96,7 +96,14 @@ pub struct CorridorRun {
     pub truth: Vec<TickTruth>,
     /// Empty unless the run used `ee_tick_mind`.
     pub mind: Vec<host::MindRecord>,
+    /// One record per tick when the run went through the ABI 1.2 model record
+    /// (a mind run of a `cues` script); otherwise empty.
+    pub model: Vec<host::ModelRecord>,
 }
+
+/// The scenario id a mind run of a `cues` script records: it goes through the
+/// 1.2 model record and the host's cue, a different decision sequence again.
+pub const MODEL_SCENARIO_ID: &str = "headless-corridor-model";
 
 /// The scenario id a corridor run records: a mind run is a different decision
 /// sequence from a plain one, so two of them must never replay as equal.
@@ -108,7 +115,9 @@ pub fn corridor_scenario_id(mind: bool) -> &'static str {
     }
 }
 
-/// Run the corridor through `ee_tick`, or with `mind` through `ee_tick_mind`.
+/// Run the corridor through `ee_tick`, or with `mind` through `ee_tick_mind`;
+/// a mind run of a `cues` script uses the 1.2 model record
+/// ([`WeevilHost::tick_model`]).
 pub fn run_corridor(ticks: u64, profile: &Profile, seed: u64, mind: bool) -> Result<CorridorRun> {
     let mut host = WeevilHost::init(
         profile.capabilities,
@@ -119,23 +128,25 @@ pub fn run_corridor(ticks: u64, profile: &Profile, seed: u64, mind: bool) -> Res
         1,
     )?;
     let mut world = HostWorld::canonical(profile);
-    let mut recorder = ReplayRecorder::new(header_from(
-        &host,
-        profile,
-        seed,
-        (60, 1),
-        corridor_scenario_id(mind),
-    ));
+    let scenario = if mind && world.gives_cues() {
+        MODEL_SCENARIO_ID
+    } else {
+        corridor_scenario_id(mind)
+    };
+    let mut recorder = ReplayRecorder::new(header_from(&host, profile, seed, (60, 1), scenario));
     let mut truth = Vec::with_capacity(ticks as usize);
     let mut records = Vec::new();
+    let mut models = Vec::new();
     for _ in 0..ticks {
-        let (t, record) = world.step_with(&mut host, profile, &mut recorder, mind)?;
+        let (t, record, model) = world.step_full(&mut host, profile, &mut recorder, mind)?;
         truth.push(t);
         records.extend(record);
+        models.extend(model);
     }
     Ok(CorridorRun {
         trace: recorder.finish(),
         truth,
         mind: records,
+        model: models,
     })
 }
