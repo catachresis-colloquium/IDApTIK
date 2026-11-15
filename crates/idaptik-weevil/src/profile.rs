@@ -267,7 +267,8 @@ pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
     | abi::CAP_DAMAGE_EVENTS
     | abi::CAP_SOUND_EVENTS
     | abi::CAP_VEHICLE_BOARDING
-    | abi::CAP_TERRAIN_HEIGHT;
+    | abi::CAP_TERRAIN_HEIGHT
+    | abi::CAP_OBSERVATION_CUES;
 
 /// Strictly greater than zero. NaN is not, so a NaN scale or limit is refused.
 fn is_positive(v: f64) -> bool {

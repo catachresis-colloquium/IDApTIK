@@ -17,7 +17,8 @@
 //! state rather than inheriting a predecessor's memory.
 
 use crate::abi::{
-    self, EeAgent, EeContext, EeInitDesc, EeIntent, EeMind, EeMindTrace, EeSnapshot, EeVersion,
+    self, EeAgent, EeContext, EeInitDesc, EeIntent, EeMind, EeMindTrace, EeModelTrace, EeSnapshot,
+    EeVersion,
 };
 use crate::error::{Result, WeevilError};
 use crate::fx::Fx2;
@@ -121,6 +122,8 @@ pub struct WeevilHost {
     /// [`WeevilHost::tick_mind`]. A host that never calls it never reads these.
     minds: Vec<EeMind>,
     mind_fingerprint: u64,
+    /// ABI 1.2: the fingerprint the kernel reports for `ee_model_trace`.
+    model_fingerprint: u64,
 }
 
 impl WeevilHost {
@@ -202,6 +205,8 @@ impl WeevilHost {
 
         // SAFETY: no arguments, returns by value.
         let mind_fingerprint = unsafe { abi::ee_mind_fingerprint() };
+        // SAFETY: no arguments, returns by value.
+        let model_fingerprint = unsafe { abi::ee_model_fingerprint() };
         let mut agents = vec![EeAgent::default(); max_agents as usize];
         for (i, a) in agents.iter_mut().enumerate() {
             a.rng_state = seed ^ ((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -217,6 +222,7 @@ impl WeevilHost {
             kernel_fingerprint,
             minds: vec![fresh_mind(); max_agents as usize],
             mind_fingerprint,
+            model_fingerprint,
         })
     }
 
@@ -233,6 +239,11 @@ impl WeevilHost {
     /// The fingerprint the kernel reports for the 1.1 mind structs.
     pub fn mind_fingerprint(&self) -> u64 {
         self.mind_fingerprint
+    }
+
+    /// The fingerprint the kernel reports for the 1.2 `ee_model_trace`.
+    pub fn model_fingerprint(&self) -> u64 {
+        self.model_fingerprint
     }
 
     /// One agent's mind, as the kernel last left it. Host-side only: the
@@ -358,6 +369,79 @@ impl WeevilHost {
         obs: &Observation,
         damage_source: Option<u32>,
     ) -> Result<MindOutcome> {
+        let mut trace = EeMindTrace {
+            struct_size: size_of::<EeMindTrace>() as u32,
+            ..Default::default()
+        };
+        let (intent, agent) = self.call_mind(obs, damage_source, &[], &mut trace)?;
+        let record = MindRecord::from_ee(&trace, obs.tick, false)?;
+        check_tells(&intent, &record, false)?;
+        Ok(MindOutcome {
+            intent: Intent::from_ee(&intent)?,
+            agent,
+            record,
+        })
+    }
+
+    /// ABI 1.2: [`WeevilHost::tick_mind`] with the 40-byte `ee_model_trace`,
+    /// which also returns the kernel's exposure belief and its cause.
+    ///
+    /// `observers` are the contacts the host's own rule says observe the guard
+    /// on this tick; each gets `EE_CONTACT_FLAG_OBSERVES`. Like the damage
+    /// source, a cue may come only from a contact the guard perceives this
+    /// tick, so an id that is not in `obs.contacts` is refused. The host sets
+    /// the flag whatever the declared capabilities; the kernel reads it only
+    /// under `CAP_OBSERVATION_CUES`, so a control that withholds the capability
+    /// differs from its scenario in that one bit, as the kernel's own fixtures
+    /// do.
+    ///
+    /// The model's fingerprint is checked on every call, as the mind's is.
+    pub fn tick_model(
+        &mut self,
+        obs: &Observation,
+        damage_source: Option<u32>,
+        observers: &[u32],
+    ) -> Result<ModelOutcome> {
+        if self.model_fingerprint != abi::MODEL_FINGERPRINT {
+            return Err(WeevilError::FingerprintMismatch {
+                host: abi::MODEL_FINGERPRINT,
+                kernel: self.model_fingerprint,
+            });
+        }
+        let mut model = EeModelTrace {
+            mind: EeMindTrace {
+                struct_size: size_of::<EeModelTrace>() as u32,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let (intent, agent) = self.call_mind(obs, damage_source, observers, &mut model.mind)?;
+        if model.mind.struct_size != size_of::<EeModelTrace>() as u32 {
+            return Err(WeevilError::InvalidMindTrace(format!(
+                "the kernel wrote a {}-byte record for a 40-byte one",
+                model.mind.struct_size
+            )));
+        }
+        let record = MindRecord::from_ee(&model.mind, obs.tick, true)?;
+        check_tells(&intent, &record, true)?;
+        let model = ModelRecord::from_ee(&model)?;
+        Ok(ModelOutcome {
+            intent: Intent::from_ee(&intent)?,
+            agent,
+            record,
+            model,
+        })
+    }
+
+    /// The one `ee_tick_mind` call both mind entrances make. `trace` is the
+    /// record's first member with its `struct_size` set by the caller.
+    fn call_mind(
+        &mut self,
+        obs: &Observation,
+        damage_source: Option<u32>,
+        observers: &[u32],
+        trace: &mut EeMindTrace,
+    ) -> Result<(EeIntent, AgentState)> {
         let slot = self.check_tick(obs)?;
         if self.mind_fingerprint != abi::MIND_FINGERPRINT {
             return Err(WeevilError::FingerprintMismatch {
@@ -366,9 +450,13 @@ impl WeevilHost {
             });
         }
         let mut snap: EeSnapshot = obs.to_snapshot()?;
-        if let Some(source) = damage_source {
-            let Some(i) = obs.contacts.iter().position(|c| c.id == source) else {
-                return Err(WeevilError::InvalidTarget(source));
+        let flags = damage_source
+            .into_iter()
+            .map(|id| (id, abi::CONTACT_FLAG_DAMAGE_SOURCE))
+            .chain(observers.iter().map(|id| (*id, abi::CONTACT_FLAG_OBSERVES)));
+        for (id, flag) in flags {
+            let Some(i) = obs.contacts.iter().position(|c| c.id == id) else {
+                return Err(WeevilError::InvalidTarget(id));
             };
             let slot_contact = match i {
                 0 => &mut snap.contact0,
@@ -380,16 +468,13 @@ impl WeevilHost {
                 6 => &mut snap.contact6,
                 _ => &mut snap.contact7,
             };
-            slot_contact.flags |= abi::CONTACT_FLAG_DAMAGE_SOURCE;
+            slot_contact.flags |= flag;
         }
         let mut intent = EeIntent::default();
-        let mut trace = EeMindTrace {
-            struct_size: size_of::<EeMindTrace>() as u32,
-            ..Default::default()
-        };
         // SAFETY: as in `tick`; `self.minds[slot]` and `trace` are valid, owned,
         // aligned values with `struct_size` set, and the kernel retains none of
-        // the pointers.
+        // the pointers. When `trace.struct_size` is 40, `trace` is the first
+        // member of a live `EeModelTrace`, so all 40 bytes are ours.
         let status = unsafe {
             abi::ee_tick_mind(
                 &mut self.ctx as *mut EeContext,
@@ -397,25 +482,13 @@ impl WeevilHost {
                 &mut self.agents[slot] as *mut EeAgent,
                 &mut self.minds[slot] as *mut EeMind,
                 &mut intent as *mut EeIntent,
-                &mut trace as *mut EeMindTrace,
+                trace as *mut EeMindTrace,
             )
         };
         if status != abi::STATUS_OK {
             return Err(self.status_error(status, obs.capability_mask));
         }
-        let record = MindRecord::from_ee(&trace, obs.tick)?;
-        let tells = ((intent.flags >> 4) & 0x7) as u8;
-        if tells != record.tells {
-            return Err(WeevilError::InvalidMindTrace(format!(
-                "intent tells {tells:#x} differ from the trace's {:#x}",
-                record.tells
-            )));
-        }
-        Ok(MindOutcome {
-            intent: Intent::from_ee(&intent)?,
-            agent: AgentState::from_ee(&self.agents[slot]),
-            record,
-        })
+        Ok((intent, AgentState::from_ee(&self.agents[slot])))
     }
 
     /// The checks both entrances make before calling the kernel: initialised,
@@ -459,6 +532,20 @@ impl WeevilHost {
     }
 }
 
+/// The intent's tell bits must be the trace's: bits 4..6 at 1.1, 4..7 with the
+/// 1.2 CAUGHT tell.
+fn check_tells(intent: &EeIntent, record: &MindRecord, model: bool) -> Result<()> {
+    let mask = if model { 0xF } else { 0x7 };
+    let tells = ((intent.flags >> 4) & mask) as u8;
+    if tells != record.tells {
+        return Err(WeevilError::InvalidMindTrace(format!(
+            "intent tells {tells:#x} differ from the trace's {:#x}",
+            record.tells
+        )));
+    }
+    Ok(())
+}
+
 /// A zeroed mind with its `struct_size` set, as the kernel requires.
 fn fresh_mind() -> EeMind {
     EeMind {
@@ -473,6 +560,8 @@ pub const MODE_ENGAGE: u8 = 1;
 pub const MODE_EVADE: u8 = 2;
 pub const MODE_RELOAD: u8 = 3;
 pub const MODE_INVESTIGATE: u8 = 4;
+/// ABI 1.2: stalk, ranked only by a 1.2 record under `CAP_OBSERVATION_CUES`.
+pub const MODE_STALK: u8 = 5;
 
 /// One `ee_mind_trace`, decoded and range-checked.
 ///
@@ -485,7 +574,7 @@ pub const MODE_INVESTIGATE: u8 = 4;
 pub struct MindRecord {
     pub tick: u64,
     pub target_id: u32,
-    /// Mode codes, best first. One or five long.
+    /// Mode codes, best first. One or five long, or six with stalk (1.2).
     pub ranking: Vec<u8>,
     pub selected: u8,
     pub incumbent: u8,
@@ -503,20 +592,35 @@ pub struct MindRecord {
 
 impl MindRecord {
     /// Decode a trace record, refusing any value outside its declared range.
-    fn from_ee(t: &EeMindTrace, tick: u64) -> Result<Self> {
+    /// `model` admits the 1.2 vocabulary (the stalk mode and the CAUGHT tell),
+    /// which only a 1.2 record can carry.
+    fn from_ee(t: &EeMindTrace, tick: u64, model: bool) -> Result<Self> {
+        let (max_count, max_mode, tells) = if model {
+            (
+                6,
+                MODE_STALK,
+                abi::TELL_STARTLE | abi::TELL_HESITATE | abi::TELL_FIXATE | abi::TELL_CAUGHT,
+            )
+        } else {
+            (
+                5,
+                MODE_INVESTIGATE,
+                abi::TELL_STARTLE | abi::TELL_HESITATE | abi::TELL_FIXATE,
+            )
+        };
         let bad = |what: String| Err(WeevilError::InvalidMindTrace(what));
         if t.tick != tick {
             return bad(format!("trace tick {} for observation tick {tick}", t.tick));
         }
         let count = t.ranking_count as usize;
-        if !(1..=5).contains(&count) {
+        if !(1..=max_count).contains(&count) {
             return bad(format!("ranking_count {count}"));
         }
         let ranking: Vec<u8> = (0..count)
             .map(|i| ((t.ranking >> (4 * i)) & 0xF) as u8)
             .collect();
         for &mode in ranking.iter().chain([t.selected, t.incumbent].iter()) {
-            if mode > MODE_INVESTIGATE {
+            if mode > max_mode {
                 return bad(format!("mode code {mode}"));
             }
         }
@@ -538,7 +642,7 @@ impl MindRecord {
         if t.attention > abi::MASS_FULL {
             return bad(format!("attention {}", t.attention));
         }
-        if t.tells & !(abi::TELL_STARTLE | abi::TELL_HESITATE | abi::TELL_FIXATE) != 0 {
+        if t.tells & !tells != 0 {
             return bad(format!("tells {:#x}", t.tells));
         }
         Ok(Self {
@@ -569,6 +673,68 @@ pub struct MindOutcome {
     pub intent: Intent,
     pub agent: AgentState,
     pub record: MindRecord,
+}
+
+/// The 1.2 part of an `ee_model_trace`, decoded and range-checked: the
+/// kernel's one belief about another mind, "a target knows where I am".
+///
+/// The lifetime counter is not here: the kernel keeps it in `ee_agent.flags`
+/// and does not put it in the trace, because it is the belief's clock, not the
+/// belief.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelRecord {
+    /// The belief as the tick closed.
+    pub exposure: bool,
+    /// The belief as the tick opened.
+    pub exposure_prev: bool,
+    /// `abi::EXPOSURE_CAUSE_*`: `NONE` exactly when the belief did not change.
+    pub cause: u8,
+    /// The observer for a cue, the struck target for an own attack, else 0.
+    pub contact: u16,
+}
+
+impl ModelRecord {
+    fn from_ee(m: &EeModelTrace) -> Result<Self> {
+        let bad = |what: String| Err(WeevilError::InvalidMindTrace(what));
+        if m.exposure > 1 || m.exposure_prev > 1 {
+            return bad(format!(
+                "exposure {} (previous {})",
+                m.exposure, m.exposure_prev
+            ));
+        }
+        if m.exposure_cause > abi::EXPOSURE_CAUSE_EXPIRY {
+            return bad(format!("exposure cause {}", m.exposure_cause));
+        }
+        if (m.exposure != m.exposure_prev) != (m.exposure_cause != abi::EXPOSURE_CAUSE_NONE) {
+            return bad(format!(
+                "exposure {} -> {} with cause {}",
+                m.exposure_prev, m.exposure, m.exposure_cause
+            ));
+        }
+        if m.reserved0 != 0 || m.reserved1 != 0 {
+            return bad("a reserved byte of the model record is not 0".to_owned());
+        }
+        Ok(Self {
+            exposure: m.exposure == 1,
+            exposure_prev: m.exposure_prev == 1,
+            cause: m.exposure_cause,
+            contact: m.exposure_contact,
+        })
+    }
+
+    /// Whether the belief changed on this tick.
+    pub fn changed(&self) -> bool {
+        self.exposure != self.exposure_prev
+    }
+}
+
+/// One model tick's outcome: the mind tick's, and the model record.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelOutcome {
+    pub intent: Intent,
+    pub agent: AgentState,
+    pub record: MindRecord,
+    pub model: ModelRecord,
 }
 
 #[cfg(test)]
@@ -618,6 +784,7 @@ mod tests {
             kernel_fingerprint: 0,
             minds: vec![fresh_mind(); 2],
             mind_fingerprint: 0,
+            model_fingerprint: 0,
         };
         assert_eq!(
             host.tick(&obs(9, 1)).unwrap_err(),
@@ -642,6 +809,7 @@ mod tests {
             kernel_fingerprint: 0,
             minds: vec![fresh_mind(); 2],
             mind_fingerprint: 0,
+            model_fingerprint: 0,
         };
         assert_eq!(
             host.tick(&obs(0, 0)).unwrap_err(),

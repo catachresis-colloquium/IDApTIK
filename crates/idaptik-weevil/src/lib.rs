@@ -54,7 +54,9 @@ pub mod world;
 
 pub use error::{Result, WeevilError};
 pub use fx::Fx2;
-pub use host::{AgentState, Memory, MindOutcome, MindRecord, TickOutcome, WeevilHost};
+pub use host::{
+    AgentState, Memory, MindOutcome, MindRecord, ModelOutcome, ModelRecord, TickOutcome, WeevilHost,
+};
 pub use intent::{Action, Intent, IntentFlags};
 pub use observation::{Contact, ContactSource, Observation};
 pub use profile::{HostTuning, Profile, ProfileSet};
