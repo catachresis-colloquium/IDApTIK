@@ -18,9 +18,9 @@ The architectural boundary is unchanged and is the thing to keep intact:
 | --- | --- |
 | `crates/idaptik-weevil/` | The native adapter: ABI mirror, fx maths, errors, observation/intent conversion, profile, host, replay, and a headless corridor world. |
 | `crates/idaptik-weevil/src/epistemic.rs` | The guard's beliefs as an `enaction-runner-output/1` document (`--emit-epistemic`). |
-| `crates/idaptik-weevil/src/mind_trace.rs` | The kernel's ABI 1.1 trace records as an `enaction-mind-trace/1` document (`--emit-mind-trace`). |
+| `crates/idaptik-weevil/src/mind_trace.rs` | The kernel's ABI 1.1 trace records as an `enaction-mind-trace/1` document (`--emit-mind-trace`), with the 1.2 vocabulary for a model run. |
 | `crates/idaptik-weevil/src/canonical.rs` | RFC 8785 canonical bytes and SHA-256 for both documents. |
-| `crates/idaptik-weevil/tests/fixtures/enaction/` | The committed documents of eight runs, pinned to the driver by `tests/golden.rs`. |
+| `crates/idaptik-weevil/tests/fixtures/enaction/` | The committed documents of twelve runs (22 files), pinned to the driver by `tests/golden.rs`. |
 | `tools/verify_abi_mirror.py` | The ABI mirror check: `abi.rs` against the generated `ee.h`, every field, offset and size. |
 | `crates/idaptik-core/src/scenario/guard_brain.rs` | The game's own seam: plain-data perception and decision types, no dependency on the kernel. |
 | `crates/idaptik-core/src/scenario/sim/mod.rs` | `guard_perception`, `is_live_target`, `apply_guard_decision`, `GuardBrainKind` selection. |
@@ -87,9 +87,11 @@ cargo --version && rustc --version
 
 ## 1. Build the kernel
 
-The adapter mirrors **ABI 1.1** (evil-weevil ADR-0013, the mind), so it needs
-evil-weevil `main` at `c655f46` or later. A 1.0 kernel does not export
-`ee_tick_mind` and the adapter will not link against it.
+The adapter mirrors **ABI 1.2** (evil-weevil ADR-0014, "it models you", on top
+of ADR-0013's mind), so it needs evil-weevil pull request 11
+(`marina/weevil-c1-mind-slice-2`, `f7c333d`) until that merges. A 1.1 kernel
+does not export `ee_model_fingerprint` and the adapter will not link against
+it; a 1.0 kernel does not export `ee_tick_mind` either.
 
 Evil Weevil is a Zig + Idris2 project. From a checkout of
 `catachresis-colloquium/evil-weevil`:
@@ -136,10 +138,10 @@ python3 tools/verify_abi_mirror.py \
     crates/idaptik-weevil/src/abi.rs
 ```
 
-It lays out all nine structs (the seven 1.0 ones, `ee_mind` and `ee_mind_trace`)
-in both files and fails on any field, offset or size that differs. `abi.rs` also
-carries a compile-time assert for every 1.1 size and offset, so a moved field
-fails the Rust build as well.
+It lays out all ten structs (the seven 1.0 ones, `ee_mind`, `ee_mind_trace` and
+the 1.2 `ee_model_trace`) in both files and fails on any field, offset or size
+that differs. `abi.rs` also carries a compile-time assert for every 1.1 and 1.2
+size and offset, so a moved field fails the Rust build as well.
 
 ## 3. Run the headless replay
 
@@ -270,8 +272,8 @@ bump is already well-formed; the claim is stated rather than implied.
 The kernel's policy weights are **not** profile fields (ADR-0010). Profiles do
 not retune the kernel's numbers.
 
-The other five stage scenarios in the headless corridor and are not read by the
-game:
+The other eleven stage scenarios in the headless corridor and are not read by
+the game:
 
 | Profile | What it stages | Measured, 200 ticks, seed 7 |
 | --- | --- | --- |
@@ -280,6 +282,12 @@ game:
 | `the-grudge-control` | The same cast without `CAP_DAMAGE_EVENTS`. | No override. |
 | `the-flinch` | C (31) close by on ticks 10 to 19. | One startle, at tick 10. |
 | `the-flinch-control` | C at 1.5 fx instead. | No startle. |
+| `the-stalker` | Slice 2: contact 41 at 3.0 fx, never observes the guard; the guard closes on it. | Stalks ticks 1 to 160; first engage at tick 161, at 0.5 fx. |
+| `the-stalker-control` | The same without `CAP_OBSERVATION_CUES`. | First engage at tick 65, at 1.0 fx. |
+| `caught` | One glance, at tick 101, while the guard stalks. | One `caught` tell, at 101; never stalks again; engages at 116. |
+| `caught-control` | The same without the capability. | No `caught`; its mind trace is the stalker control's, byte for byte. |
+| `false-exposure` | One glance, at tick 21; the contact then looks away and keeps its distance. | Exposed and not known on 90 ticks, 22 to 111; expires at 112. |
+| `false-exposure-control` | The same without the capability. | 0 such ticks. |
 
 The `the-*` profiles carry a `CorridorScript` (`HostTuning::script`): contacts
 present for a window of ticks, standing still, that may hit the guard. The cast
@@ -287,6 +295,17 @@ replaces the corridor's default player and decoy, and is in the world's truth
 while present. The guard holds at x = 50 and each contact stands at the
 fixture's fx distance at the corridor's scale (8 world units to 1.0 fx). The
 override and startle figures are the kernel fixtures' own.
+
+The six slice 2 profiles reproduce evil-weevil ADR-0014's measured figures
+exactly, one tick later: corridor ticks count from 1 and the fixtures' from 0.
+Their script has two more switches. `cues` runs a mind run through the 1.2
+model record (`WeevilHost::tick_model`) and sets `EE_CONTACT_FLAG_OBSERVES` on a
+contact's `observes` ticks, for a contact the guard perceives; each control
+sets the same flag and withholds only `CAP_OBSERVATION_CUES`, as the kernel's
+own controls do. `approach` is the fixtures' world rule: while the guard
+advances or stalks it closes on its target by the proposed speed over 32, and
+it moves on no other action. `false-exposure` has no `approach`, because in the
+fixture the range does not close.
 
 ## 7. The developer view
 
@@ -325,6 +344,56 @@ against a 1.1 build.
 
 The Bevy driver still calls `tick` only; the game does not run the mind yet.
 
+## 9a. The model (ABI 1.2)
+
+`WeevilHost::tick_model(obs, damage_source, observers)` passes the 40-byte
+`ee_model_trace` through the unchanged `ee_tick_mind` and returns the kernel's
+exposure ("a target knows where I am"), its value as the tick opened, its
+cause (`CUE`, `OWN_ATTACK`, `EXPIRY`, or `NONE` exactly when it did not
+change) and the contact behind it. The model fingerprint (69857) is checked on
+every call. The new mirror items are `CAP_OBSERVATION_CUES` (bit 10),
+`CONTACT_FLAG_OBSERVES` (2), `AGENT_FLAG_EXPOSED` (16) and the lifetime bits
+8..15 of `ee_agent.flags`, `AGENT_MODE_STALK` (5, `TAKE_COVER`),
+`INTENT_FLAG_CAUGHT` (128) and `TELL_CAUGHT` (8). `tick` and `tick_mind` are
+unchanged, so every earlier run is unchanged too: the ten earlier documents
+differ from their 1.1 bytes in the kernel label only.
+
+The profile validator refuses any capability bit the mirror does not define,
+so no profile can declare bit 10 by accident, nor `0xFFFF_FFFF` (ADR-0014's
+"a host that declares every bit declares the future").
+
+**What a contact knows** is the world's rule, in `world.rs`, used everywhere:
+a contact knows where the guard is on tick `t` exactly when it observes the
+guard on `t`, or the guard's attack on it is applied on `t`. The kernel's
+belief never enters it, so the two can differ, and `tests/models.rs` counts
+where they do.
+
+A model run's runner output states four separate facts about one proposition
+without a tick, `guard-0 in room-0`:
+
+* the world: `world_truth`, closed over every order-0 proposition and event,
+  with no atom for a model;
+* the contact's own belief: order 0, `bearer` `contact-41`, `certain` from the
+  tick it comes to know and superseded by `unknown` from the tick it stops;
+* the guard's model of it: `holders = ["guard-0"]`, the same bearer and
+  proposition, `certain` while exposure is true and `rejected` while it is
+  false, stated on the first claim and then only when exposure changes, citing
+  `contact-41 observes guard-0 at tick T` (cue), `guard-0 attacked contact-41
+  at tick T` (own attack) or the guard's perception that tick (expiry, as for
+  decay);
+* whether the guard is right: derived by the reader (CAC-KERNEL §9), never
+  asserted.
+
+Check a model run under the depth-1 policies:
+
+```sh
+enaction-validate --policies crates/idaptik-weevil/tests/fixtures/enaction-policies-models.json \
+    --mind-trace /tmp/mind.json < /tmp/runner.json
+```
+
+Under the depth-0 `enaction-policies.json` a scenario's runner output is
+refused as `nesting-bounded`.
+
 ## 10. Known limitations
 
 * The ABI bearing is a `u16` the kernel zero-extends to `i32`. A **signed**
@@ -344,3 +413,9 @@ The Bevy driver still calls `tick` only; the game does not run the mind yet.
 * The scripted contacts report `ContactSource::Player`, the closest term the
   closed vocabulary has for a person who is not the infiltrator.
 * Native pointer checks are not memory isolation.
+* The kernel's exposure is about "a target", not one target (ADR-0014 leaves a
+  per-target model to the owner). The corridor's model scenarios have one
+  contact, so the bearer of every model is that contact; an expiry names no
+  contact and keeps the bearer of the model it ends.
+* The contact's position proposition has no tick, so a model run whose guard
+  changes room is refused rather than given a truth atom it cannot decide.

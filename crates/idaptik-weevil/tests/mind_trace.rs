@@ -76,7 +76,9 @@ fn the_document_is_canonical_one_record_per_tick_in_kernel_vocabulary() {
     );
     assert_eq!(mind["contract"], "enaction-mind-trace/1");
     assert_eq!(mind["producer"]["kernel"], "evil-weevil");
-    assert_eq!(mind["producer"]["abi"], "1.1");
+    // The linked kernel's version: a 1.1 run on the 1.2 kernel is labelled
+    // with the kernel that ran it.
+    assert_eq!(mind["producer"]["abi"], "1.2");
     let v = &mind["vocabulary"];
     assert_eq!(
         names(&v["affect_tokens"]),

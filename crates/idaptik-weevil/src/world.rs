@@ -10,11 +10,32 @@
 //! The architecture is the same as the real integration: the world owns truth,
 //! physics, collision and action application; the kernel owns memory and
 //! proposes intents. Whatever this model does, the game does authoritatively.
+//!
+//! # What a contact knows (slice 2)
+//!
+//! The kernel's ABI 1.2 holds one belief about another mind: *exposure*, "a
+//! target knows where I am" (evil-weevil ADR-0014). To show whether that
+//! belief is right, the world needs its own rule for what a contact knows.
+//! The rule is the world's, evaluated on every tick from the corridor's own
+//! state, and the kernel's belief never enters it, so the two can differ:
+//!
+//! > **A contact knows where the guard is on tick `t` exactly when it observes
+//! > the guard on tick `t` (its scripted `observes` schedule), or the guard's
+//! > attack on it is applied on tick `t`.**
+//!
+//! Nothing else gives knowledge and nothing makes it last: a contact that
+//! looks away on the next tick, and is not struck, no longer knows. This is
+//! [`knows`], over the [`TickTruth`] of that tick, and it is used everywhere
+//! a contact's knowledge is stated or counted. "Applied" means the host
+//! accepted the kernel's `ATTACK` on that contact while it was present in the
+//! corridor; the blow reveals the striker on the tick it lands. The kernel
+//! counts its own attack as evidence too, but it keeps the belief for its
+//! whole lifetime, and the world does not.
 
 use crate::error::Result;
 use crate::fx::{Fx2, from_fx, to_fx};
-use crate::host::MindRecord;
 use crate::host::{AgentState, WeevilHost};
+use crate::host::{MindRecord, ModelRecord};
 use crate::intent::{Action, Intent};
 use crate::observation::{Contact, ContactSource, Observation};
 use crate::profile::{Profile, ScriptedContact};
@@ -68,6 +89,23 @@ pub struct HostWorld {
     scripted: Option<Vec<ScriptedContact>>,
     /// The scripted contacts that hit the guard on the current tick.
     hits_this_tick: Vec<u32>,
+    /// A `cues` script: mind runs go through the 1.2 model record.
+    cues: bool,
+    /// An `approach` script: the kernel fixtures' movement rule.
+    approach: bool,
+}
+
+/// The kernel fixtures' closing rule (evil-weevil ADR-0014 §7): while the agent
+/// advances or stalks, the range closes by `speed × 2048 / 65536`, that is by
+/// the proposed speed over 32. `2048` is the fixtures' `CLOSE_STEP`, a
+/// constant of their world, not of the kernel.
+pub const APPROACH_DIVISOR: f64 = 32.0;
+
+/// The world's rule for what a contact knows (see the module docs): on the
+/// tick `truth` records, `contact` knows where the guard is exactly when it
+/// observes the guard or the guard's attack on it was applied.
+pub fn knows(truth: &TickTruth, contact: u32) -> bool {
+    truth.observers.contains(&contact) || truth.struck.contains(&contact)
 }
 
 /// The guard's host-side state.
@@ -132,12 +170,16 @@ impl HostWorld {
             profile_scale: 1.0,
             scripted: None,
             hits_this_tick: Vec::new(),
+            cues: false,
+            approach: false,
         };
         w.profile_scale = profile.host.fx_per_world_unit;
         if let Some(script) = &profile.host.script {
             w.player_visible.clear();
             w.decoy = None;
             w.scripted = Some(script.contacts.clone());
+            w.cues = script.cues;
+            w.approach = script.approach;
         }
         w
     }
@@ -353,8 +395,16 @@ impl HostWorld {
         (to_fx(speed_world), false)
     }
 
+    /// Whether a mind run of this world goes through the 1.2 model record.
+    pub fn gives_cues(&self) -> bool {
+        self.cues
+    }
+
     /// Apply a validated intent. This is the host's authoritative application.
     pub fn apply(&mut self, intent: &Intent, profile: &Profile) -> AppliedEffect {
+        if self.approach {
+            return self.apply_approach(intent, profile);
+        }
         // The movement limit is a *world* limit, so it is applied AFTER the
         // fx→world conversion. Clamping the kernel's fx speed against the fx
         // form of the limit instead compares the kernel's 1.0-fx advance
@@ -450,6 +500,58 @@ impl HostWorld {
         }
     }
 
+    /// [`HostWorld::apply`] under the kernel fixtures' world rule: the guard
+    /// closes on the kernel's target while it advances or stalks, by the
+    /// proposed speed over [`APPROACH_DIVISOR`] (within the profile's movement
+    /// limit), and it moves on no other action. An attack is applied where
+    /// the guard stands.
+    fn apply_approach(&mut self, intent: &Intent, profile: &Profile) -> AppliedEffect {
+        let hold = |reason: &str| AppliedEffect {
+            moved: false,
+            speed_applied: 0,
+            blocked: false,
+            reason: reason.to_owned(),
+        };
+        let target = self.resolve_target(intent, profile);
+        match intent.action {
+            Action::Advance | Action::TakeCover => {
+                let Some(x) = target else {
+                    return hold("approach-no-target");
+                };
+                let step = (from_fx(intent.speed.max(0))
+                    / APPROACH_DIVISOR
+                    / profile.host.fx_per_world_unit)
+                    .min(profile.host.max_speed_world);
+                let before = self.guard.x;
+                let (applied, blocked) = if step > 0.0 {
+                    self.move_toward(x, step)
+                } else {
+                    (0, false)
+                };
+                AppliedEffect {
+                    moved: (self.guard.x - before).abs() > f64::EPSILON,
+                    speed_applied: applied,
+                    blocked,
+                    reason: if intent.action == Action::TakeCover {
+                        "stalk-approach"
+                    } else {
+                        "advance-approach"
+                    }
+                    .to_owned(),
+                }
+            }
+            Action::Attack => match target {
+                Some(_) => hold("attack"),
+                None => hold("attack-invalid-target"),
+            },
+            Action::Reload => {
+                self.guard.ammo = 3.0;
+                hold("reload")
+            }
+            _ => hold("hold"),
+        }
+    }
+
     /// Resolve an intent's target id to a world x, refusing ids no live entity
     /// owns. This is the host's authoritative target validation.
     fn resolve_target(&self, intent: &Intent, _profile: &Profile) -> Option<f64> {
@@ -496,6 +598,21 @@ impl HostWorld {
         recorder: &mut ReplayRecorder,
         mind: bool,
     ) -> Result<(TickTruth, Option<MindRecord>)> {
+        self.step_full(host, profile, recorder, mind)
+            .map(|(truth, record, _)| (truth, record))
+    }
+
+    /// [`HostWorld::step_with`], also returning the tick's model record when a
+    /// mind run of a `cues` script went through the 1.2 entrance. The cue is
+    /// given for every contact the world says observes the guard on this tick
+    /// and the guard perceives: the host cannot report a gaze it cannot see.
+    pub fn step_full(
+        &mut self,
+        host: &mut WeevilHost,
+        profile: &Profile,
+        recorder: &mut ReplayRecorder,
+        mind: bool,
+    ) -> Result<(TickTruth, Option<MindRecord>, Option<ModelRecord>)> {
         self.advance_script();
         let obs = self.observation(profile);
         let mut truth = self.truth();
@@ -511,11 +628,20 @@ impl HostWorld {
             mode: 0,
             flags: 0,
         });
-        let (intent, record) = if mind {
+        let cues: Vec<u32> = truth
+            .observers
+            .iter()
+            .copied()
+            .filter(|id| truth.visible.contains(id))
+            .collect();
+        let (intent, record, model) = if mind && self.cues {
+            let m = host.tick_model(&obs, self.damage_source(&obs), &cues)?;
+            (m.intent, Some(m.record), Some(m.model))
+        } else if mind {
             let m = host.tick_mind(&obs, self.damage_source(&obs))?;
-            (m.intent, Some(m.record))
+            (m.intent, Some(m.record), None)
         } else {
-            (host.tick(&obs)?.intent, None)
+            (host.tick(&obs)?.intent, None, None)
         };
 
         // Host-side validation of the proposal. The kernel's speed is advisory
@@ -533,6 +659,16 @@ impl HostWorld {
             }
         };
 
+        // The world's record of a blow: the host accepted the kernel's attack
+        // on a scripted contact that is in the corridor, and applied it.
+        if accepted
+            && intent.action == Action::Attack
+            && applied.reason == "attack"
+            && self.scripted_present(intent.target_id).is_some()
+        {
+            truth.struck.push(intent.target_id);
+        }
+
         recorder.record(ReplayEntry {
             tick: self.tick,
             agent_id: obs.agent_id,
@@ -543,7 +679,7 @@ impl HostWorld {
             applied,
             note: String::new(),
         });
-        Ok((truth, record))
+        Ok((truth, record, model))
     }
 
     fn target_is_live(&self, id: u32) -> bool {
@@ -577,6 +713,12 @@ pub struct TickTruth {
     /// The guard's health and ammunition after this tick's hits, in fx.
     pub guard_health: i32,
     pub guard_ammo: i32,
+    /// The scripted contacts that observe the guard this tick, by their
+    /// `observes` schedule, whether or not the guard perceives them.
+    pub observers: Vec<u32>,
+    /// The scripted contacts the guard's attack was applied to this tick.
+    /// Filled after the host applies the tick's intent.
+    pub struck: Vec<u32>,
 }
 
 impl HostWorld {
@@ -603,6 +745,13 @@ impl HostWorld {
                 contacts.push((c.id, self.room_at(c.x)));
             }
         }
+        let observers = self
+            .scripted
+            .iter()
+            .flatten()
+            .filter(|c| present(c, self.tick) && c.observes.contains(&self.tick))
+            .map(|c| c.id)
+            .collect();
         TickTruth {
             tick: self.tick,
             guard_room: self.room_at(self.guard.x),
@@ -611,6 +760,8 @@ impl HostWorld {
             hits: self.hits_this_tick.clone(),
             guard_health: to_fx(self.guard.health),
             guard_ammo: to_fx(self.guard.ammo),
+            observers,
+            struck: Vec::new(),
         }
     }
 }

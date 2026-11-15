@@ -102,7 +102,7 @@ fn run() -> Result<()> {
     let set = ProfileSet::canonical();
     let Some(profile) = set.get(&profile_id) else {
         eprintln!(
-            "unknown profile '{profile_id}'; known: cautious-sentry, aggressive-pursuer, equipment-specialist, decoy-lure, the-grudge, the-grudge-control, the-flinch, the-flinch-control"
+            "unknown profile '{profile_id}'; known: cautious-sentry, aggressive-pursuer, equipment-specialist, decoy-lure, the-grudge, the-grudge-control, the-flinch, the-flinch-control, the-stalker, the-stalker-control, caught, caught-control, false-exposure, false-exposure-control"
         );
         std::process::exit(2);
     };
