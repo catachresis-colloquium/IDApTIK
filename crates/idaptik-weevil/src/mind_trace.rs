@@ -12,7 +12,7 @@
 //! * the affect token, the attention mass, and `caused_by`: when the token
 //!   differs from the one the tick opened with, the ids of the events in the
 //!   paired runner output that the kernel's `cause` names (see
-//!   [`crate::epistemic::runner_output_with_causes`]); otherwise none;
+//!   [`crate::epistemic::runner_output_with_models`]); otherwise none;
 //! * the ranking of candidates, best first, the incumbent and the selected
 //!   candidate, and the target when the decision has one;
 //! * the tells.
@@ -24,12 +24,13 @@
 //!
 //! The vocabularies are declared in the kernel's own order: tokens by
 //! `EE_AFFECT_*`, candidates by mode code (advance 0, engage 1, evade 2,
-//! reload 3, investigate 4), tells by `EE_TELL_*` bit.
+//! reload 3, investigate 4, and for a model run stalk 5), tells by
+//! `EE_TELL_*` bit (startle, hesitate, fixate, and for a model run caught).
 
 use crate::CorridorRun;
 use crate::abi;
 use crate::canonical::to_jcs;
-use crate::epistemic::{PROFILE_ID, RunnerOutput, runner_output_with_causes};
+use crate::epistemic::{PROFILE_ID, RunnerOutput, runner_output_with_models};
 use crate::error::{Result, WeevilError};
 use crate::host::MindRecord;
 use serde::Serialize;
@@ -39,13 +40,24 @@ pub const MIND_TRACE_CONTRACT: &str = "enaction-mind-trace/1";
 
 /// Affect tokens, indexed by `EE_AFFECT_*`.
 pub const AFFECT_TOKENS: [&str; 4] = ["calm", "wary", "afraid", "angry"];
-/// Candidates, indexed by the kernel's mode code.
-pub const CANDIDATES: [&str; 5] = ["advance", "engage", "evade", "reload", "investigate"];
-/// Tells, in `EE_TELL_*` bit order.
-pub const TELLS: [(u8, &str); 3] = [
+/// Candidates, indexed by the kernel's mode code. A model run (ABI 1.2)
+/// declares all six; any other mind run declares the first five, the 1.1
+/// vocabulary, because it cannot rank stalk.
+pub const CANDIDATES: [&str; 6] = [
+    "advance",
+    "engage",
+    "evade",
+    "reload",
+    "investigate",
+    "stalk",
+];
+/// Tells, in `EE_TELL_*` bit order. A model run declares all four; any other
+/// mind run the first three.
+pub const TELLS: [(u8, &str); 4] = [
     (abi::TELL_STARTLE, "startle"),
     (abi::TELL_HESITATE, "hesitate"),
     (abi::TELL_FIXATE, "fixate"),
+    (abi::TELL_CAUGHT, "caught"),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -116,11 +128,30 @@ fn mind(msg: String) -> WeevilError {
     WeevilError::Epistemic(msg)
 }
 
-fn candidate(mode: u8) -> Result<String> {
-    CANDIDATES
+/// The terms one run declares: the first `candidates` candidates and the
+/// first `tells` tells, in the kernel's order.
+#[derive(Debug, Clone, Copy)]
+struct Terms {
+    candidates: usize,
+    tells: usize,
+}
+
+/// ABI 1.1: five candidates and three tells.
+const TERMS_1_1: Terms = Terms {
+    candidates: 5,
+    tells: 3,
+};
+/// ABI 1.2, a model run: stalk and caught are declared too.
+const TERMS_1_2: Terms = Terms {
+    candidates: 6,
+    tells: 4,
+};
+
+fn candidate(terms: Terms, mode: u8) -> Result<String> {
+    CANDIDATES[..terms.candidates]
         .get(usize::from(mode))
         .map(|s| (*s).to_owned())
-        .ok_or_else(|| mind(format!("mode code {mode} has no candidate")))
+        .ok_or_else(|| mind(format!("mode code {mode} has no declared candidate")))
 }
 
 fn token(code: u8) -> Result<String> {
@@ -131,7 +162,9 @@ fn token(code: u8) -> Result<String> {
 }
 
 /// Both documents of one run through the mind: the runner output, with the
-/// events every affect change cites, and the mind trace that cites them.
+/// events every affect change cites, and the mind trace that cites them. A
+/// model run (one with exposure records) declares the ABI 1.2 vocabulary and
+/// its runner output carries the contact's beliefs and the guard's models.
 pub fn documents(run: &CorridorRun) -> Result<(RunnerOutput, MindTrace)> {
     if run.mind.len() != run.trace.entries.len() {
         return Err(mind(format!(
@@ -140,11 +173,17 @@ pub fn documents(run: &CorridorRun) -> Result<(RunnerOutput, MindTrace)> {
             run.trace.entries.len()
         )));
     }
-    let (runner, causes) = runner_output_with_causes(&run.trace, &run.truth, &run.mind)?;
+    let (runner, causes) =
+        runner_output_with_models(&run.trace, &run.truth, &run.mind, &run.exposure)?;
+    let terms = if run.exposure.is_empty() {
+        TERMS_1_1
+    } else {
+        TERMS_1_2
+    };
     let hdr = &run.trace.header;
     let mut ticks = Vec::with_capacity(run.mind.len());
     for ((entry, record), caused_by) in run.trace.entries.iter().zip(&run.mind).zip(causes) {
-        ticks.push(tick_record(entry.agent_id, record, caused_by)?);
+        ticks.push(tick_record(terms, entry.agent_id, record, caused_by)?);
     }
     let trace = MindTrace {
         contract: MIND_TRACE_CONTRACT.to_owned(),
@@ -158,15 +197,26 @@ pub fn documents(run: &CorridorRun) -> Result<(RunnerOutput, MindTrace)> {
         },
         vocabulary: Vocabulary {
             affect_tokens: AFFECT_TOKENS.iter().map(|s| (*s).to_owned()).collect(),
-            candidates: CANDIDATES.iter().map(|s| (*s).to_owned()).collect(),
-            tells: TELLS.iter().map(|(_, s)| (*s).to_owned()).collect(),
+            candidates: CANDIDATES[..terms.candidates]
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect(),
+            tells: TELLS[..terms.tells]
+                .iter()
+                .map(|(_, s)| (*s).to_owned())
+                .collect(),
         },
         ticks,
     };
     Ok((runner, trace))
 }
 
-fn tick_record(agent: u32, r: &MindRecord, caused_by: Vec<u64>) -> Result<TickRecord> {
+fn tick_record(
+    terms: Terms,
+    agent: u32,
+    r: &MindRecord,
+    caused_by: Vec<u64>,
+) -> Result<TickRecord> {
     let changed = r.token != r.token_prev;
     if changed == caused_by.is_empty() {
         return Err(mind(format!(
@@ -175,6 +225,13 @@ fn tick_record(agent: u32, r: &MindRecord, caused_by: Vec<u64>) -> Result<TickRe
             r.token_prev,
             r.token,
             caused_by.len()
+        )));
+    }
+    let declared: u8 = TELLS[..terms.tells].iter().map(|(bit, _)| bit).sum();
+    if r.tells & !declared != 0 {
+        return Err(mind(format!(
+            "tick {}: tells {:#x} outside the declared vocabulary",
+            r.tick, r.tells
         )));
     }
     Ok(TickRecord {
@@ -189,13 +246,13 @@ fn tick_record(agent: u32, r: &MindRecord, caused_by: Vec<u64>) -> Result<TickRe
             ranking: r
                 .ranking
                 .iter()
-                .map(|m| candidate(*m))
+                .map(|m| candidate(terms, *m))
                 .collect::<Result<_>>()?,
-            incumbent: candidate(r.incumbent)?,
-            selected: candidate(r.selected)?,
+            incumbent: candidate(terms, r.incumbent)?,
+            selected: candidate(terms, r.selected)?,
             target: (r.target_id != 0).then(|| format!("contact-{}", r.target_id)),
         },
-        tells: TELLS
+        tells: TELLS[..terms.tells]
             .iter()
             .filter(|(bit, _)| r.tells & bit != 0)
             .map(|(_, name)| (*name).to_owned())

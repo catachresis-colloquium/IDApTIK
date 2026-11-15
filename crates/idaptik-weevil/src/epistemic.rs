@@ -49,11 +49,52 @@
 //! the validator, never carried in the document); the thresholds below are
 //! the ones `tests/fixtures/enaction-policies.json` declares, and a test keeps
 //! the two equal.
+//!
+//! # The guard's model of a contact
+//!
+//! A run through the ABI 1.2 model trace (a model scenario, see
+//! [`crate::profile::CorridorScript::model`]) adds, for its one contact `C`,
+//! two kinds of belief about one proposition, `P = "guard-0 in room-R"`, with
+//! `R` the guard's room. `P` carries no tick: time is in `valid_from` and
+//! `supersedes`, so one model can outlive a change of the contact's own
+//! belief. The guard must stay in one room for the whole run, or `P` would have
+//! no single truth value and the emitter refuses.
+//!
+//! * **What `C` believes** (order 0, `bearer` `C`, no `holders`), from the
+//!   world's rule in [`crate::world`] ("What a contact knows"), never from the
+//!   kernel. On the first tick `C` knows, a `certain` belief `[10000, 10000]`
+//!   cites what `C` perceived: its own sighting of the guard
+//!   (`observation`, `P`), or the attack it took (`action_outcome`,
+//!   `guard-0 attacked C at tick T`). On the first tick it stops knowing, an
+//!   `unknown` belief `[0, 10000]` supersedes it and cites `C`'s observation of
+//!   `P` with confidence 0, as `conformance/tom/v1` writes it. Nothing is
+//!   stated while `C` has never known: a missing own belief means `C` does
+//!   not hold `P` (CAC-KERNEL §9).
+//! * **What the guard thinks `C` believes** (order 1, `holders`
+//!   `["guard-0"]`, `bearer` `C`, the same `P`), from the kernel's exposure:
+//!   `certain` `[10000, 10000]` while exposure is true, `rejected` `[0, 0]`
+//!   while it is false. The first model is stated on the first tick the
+//!   kernel has a target or is exposed; each later one only on a tick where
+//!   exposure changes, superseding the one before. A model is never restated
+//!   on a tick the kernel did not change it, so a model that goes stale stays
+//!   visible as one. Without `CAP_OBSERVATION_CUES` the kernel makes no claim
+//!   and no model is stated.
+//! * **The cause** of each model: the cue as an `observation` by the guard,
+//!   `C observes guard-0 at tick T`; the guard's own attack as an
+//!   `action_outcome`, `guard-0 attacked C at tick T`; and for expiry, as for
+//!   the first claim, the guard's perception on that tick, the convention this
+//!   module uses for affect decay (Enaction ADR-0027's recorded limit).
+//!
+//! World truth stays closed over every stated proposition: `P` is an atom
+//! when the guard is in room `R` (it is, throughout), and the cue and attack
+//! propositions are atoms when the corridor's record of that tick holds them.
+//! A model is compared with `C`'s own belief by the reader, never with world
+//! truth, so no atom stands for a model as such.
 
 use crate::abi;
 use crate::canonical::{MAX_SAFE_INTEGER, NotCanonical, sha256_hex, to_jcs};
 use crate::error::{Result, WeevilError};
-use crate::host::MindRecord;
+use crate::host::{Exposure, MindRecord};
 use crate::replay::ReplayTrace;
 use crate::world::TickTruth;
 use serde::Serialize;
@@ -176,12 +217,21 @@ impl Status {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Belief {
     pub belief_id: u64,
+    /// The ascription path, outermost first. Empty, and then absent from the
+    /// wire, for a bearer's own belief; `["guard-0"]` for the guard's model
+    /// of the bearer's belief (CAC-KERNEL §9, "Models are compared with
+    /// minds").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub holders: Vec<String>,
     pub bearer: String,
     pub proposition: String,
     pub status: Status,
     pub confidence: Interval,
     pub source_events: Vec<u64>,
     pub valid_from: u64,
+    /// The belief this one ends, from its own `valid_from`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supersedes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -267,7 +317,7 @@ fn origin(source: &str) -> &'static str {
 #[derive(Debug, Clone)]
 struct Draft {
     tick: u64,
-    observer: u32,
+    observer: String,
     subject: String,
     kind: &'static str,
     proposition: String,
@@ -289,14 +339,35 @@ const CLASS_NOT_FOUND: u8 = 2;
 const CLASS_NOTHING_VISIBLE: u8 = 3;
 const CLASS_LOW_HEALTH: u8 = 4;
 const CLASS_NO_AMMO: u8 = 5;
+/// ABI 1.2: the cue that set exposure, as the guard perceived it.
+const CLASS_CUE: u8 = 6;
+/// ABI 1.2: the guard's own attack that set exposure.
+const CLASS_OWN_ATTACK: u8 = 7;
+/// What a contact itself perceived when its own knowledge changed.
+const CLASS_CONTACT: u8 = 8;
+
+const ORDER_MEMORY: u8 = 0;
+const ORDER_OWN: u8 = 1;
+const ORDER_MODEL: u8 = 2;
 
 /// A belief whose source is still a draft key, before ids are assigned.
 struct PendingBelief {
     tick: u64,
-    bearer: u32,
+    bearer: String,
+    /// The ascription path: empty for a bearer's own belief, `["guard-0"]`
+    /// for the guard's model of the bearer's belief.
+    holders: Vec<String>,
     proposition: String,
     interval: Interval,
     source: DraftKey,
+    /// Within a tick: the guard's memory beliefs (0), a contact's own beliefs
+    /// (1), then the guard's models (2).
+    order: u8,
+    /// The index in `pending` of the belief this one supersedes.
+    supersedes: Option<usize>,
+    /// Whether the world holds the proposition; `None` for a memory belief,
+    /// whose truth is read from its own tick's record.
+    holds: Option<bool>,
 }
 
 /// Build the document for one run through `ee_tick`.
@@ -336,6 +407,25 @@ pub fn runner_output_with_causes(
     truth: &[TickTruth],
     mind: &[MindRecord],
 ) -> Result<(RunnerOutput, Vec<Vec<u64>>)> {
+    runner_output_with_models(trace, truth, mind, &[])
+}
+
+/// [`runner_output_with_causes`] for a run through the ABI 1.2 model trace:
+/// `exposure` holds one record per tick, or is empty for any other run. See
+/// the module docs, "The guard's model of a contact", for what it adds.
+pub fn runner_output_with_models(
+    trace: &ReplayTrace,
+    truth: &[TickTruth],
+    mind: &[MindRecord],
+    exposure: &[Exposure],
+) -> Result<(RunnerOutput, Vec<Vec<u64>>)> {
+    if !exposure.is_empty() && exposure.len() != mind.len() {
+        return Err(epistemic(format!(
+            "{} exposure records for {} mind records",
+            exposure.len(),
+            mind.len()
+        )));
+    }
     if trace.entries.len() != truth.len() {
         return Err(epistemic(format!(
             "{} replay entries but {} truth records",
@@ -371,7 +461,7 @@ pub fn runner_output_with_causes(
         for (slot, c) in entry.observation.contacts.iter().enumerate() {
             let draft = Draft {
                 tick,
-                observer: guard,
+                observer: agent(guard),
                 subject: contact(c.id),
                 kind: "observation",
                 proposition: located(c.id, now.guard_room, tick),
@@ -421,10 +511,14 @@ pub fn runner_output_with_causes(
             cited.entry(key).or_insert(draft);
             pending.push(PendingBelief {
                 tick,
-                bearer: guard,
+                bearer: agent(guard),
+                holders: Vec::new(),
                 proposition,
                 interval,
                 source: key,
+                order: ORDER_MEMORY,
+                supersedes: None,
+                holds: None,
             });
         }
 
@@ -451,7 +545,7 @@ pub fn runner_output_with_causes(
                     (tick, class, 0),
                     Draft {
                         tick,
-                        observer: guard,
+                        observer: agent(guard),
                         subject: agent(guard),
                         kind,
                         proposition,
@@ -579,6 +673,21 @@ pub fn runner_output_with_causes(
         cause_keys.push(keys);
     }
 
+    if !exposure.is_empty() {
+        let hdr = &trace.header;
+        let claims = hdr.initial_context.capabilities & abi::CAP_OBSERVATION_CUES != 0;
+        model_beliefs(
+            trace,
+            truth,
+            mind,
+            exposure,
+            claims,
+            &sightings,
+            &mut cited,
+            &mut pending,
+        )?;
+    }
+
     // Ids and sequences count from 1 in (tick, class, slot) order, so
     // (tick, sequence) is strictly increasing.
     let mut ids: BTreeMap<DraftKey, u64> = BTreeMap::new();
@@ -600,7 +709,7 @@ pub fn runner_output_with_causes(
             event_id: id,
             sequence: id,
             tick: d.tick,
-            observer: agent(d.observer),
+            observer: d.observer,
             subject: Subject::Agent(d.subject),
             kind: d.kind.to_owned(),
             proposition: d.proposition,
@@ -612,25 +721,42 @@ pub fn runner_output_with_causes(
         });
     }
 
+    // Beliefs are numbered in (tick, order) order, the order they were found
+    // in breaking ties, so a superseding belief always has the larger id.
+    let mut order: Vec<usize> = (0..pending.len()).collect();
+    order.sort_by_key(|&i| (pending[i].tick, pending[i].order));
+    let mut belief_ids = vec![0u64; pending.len()];
+    for (n, &i) in order.iter().enumerate() {
+        belief_ids[i] = n as u64 + 1;
+    }
     let mut beliefs = Vec::with_capacity(pending.len());
-    for (n, p) in pending.into_iter().enumerate() {
-        let (_, tick) = (p.source, p.tick);
-        let (target, room) = target_room(&p.proposition);
-        let at = truth
-            .iter()
-            .find(|t| t.tick == tick)
-            .expect("a truth record for every tick");
-        if at.contacts.contains(&(target, room)) && seen_atoms.insert(p.proposition.clone()) {
+    for &i in &order {
+        let p = &pending[i];
+        let tick = p.tick;
+        let holds = match p.holds {
+            Some(h) => h,
+            None => {
+                let (target, room) = target_room(&p.proposition);
+                let at = truth
+                    .iter()
+                    .find(|t| t.tick == tick)
+                    .expect("a truth record for every tick");
+                at.contacts.contains(&(target, room))
+            }
+        };
+        if holds && seen_atoms.insert(p.proposition.clone()) {
             world_truth.push(p.proposition.clone());
         }
         beliefs.push(Belief {
-            belief_id: n as u64 + 1,
-            bearer: agent(p.bearer),
-            proposition: p.proposition,
+            belief_id: belief_ids[i],
+            holders: p.holders.clone(),
+            bearer: p.bearer.clone(),
+            proposition: p.proposition.clone(),
             status: Status::of(p.interval),
             confidence: p.interval,
             source_events: vec![ids[&p.source]],
             valid_from: tick,
+            supersedes: p.supersedes.map(|s| belief_ids[s]),
         });
     }
     let causes = cause_keys
@@ -680,6 +806,270 @@ pub fn runner_output_with_causes(
         },
         causes,
     ))
+}
+
+/// The proposition a contact's own belief and the guard's model of it share:
+/// where the guard is. It carries no tick, because time is in `valid_from`
+/// and `supersedes`, so one model can outlive a change of the contact's own
+/// belief.
+pub fn guard_located(guard: u32, room: usize) -> String {
+    format!("{} in room-{room}", agent(guard))
+}
+
+/// The cue as the guard perceives it: the contact looks at it.
+pub fn observes(contact_id: u32, guard: u32, tick: u64) -> String {
+    format!(
+        "{} observes {} at tick {tick}",
+        contact(contact_id),
+        agent(guard)
+    )
+}
+
+/// The guard's attack on a contact, as the host applied it.
+pub fn attacked(guard: u32, contact_id: u32, tick: u64) -> String {
+    format!(
+        "{} attacked {} at tick {tick}",
+        agent(guard),
+        contact(contact_id)
+    )
+}
+
+/// A certain belief, and the two ways of not holding one: a model that says
+/// the bearer does not know (rejected) and a bearer who has stopped knowing
+/// (unknown, as `conformance/tom/v1` writes it).
+const HELD: Interval = Interval {
+    belief: MASS_FULL,
+    plausibility: MASS_FULL,
+};
+const NOT_HELD: Interval = Interval {
+    belief: 0,
+    plausibility: 0,
+};
+const STOPPED: Interval = Interval {
+    belief: 0,
+    plausibility: MASS_FULL,
+};
+
+/// The contact's own beliefs and the guard's models of them, for a run
+/// through the ABI 1.2 model trace. See the module docs, "The guard's model
+/// of a contact".
+#[allow(clippy::too_many_arguments)]
+fn model_beliefs(
+    trace: &ReplayTrace,
+    truth: &[TickTruth],
+    mind: &[MindRecord],
+    exposure: &[Exposure],
+    claims: bool,
+    sightings: &BTreeMap<(u64, u32), (DraftKey, Draft)>,
+    cited: &mut BTreeMap<DraftKey, Draft>,
+    pending: &mut Vec<PendingBelief>,
+) -> Result<()> {
+    // One modelled contact: the kernel's exposure is "a target knows where I
+    // am", not a named target (evil-weevil ADR-0014), so a model is about the
+    // one contact the scenario casts.
+    let mut cast: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for (m, x) in mind.iter().zip(exposure) {
+        cast.extend(
+            [m.target_id, u32::from(x.contact)]
+                .into_iter()
+                .filter(|id| *id != 0),
+        );
+    }
+    for t in truth {
+        cast.extend(t.knows.iter().chain(&t.observers).chain(&t.attacked));
+    }
+    let [bearer_id] = cast.iter().copied().collect::<Vec<_>>()[..] else {
+        return Err(epistemic(format!(
+            "a model run needs exactly one contact, the kernel names or the world casts {cast:?}"
+        )));
+    };
+    // The proposition carries no tick, so the world must decide it for the
+    // whole run: the guard must stand in one room throughout.
+    let guard = trace.entries.first().map_or(0, |e| e.agent_id);
+    let room = truth.first().map_or(0, |t| t.guard_room);
+    if let Some(t) = truth.iter().find(|t| t.guard_room != room) {
+        return Err(epistemic(format!(
+            "the guard leaves room-{room} at tick {}, so `{}` has no single truth value",
+            t.tick,
+            guard_located(guard, room)
+        )));
+    }
+    let located = guard_located(guard, room);
+    let bearer = contact(bearer_id);
+
+    // The guard's perception on a tick, cited when nothing else brought the
+    // claim: its sightings, or that it saw nothing (the decay convention).
+    let perception = |i: usize, cited: &mut BTreeMap<DraftKey, Draft>| -> DraftKey {
+        let entry = &trace.entries[i];
+        let now = &truth[i];
+        let tick = entry.tick;
+        if let Some(c) = entry.observation.contacts.first() {
+            let (key, draft) = sightings[&(tick, c.id)].clone();
+            cited.entry(key).or_insert(draft);
+            key
+        } else {
+            let key = (tick, CLASS_NOTHING_VISIBLE, 0);
+            cited.entry(key).or_insert(Draft {
+                tick,
+                observer: agent(guard),
+                subject: agent(guard),
+                kind: "observation",
+                proposition: format!("no contact visible to {} at tick {tick}", agent(guard)),
+                confidence: MASS_FULL,
+                origin: "sight",
+                channel: "none".to_owned(),
+                holds: !now.contacts.iter().any(|(_, r)| *r == now.guard_room),
+            });
+            key
+        }
+    };
+    let contact_draft = |tick: u64, kind, proposition: String, confidence, origin, channel: &str|    // An event the contact perceived. A `P` event holds: the guard is in room
+    // R on every tick, checked above.
+ Draft {
+            tick,
+            observer: bearer.clone(),
+            subject: agent(guard),
+            kind,
+            proposition,
+            confidence,
+            origin,
+            channel: channel.to_owned(),
+            holds: true,
+        };
+
+    // 1. What the contact itself knows, from the world's rule, as order-0
+    // beliefs that change only when its knowledge does.
+    let mut knew = false;
+    let mut own: Option<usize> = None;
+    for now in truth {
+        let tick = now.tick;
+        let knows = now.knows.contains(&bearer_id);
+        if knows == knew {
+            continue;
+        }
+        knew = knows;
+        let key = (tick, CLASS_CONTACT, 0);
+        let (draft, interval) = if !knows {
+            // It stopped knowing: it did not see the guard, as
+            // conformance/tom/v1 writes it.
+            (
+                contact_draft(tick, "observation", located.clone(), 0, "sight", "none"),
+                STOPPED,
+            )
+        } else if now.observers.contains(&bearer_id) {
+            (
+                contact_draft(
+                    tick,
+                    "observation",
+                    located.clone(),
+                    MASS_FULL,
+                    "sight",
+                    "gaze",
+                ),
+                HELD,
+            )
+        } else {
+            let mut d = contact_draft(
+                tick,
+                "action_outcome",
+                attacked(guard, bearer_id, tick),
+                MASS_FULL,
+                "damage",
+                "attack",
+            );
+            d.holds = now.attacked.contains(&bearer_id);
+            (d, HELD)
+        };
+        cited.insert(key, draft);
+        pending.push(PendingBelief {
+            tick,
+            bearer: bearer.clone(),
+            holders: Vec::new(),
+            proposition: located.clone(),
+            interval,
+            source: key,
+            order: ORDER_OWN,
+            supersedes: own,
+            holds: Some(true),
+        });
+        own = Some(pending.len() - 1);
+    }
+
+    // 2. The guard's model of it: stated where the kernel first makes a claim,
+    // then again only where the kernel's exposure changes.
+    let mut model: Option<usize> = None;
+    for (i, (m, x)) in mind.iter().zip(exposure).enumerate() {
+        let tick = m.tick;
+        let now = &truth[i];
+        if !claims {
+            if x.now || x.prev || x.cause != abi::EXPOSURE_CAUSE_NONE {
+                return Err(epistemic(format!(
+                    "tick {tick}: exposure without CAP_OBSERVATION_CUES"
+                )));
+            }
+            continue;
+        }
+        if x.contact != 0 && u32::from(x.contact) != bearer_id {
+            return Err(epistemic(format!(
+                "tick {tick}: exposure names contact {}, the model is of {bearer_id}",
+                x.contact
+            )));
+        }
+        let changed = x.cause != abi::EXPOSURE_CAUSE_NONE;
+        let first = model.is_none() && (x.now || m.target_id != 0);
+        if !changed && !first {
+            continue;
+        }
+        let key = match x.cause {
+            abi::EXPOSURE_CAUSE_NONE | abi::EXPOSURE_CAUSE_EXPIRY => perception(i, cited),
+            abi::EXPOSURE_CAUSE_CUE => {
+                let key = (tick, CLASS_CUE, 0);
+                cited.entry(key).or_insert(Draft {
+                    tick,
+                    observer: agent(guard),
+                    subject: bearer.clone(),
+                    kind: "observation",
+                    proposition: observes(bearer_id, guard, tick),
+                    confidence: MASS_FULL,
+                    origin: "sight",
+                    channel: "cue".to_owned(),
+                    holds: now.observers.contains(&bearer_id),
+                });
+                key
+            }
+            abi::EXPOSURE_CAUSE_OWN_ATTACK => {
+                let key = (tick, CLASS_OWN_ATTACK, 0);
+                cited.entry(key).or_insert(Draft {
+                    tick,
+                    observer: agent(guard),
+                    subject: bearer.clone(),
+                    kind: "action_outcome",
+                    proposition: attacked(guard, bearer_id, tick),
+                    confidence: MASS_FULL,
+                    origin: "action",
+                    channel: "attack".to_owned(),
+                    holds: now.attacked.contains(&bearer_id),
+                });
+                key
+            }
+            other => {
+                return Err(epistemic(format!("tick {tick}: exposure cause {other}")));
+            }
+        };
+        pending.push(PendingBelief {
+            tick,
+            bearer: bearer.clone(),
+            holders: vec![agent(guard)],
+            proposition: located.clone(),
+            interval: if x.now { HELD } else { NOT_HELD },
+            source: key,
+            order: ORDER_MODEL,
+            supersedes: model,
+            holds: Some(true),
+        });
+        model = Some(pending.len() - 1);
+    }
+    Ok(())
 }
 
 /// The room index in a `located` proposition this module wrote.
