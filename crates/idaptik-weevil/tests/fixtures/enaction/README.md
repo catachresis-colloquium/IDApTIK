@@ -58,6 +58,29 @@ contact's glance and the contact's own belief.
 A mind trace's `caused_by` ids name events of the runner output with the same
 profile, which comes from the same run.
 
+## What a contact knows
+
+The contact's own belief follows the world's rule, in `src/world.rs`: a
+scripted contact has `memory`, a count of ticks (default 0), and it knows
+where the guard is on tick `t` exactly when a tick `s` exists with
+`t - memory <= s <= t` on which it observed the guard, or the guard's attack
+on it was applied. In the six model runs contact 41 has a memory of 30 ticks.
+
+The memory changed three runner outputs and nothing else:
+
+- `caught.runner-output.json`: the contact glances at 101 and still knows
+  when the blows land from 116, so its belief is `certain` from 101 to the
+  end. Before, it was `unknown` on 102 to 115 and the guard's model read as
+  stale.
+- `false-exposure.runner-output.json` and
+  `false-exposure-control.runner-output.json`: the contact's belief turns
+  `unknown` on 52, the first tick after its memory ends, instead of 22. The
+  guard's model still holds until 112, so it agrees on 21 to 51 and diverges
+  from 52.
+
+The kernel learns nothing of a contact's memory, so every mind trace is
+byte-identical to its bytes before the change. `tests/golden.rs` pins them.
+
 ## Commands
 
 From the repository root, with the kernel built (`scripts/weevil_kernel.sh build`):

@@ -176,6 +176,16 @@ pub struct ScriptedContact {
     /// given to the kernel as the cue in a `cues` script.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observes: Vec<u64>,
+    /// How many ticks the contact keeps what it learned about the guard: its
+    /// memory window in the world's rule ([`crate::world::knows_within`]).
+    /// The designer sets it for each contact. 0, the default, means the
+    /// contact knows only on the tick it observes the guard or is struck.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub memory: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// One hit on the guard.
@@ -354,6 +364,15 @@ fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
     }
     Ok(())
 }
+
+/// The memory window of contact 41 in the six slice 2 model scenarios, the
+/// three scenarios and their controls alike: 30 ticks, half a second at
+/// 60 Hz. It meets both conditions of the scenarios. In `caught` the contact
+/// glances at 101 and the guard's blows land from 116, 15 ticks later, so
+/// the contact still knows when they begin. In `false-exposure` the contact
+/// glances at 21 and forgets on 52, 60 ticks before the kernel lets its
+/// exposure go at 112, so the guard's model still goes stale.
+pub const MODEL_CONTACT_MEMORY: u64 = 30;
 
 /// The largest profile version this build understands.
 pub const PROFILE_VERSION_MAX: u32 = 1;
@@ -579,6 +598,7 @@ impl ProfileSet {
                         })
                         .collect(),
                     observes: Vec::new(),
+                    memory: 0,
                 },
                 ScriptedContact {
                     id: 22,
@@ -588,6 +608,7 @@ impl ProfileSet {
                     threat: 0.125,
                     hits: Vec::new(),
                     observes: Vec::new(),
+                    memory: 0,
                 },
             ]
         };
@@ -602,6 +623,7 @@ impl ProfileSet {
                 threat: 0.5,
                 hits: Vec::new(),
                 observes: Vec::new(),
+                memory: 0,
             }]
         };
         let the_grudge = stage("the-grudge", damage, grudge_cast());
@@ -637,6 +659,7 @@ impl ProfileSet {
                             threat: 0.5,
                             hits: Vec::new(),
                             observes,
+                            memory: MODEL_CONTACT_MEMORY,
                         }],
                         cues: true,
                         approach,

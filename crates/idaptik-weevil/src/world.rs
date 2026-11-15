@@ -19,18 +19,26 @@
 //! The rule is the world's, evaluated on every tick from the corridor's own
 //! state, and the kernel's belief never enters it, so the two can differ:
 //!
-//! > **A contact knows where the guard is on tick `t` exactly when it observes
-//! > the guard on tick `t` (its scripted `observes` schedule), or the guard's
-//! > attack on it is applied on tick `t`.**
+//! > **A scripted contact has a `memory`, a count of ticks that the designer
+//! > sets for each contact (default 0). The contact knows where the guard is
+//! > on tick `t` exactly when a tick `s` exists with `t - memory <= s <= t`
+//! > on which it observed the guard (its scripted `observes` schedule), or
+//! > the guard's attack on it was applied.**
 //!
-//! Nothing else gives knowledge and nothing makes it last: a contact that
-//! looks away on the next tick, and is not struck, no longer knows. This is
-//! [`knows`], over the [`TickTruth`] of that tick, and it is used everywhere
-//! a contact's knowledge is stated or counted. "Applied" means the host
+//! Nothing else gives knowledge. A contact that saw the guard keeps the
+//! knowledge for `memory` ticks after the last tick of evidence, and then no
+//! longer knows. A later observation or attack starts the window again. With
+//! `memory` 0 a contact knows only on a tick of evidence. The rule is
+//! [`knows_within`], over each contact's evidence and its `memory`. The world
+//! evaluates it once per tick and records the answer in
+//! [`TickTruth::knowers`], which [`knows`] reads, and it is used everywhere a
+//! contact's knowledge is stated or counted. "Applied" means the host
 //! accepted the kernel's `ATTACK` on that contact while it was present in the
 //! corridor; the blow reveals the striker on the tick it lands. The kernel
 //! counts its own attack as evidence too, but it keeps the belief for its
-//! whole lifetime, and the world does not.
+//! own lifetime, and the world keeps it for the contact's memory. The kernel
+//! never learns the contact's memory: its cue is still set only on the ticks
+//! of the `observes` schedule.
 
 use crate::error::Result;
 use crate::fx::{Fx2, from_fx, to_fx};
@@ -42,6 +50,7 @@ use crate::profile::{Profile, ScriptedContact};
 use crate::replay::{
     AppliedEffect, ContactRecord, IntentRecord, ObservationRecord, ReplayEntry, ReplayRecorder,
 };
+use std::collections::BTreeMap;
 
 /// One entity in the world.
 #[derive(Debug, Clone, Copy)]
@@ -93,6 +102,10 @@ pub struct HostWorld {
     cues: bool,
     /// An `approach` script: the kernel fixtures' movement rule.
     approach: bool,
+    /// Each scripted contact's evidence about the guard so far: the ticks on
+    /// which it observed the guard or the guard's attack on it was applied,
+    /// in tick order. The world's rule ([`knows_within`]) reads it.
+    evidence: BTreeMap<u32, Vec<u64>>,
 }
 
 /// The kernel fixtures' closing rule (evil-weevil ADR-0014 §7): while the agent
@@ -101,11 +114,21 @@ pub struct HostWorld {
 /// constant of their world, not of the kernel.
 pub const APPROACH_DIVISOR: f64 = 32.0;
 
-/// The world's rule for what a contact knows (see the module docs): on the
-/// tick `truth` records, `contact` knows where the guard is exactly when it
-/// observes the guard or the guard's attack on it was applied.
+/// The world's rule for what a contact knows (see the module docs), over the
+/// contact's evidence: `evidence` holds the ticks on which it observed the
+/// guard or the guard's attack on it was applied. On `tick` it knows where
+/// the guard is exactly when some `s` in `evidence` has
+/// `tick - memory <= s <= tick`. Integers only, and no subtraction that can
+/// wrap.
+pub fn knows_within(evidence: &[u64], tick: u64, memory: u64) -> bool {
+    evidence.iter().any(|&s| s <= tick && tick - s <= memory)
+}
+
+/// Whether `contact` knows where the guard is on the tick `truth` records.
+/// The world evaluated [`knows_within`] for that tick and kept the answer in
+/// [`TickTruth::knowers`]; this reads it.
 pub fn knows(truth: &TickTruth, contact: u32) -> bool {
-    truth.observers.contains(&contact) || truth.struck.contains(&contact)
+    truth.knowers.contains(&contact)
 }
 
 /// The guard's host-side state.
@@ -172,6 +195,7 @@ impl HostWorld {
             hits_this_tick: Vec::new(),
             cues: false,
             approach: false,
+            evidence: BTreeMap::new(),
         };
         w.profile_scale = profile.host.fx_per_world_unit;
         if let Some(script) = &profile.host.script {
@@ -668,6 +692,7 @@ impl HostWorld {
         {
             truth.struck.push(intent.target_id);
         }
+        self.know(&mut truth);
 
         recorder.record(ReplayEntry {
             tick: self.tick,
@@ -680,6 +705,31 @@ impl HostWorld {
             note: String::new(),
         });
         Ok((truth, record, model))
+    }
+
+    /// Apply the world's rule on the tick `truth` records: add this tick's
+    /// observations and applied attacks to each contact's evidence, then
+    /// fill [`TickTruth::knowers`] with every scripted contact that knows
+    /// where the guard is by [`knows_within`] and its own `memory`. Called
+    /// once per tick, after the tick's attack is applied.
+    fn know(&mut self, truth: &mut TickTruth) {
+        for id in truth.observers.iter().chain(&truth.struck) {
+            let ticks = self.evidence.entry(*id).or_default();
+            if ticks.last() != Some(&truth.tick) {
+                ticks.push(truth.tick);
+            }
+        }
+        truth.knowers = self
+            .scripted
+            .iter()
+            .flatten()
+            .filter(|c| {
+                self.evidence
+                    .get(&c.id)
+                    .is_some_and(|ticks| knows_within(ticks, truth.tick, c.memory))
+            })
+            .map(|c| c.id)
+            .collect();
     }
 
     fn target_is_live(&self, id: u32) -> bool {
@@ -719,6 +769,10 @@ pub struct TickTruth {
     /// The scripted contacts the guard's attack was applied to this tick.
     /// Filled after the host applies the tick's intent.
     pub struck: Vec<u32>,
+    /// The scripted contacts that know where the guard is on this tick, by
+    /// the world's rule ([`knows_within`] with each contact's `memory`), in
+    /// the cast's order. Filled after `struck`; read through [`knows`].
+    pub knowers: Vec<u32>,
 }
 
 impl HostWorld {
@@ -762,6 +816,7 @@ impl HostWorld {
             guard_ammo: to_fx(self.guard.ammo),
             observers,
             struck: Vec::new(),
+            knowers: Vec::new(),
         }
     }
 }
@@ -795,6 +850,76 @@ impl HostWorld {
 mod tests {
     use super::*;
     use crate::profile::ProfileSet;
+
+    #[test]
+    fn with_memory_0_a_contact_knows_only_on_a_tick_of_evidence() {
+        assert!(knows_within(&[10], 10, 0));
+        assert!(!knows_within(&[10], 9, 0));
+        assert!(!knows_within(&[10], 11, 0));
+        assert!(!knows_within(&[], 10, 0));
+    }
+
+    #[test]
+    fn evidence_exactly_memory_ticks_ago_is_known_and_one_tick_more_is_not() {
+        assert!(
+            knows_within(&[10], 40, 30),
+            "40 - 30 = 10: inside the window"
+        );
+        assert!(!knows_within(&[10], 41, 30), "41 - 30 = 11: outside");
+        // Evidence from a later tick does not count on an earlier one.
+        assert!(!knows_within(&[50], 40, 30));
+        // No wrap near zero or near the top of the range.
+        assert!(knows_within(&[0], 5, 30));
+        assert!(knows_within(&[u64::MAX], u64::MAX, u64::MAX));
+        assert!(!knows_within(&[u64::MAX], 0, u64::MAX));
+    }
+
+    #[test]
+    fn a_later_observation_restarts_the_window() {
+        let evidence = [10, 35];
+        assert!(knows_within(&evidence, 41, 30), "35 restarts it");
+        assert!(knows_within(&evidence, 65, 30));
+        assert!(!knows_within(&evidence, 66, 30));
+    }
+
+    /// One tick of the world's rule, fed by hand: the contact's observation
+    /// and the guard's applied attack on that tick.
+    fn know_on(w: &mut HostWorld, tick: u64, observes: bool, struck: bool) -> bool {
+        w.tick = tick;
+        let mut truth = w.truth();
+        truth.observers = if observes { vec![41] } else { Vec::new() };
+        truth.struck = if struck { vec![41] } else { Vec::new() };
+        w.know(&mut truth);
+        knows(&truth, 41)
+    }
+
+    fn corridor_with_memory(memory: u64) -> HostWorld {
+        let mut profile = ProfileSet::canonical().caught;
+        let script = profile.host.script.as_mut().expect("a scripted cast");
+        script.contacts[0].memory = memory;
+        script.contacts[0].observes.clear();
+        HostWorld::canonical(&profile)
+    }
+
+    #[test]
+    fn an_applied_attack_counts_like_an_observation_and_restarts_the_window() {
+        let mut w = corridor_with_memory(5);
+        assert!(!know_on(&mut w, 1, false, false), "no evidence yet");
+        assert!(know_on(&mut w, 2, false, true), "struck: it knows");
+        assert!(know_on(&mut w, 7, false, false), "2 + 5: still inside");
+        assert!(
+            know_on(&mut w, 8, true, false),
+            "an observation restarts it"
+        );
+        assert!(know_on(&mut w, 13, false, false), "8 + 5");
+        assert!(know_on(&mut w, 14, false, true), "an attack restarts it");
+        assert!(know_on(&mut w, 19, false, false), "14 + 5");
+        assert!(!know_on(&mut w, 20, false, false), "14 + 6: forgotten");
+
+        let mut w = corridor_with_memory(0);
+        assert!(know_on(&mut w, 2, false, true));
+        assert!(!know_on(&mut w, 3, false, false), "memory 0: today's rule");
+    }
 
     #[test]
     fn the_guard_cannot_pass_a_closed_door() {

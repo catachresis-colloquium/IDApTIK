@@ -284,9 +284,9 @@ the game:
 | `the-flinch-control` | C at 1.5 fx instead. | No startle. |
 | `the-stalker` | Slice 2: contact 41 at 3.0 fx, never observes the guard; the guard closes on it. | Stalks ticks 1 to 160; first engage at tick 161, at 0.5 fx. |
 | `the-stalker-control` | The same without `CAP_OBSERVATION_CUES`. | First engage at tick 65, at 1.0 fx. |
-| `caught` | One glance, at tick 101, while the guard stalks. | One `caught` tell, at 101; never stalks again; engages at 116. |
+| `caught` | One glance, at tick 101, while the guard stalks. | One `caught` tell, at 101; never stalks again; engages at 116; exposed and not known on 0 ticks. |
 | `caught-control` | The same without the capability. | No `caught`; its mind trace is the stalker control's, byte for byte. |
-| `false-exposure` | One glance, at tick 21; the contact then looks away and keeps its distance. | Exposed and not known on 90 ticks, 22 to 111; expires at 112. |
+| `false-exposure` | One glance, at tick 21; the contact then looks away and keeps its distance. | The contact knows on 21 to 51. Exposed and not known on 60 ticks, 52 to 111; expires at 112. |
 | `false-exposure-control` | The same without the capability. | 0 such ticks. |
 
 The `the-*` profiles carry a `CorridorScript` (`HostTuning::script`): contacts
@@ -362,11 +362,42 @@ The profile validator refuses any capability bit the mirror does not define,
 so no profile can declare bit 10 by accident, nor `0xFFFF_FFFF` (ADR-0014's
 "a host that declares every bit declares the future").
 
-**What a contact knows** is the world's rule, in `world.rs`, used everywhere:
-a contact knows where the guard is on tick `t` exactly when it observes the
-guard on `t`, or the guard's attack on it is applied on `t`. The kernel's
-belief never enters it, so the two can differ, and `tests/models.rs` counts
-where they do.
+**What a contact knows** is the world's rule, in `world.rs`, used everywhere
+(the owner's ruling of 2026-11-15, "Contacts remember"):
+
+> A scripted contact has `memory`, a count of ticks that the designer sets for
+> each contact (default 0). The contact knows where the guard is on tick `t`
+> exactly when a tick `s` exists with `t - memory <= s <= t` on which it
+> observed the guard, or the guard's attack on it was applied.
+
+With `memory` 0 a contact knows only on a tick of evidence. A later
+observation or attack starts the window again. The rule is
+`world::knows_within`; the world evaluates it once per tick and records the
+answer in `TickTruth::knowers`, which `world::knows` reads. Integers only. The
+kernel's belief never enters the rule, so the two can differ, and
+`tests/models.rs` counts where they do. The kernel does not learn a contact's
+memory and receives no new input: the cue is still set only on the ticks of
+the `observes` schedule.
+
+The six model scenarios give contact 41 one memory, 30 ticks
+(`profile::MODEL_CONTACT_MEMORY`, half a second at 60 Hz). It meets both
+conditions of the scenarios:
+
+* In `caught` the contact glances at 101 and the guard's blows land from 116,
+  15 ticks later, so the contact still knows when they begin. The kernel is
+  exposed to a contact that does not know on 0 ticks. Without the memory it
+  was 14 ticks, 102 to 115, and the guard's model read as stale.
+* In `false-exposure` the contact glances at 21, knows on 21 to 51, and
+  forgets on 52. The kernel holds exposure until it expires at 112, so it is
+  exposed to a contact that does not know on 60 ticks, 52 to 111. The
+  control gives 0.
+
+Read as CAC-KERNEL section 9 reads it, `caught` has two models and neither is
+stale-divergent: belief 1 (`rejected`, tick 1) agrees until 101, and belief 3
+(`certain`, tick 101) agrees to the end. `false-exposure` has three, and
+exactly one is stale-divergent: belief 3 (`certain`, tick 21) agrees on 21 to
+51 and diverges from 52 until 112. `tests/model_timelines.rs` derives these
+timelines from the contract text.
 
 A model run's runner output states four separate facts about one proposition
 without a tick, `guard-0 in room-0`:
@@ -374,7 +405,11 @@ without a tick, `guard-0 in room-0`:
 * the world: `world_truth`, closed over every order-0 proposition and event,
   with no atom for a model;
 * the contact's own belief: order 0, `bearer` `contact-41`, `certain` from the
-  tick it comes to know and superseded by `unknown` from the tick it stops;
+  tick it comes to know and superseded by `unknown` from the tick it stops,
+  which is the first tick after its memory ends (52 in `false-exposure`). That
+  `unknown` belief cites `contact-41 does not observe guard-0 at tick T`, the
+  contact's perception on that tick, as the guard's expiry cites the guard's
+  perception;
 * the guard's model of it: `holders = ["guard-0"]`, the same bearer and
   proposition, `certain` while exposure is true and `rejected` while it is
   false, stated on the first claim and then only when exposure changes, citing

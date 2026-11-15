@@ -11,7 +11,7 @@
 //! tick is the fixture's tick plus one.
 
 use idaptik_weevil::abi;
-use idaptik_weevil::profile::ProfileSet;
+use idaptik_weevil::profile::{MODEL_CONTACT_MEMORY, ProfileSet};
 use idaptik_weevil::world::knows;
 use idaptik_weevil::{CorridorRun, TickTruth, run_corridor};
 
@@ -135,13 +135,18 @@ fn caught_shows_exactly_one_caught_tell_on_the_observation_tick() {
 #[test]
 fn false_exposure_the_guard_thinks_it_is_known_while_the_contact_does_not_know() {
     let fe = run("false-exposure");
-    // The contact observes the guard once, and knows where it is only then.
-    assert_eq!(known_ticks(&fe.truth), [21]);
-    // The kernel's belief outlives the glance by its whole lifetime.
+    // The contact observes the guard once, at 21, and remembers for 30
+    // ticks: it knows from 21 to 51 and not after.
+    assert_eq!(
+        fe.truth.iter().filter(|t| !t.observers.is_empty()).count(),
+        1
+    );
+    assert_eq!(known_ticks(&fe.truth), (21..=51).collect::<Vec<u64>>());
+    // The contact's memory ends well before the kernel's belief does: the
+    // kernel holds exposure for 90 ticks after the cue and lets it go at 112.
     let unknown = exposed_but_unknown(&fe);
     assert!(!unknown.is_empty());
-    assert_eq!(unknown.len(), 90, "the kernel fixture's 90 no-cue ticks");
-    assert_eq!((unknown[0], unknown[unknown.len() - 1]), (22, 111));
+    assert_eq!(unknown, (52..=111).collect::<Vec<u64>>(), "60 ticks");
     let expiry: Vec<u64> = fe
         .model
         .iter()
@@ -154,6 +159,74 @@ fn false_exposure_the_guard_thinks_it_is_known_while_the_contact_does_not_know()
     assert_eq!(caught_ticks(&fe), [21]);
 
     let control = run("false-exposure-control");
-    assert_eq!(known_ticks(&control.truth), [21], "the same world");
+    assert_eq!(
+        known_ticks(&control.truth),
+        known_ticks(&fe.truth),
+        "the same world"
+    );
     assert_eq!(exposed_but_unknown(&control).len(), 0);
+}
+
+/// The ticks on which the world's rule changes its answer for the contact,
+/// with the new answer: the ticks on which the contact's own belief must be
+/// restated.
+fn knowledge_changes(truth: &[TickTruth]) -> Vec<(u64, bool)> {
+    let mut before = false;
+    let mut out = Vec::new();
+    for t in truth {
+        let now = knows(t, CONTACT);
+        if now != before {
+            out.push((t.tick, now));
+        }
+        before = now;
+    }
+    out
+}
+
+#[test]
+fn false_exposure_the_contact_forgets_on_the_first_tick_after_its_memory() {
+    // Known from the glance at 21, forgotten on 21 + 30 + 1 = 52, not on 22.
+    assert_eq!(
+        knowledge_changes(&run("false-exposure").truth),
+        [(21, true), (52, false)]
+    );
+}
+
+#[test]
+fn every_model_scenario_gives_its_contact_one_stated_memory() {
+    // One value for all six: the three scenarios and their controls.
+    assert_eq!(MODEL_CONTACT_MEMORY, 30);
+    let set = ProfileSet::canonical();
+    for id in [
+        "the-stalker",
+        "the-stalker-control",
+        "caught",
+        "caught-control",
+        "false-exposure",
+        "false-exposure-control",
+    ] {
+        let script = set
+            .get(id)
+            .expect("known")
+            .host
+            .script
+            .clone()
+            .expect("a cast");
+        assert_eq!(script.contacts.len(), 1, "{id}");
+        assert_eq!(script.contacts[0].memory, MODEL_CONTACT_MEMORY, "{id}");
+    }
+}
+
+#[test]
+fn caught_the_contact_knows_on_every_tick_the_kernel_is_exposed() {
+    let caught = run("caught");
+    // The glance at 101 and the blows from 116: the contact's memory spans
+    // the 15 ticks between them, so the guard is never exposed to a contact
+    // that does not know.
+    assert_eq!(caught.truth[100].observers, [CONTACT]);
+    assert_eq!(first_engage(&caught), Some(116));
+    assert_eq!(exposed_but_unknown(&caught), Vec::<u64>::new());
+    let exposed = caught.model.iter().filter(|m| m.exposure).count();
+    assert!(exposed > 0, "the kernel is exposed after the cue");
+    assert_eq!(knowledge_changes(&caught.truth)[0], (101, true));
 }
