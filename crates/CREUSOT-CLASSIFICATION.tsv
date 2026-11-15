@@ -271,6 +271,7 @@ T	crates/idaptik-weevil/tests/golden.rs	pins the committed Enaction documents to
 T	crates/idaptik-weevil/tests/abi_1_1.rs	test of the ABI 1.1 entrance against the linked kernel; observing it would be circular
 T	crates/idaptik-weevil/tests/abi_1_2.rs	test of the ABI 1.2 model record against the linked kernel; observing it would be circular
 T	crates/idaptik-weevil/tests/models.rs	test of the corridor's knowledge rule against the kernel's model of it; observing it would be circular
+T	crates/idaptik-weevil/tests/model_documents.rs	test of the contacts' own beliefs and the guard's models in the emitted documents; observing it would be circular
 T	crates/idaptik-weevil/tests/epistemic.rs	test of the emitted epistemic document; observing it would be circular
 P	crates/idaptik-bevy/src/guard_weevil.rs	the Bevy half of the kernel integration: turns sim perception into observations and the returned intent into the guard action
 D	crates/idaptik-core/src/scenario/guard_brain.rs	the selectable brain seam: plain enums, contact ids and perception/decision records with no kernel dependency

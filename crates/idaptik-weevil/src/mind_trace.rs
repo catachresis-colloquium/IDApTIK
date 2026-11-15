@@ -24,12 +24,15 @@
 //!
 //! The vocabularies are declared in the kernel's own order: tokens by
 //! `EE_AFFECT_*`, candidates by mode code (advance 0, engage 1, evade 2,
-//! reload 3, investigate 4), tells by `EE_TELL_*` bit.
+//! reload 3, investigate 4), tells by `EE_TELL_*` bit. A run through the 1.2
+//! model record (evil-weevil ADR-0014) declares the two terms 1.2 adds, in the
+//! same order: the candidate `stalk` (mode 5) and the tell `caught` (bit 3).
+//! A 1.1 run declares the 1.1 vocabulary, whatever kernel ran it.
 
 use crate::CorridorRun;
 use crate::abi;
 use crate::canonical::to_jcs;
-use crate::epistemic::{PROFILE_ID, RunnerOutput, runner_output_with_causes};
+use crate::epistemic::{PROFILE_ID, RunnerOutput, runner_output_with_models};
 use crate::error::{Result, WeevilError};
 use crate::host::MindRecord;
 use serde::Serialize;
@@ -46,6 +49,22 @@ pub const TELLS: [(u8, &str); 3] = [
     (abi::TELL_STARTLE, "startle"),
     (abi::TELL_HESITATE, "hesitate"),
     (abi::TELL_FIXATE, "fixate"),
+];
+/// The candidates of a run through the 1.2 model record: 1.1's, then stalk.
+pub const MODEL_CANDIDATES: [&str; 6] = [
+    "advance",
+    "engage",
+    "evade",
+    "reload",
+    "investigate",
+    "stalk",
+];
+/// The tells of a run through the 1.2 model record: 1.1's, then caught.
+pub const MODEL_TELLS: [(u8, &str); 4] = [
+    (abi::TELL_STARTLE, "startle"),
+    (abi::TELL_HESITATE, "hesitate"),
+    (abi::TELL_FIXATE, "fixate"),
+    (abi::TELL_CAUGHT, "caught"),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -116,8 +135,8 @@ fn mind(msg: String) -> WeevilError {
     WeevilError::Epistemic(msg)
 }
 
-fn candidate(mode: u8) -> Result<String> {
-    CANDIDATES
+fn candidate(candidates: &[&str], mode: u8) -> Result<String> {
+    candidates
         .get(usize::from(mode))
         .map(|s| (*s).to_owned())
         .ok_or_else(|| mind(format!("mode code {mode} has no candidate")))
@@ -140,11 +159,23 @@ pub fn documents(run: &CorridorRun) -> Result<(RunnerOutput, MindTrace)> {
             run.trace.entries.len()
         )));
     }
-    let (runner, causes) = runner_output_with_causes(&run.trace, &run.truth, &run.mind)?;
+    let (runner, causes) =
+        runner_output_with_models(&run.trace, &run.truth, &run.mind, &run.model)?;
     let hdr = &run.trace.header;
+    let (candidates, tells): (&[&str], &[(u8, &str)]) = if run.model.is_empty() {
+        (&CANDIDATES, &TELLS)
+    } else {
+        (&MODEL_CANDIDATES, &MODEL_TELLS)
+    };
     let mut ticks = Vec::with_capacity(run.mind.len());
     for ((entry, record), caused_by) in run.trace.entries.iter().zip(&run.mind).zip(causes) {
-        ticks.push(tick_record(entry.agent_id, record, caused_by)?);
+        ticks.push(tick_record(
+            entry.agent_id,
+            record,
+            caused_by,
+            candidates,
+            tells,
+        )?);
     }
     let trace = MindTrace {
         contract: MIND_TRACE_CONTRACT.to_owned(),
@@ -158,15 +189,21 @@ pub fn documents(run: &CorridorRun) -> Result<(RunnerOutput, MindTrace)> {
         },
         vocabulary: Vocabulary {
             affect_tokens: AFFECT_TOKENS.iter().map(|s| (*s).to_owned()).collect(),
-            candidates: CANDIDATES.iter().map(|s| (*s).to_owned()).collect(),
-            tells: TELLS.iter().map(|(_, s)| (*s).to_owned()).collect(),
+            candidates: candidates.iter().map(|s| (*s).to_owned()).collect(),
+            tells: tells.iter().map(|(_, s)| (*s).to_owned()).collect(),
         },
         ticks,
     };
     Ok((runner, trace))
 }
 
-fn tick_record(agent: u32, r: &MindRecord, caused_by: Vec<u64>) -> Result<TickRecord> {
+fn tick_record(
+    agent: u32,
+    r: &MindRecord,
+    caused_by: Vec<u64>,
+    candidates: &[&str],
+    tells: &[(u8, &str)],
+) -> Result<TickRecord> {
     let changed = r.token != r.token_prev;
     if changed == caused_by.is_empty() {
         return Err(mind(format!(
@@ -189,13 +226,13 @@ fn tick_record(agent: u32, r: &MindRecord, caused_by: Vec<u64>) -> Result<TickRe
             ranking: r
                 .ranking
                 .iter()
-                .map(|m| candidate(*m))
+                .map(|m| candidate(candidates, *m))
                 .collect::<Result<_>>()?,
-            incumbent: candidate(r.incumbent)?,
-            selected: candidate(r.selected)?,
+            incumbent: candidate(candidates, r.incumbent)?,
+            selected: candidate(candidates, r.selected)?,
             target: (r.target_id != 0).then(|| format!("contact-{}", r.target_id)),
         },
-        tells: TELLS
+        tells: tells
             .iter()
             .filter(|(bit, _)| r.tells & bit != 0)
             .map(|(_, name)| (*name).to_owned())
