@@ -2,8 +2,10 @@
 # Enaction documents from the headless corridor
 
 The `enaction-runner-output/1` and `enaction-mind-trace/1` documents that
-`idaptik-weevil-replay` writes for twelve corridor runs, committed for consumers
-that can fetch this repository but cannot build the Evil Weevil kernel.
+`idaptik-weevil-replay` writes for twelve corridor runs (22 documents), committed for
+consumers that can fetch this repository but cannot build the Evil Weevil
+kernel. Six of them are slice 2, "it models you": runs through the ABI 1.2
+model record, whose runner outputs hold models (order-1 beliefs).
 
 They are written by the binary, never by hand. `tests/golden.rs` fails if any
 file differs from what the built binary writes today, or if `SHA256SUMS` does
@@ -11,19 +13,23 @@ not match the complete sorted file set.
 
 ## Provenance
 
-- Kernel: catachresis-colloquium/evil-weevil at `1f68271` (ABI 1.2,
-  evil-weevil ADR-0014, draft pull request 11), built with Zig 0.16.0. The
-  ten stage 1 documents, first written on `c655f46` (ABI 1.1) are byte-identical on
-  it except for the kernel version they name: `manifest.source` (and so
-  `manifest.digest`) and the mind trace's `producer.abi`.
-- Validator: catachresis-colloquium/enaction-engine `main` at `81fa3ed`,
-  `enaction-validate`. Every document here exits 0 from it.
-- Policies: `../enaction-policies.json` (`depth.max_order` 0) for the stage 1
-  runs, and `../enaction-policies-depth-1.json` (the same status policy,
-  `depth.max_order` 1) for the six model runs, whose runner output holds
-  order-1 beliefs. Under the depth-0 file a model scenario's runner output is
-  refused as `nesting-bounded`; its control holds no model and is accepted
-  by either.
+- Kernel: catachresis-colloquium/evil-weevil `marina/weevil-c1-mind-slice-2`
+  at `f7c333d` (ABI 1.2, evil-weevil ADR-0014; pull request 11, not merged),
+  built with Zig 0.16.0. The ten documents of the runs before slice 2 were first
+  written on `main` at `c655f46` (ABI 1.1). On the 1.2 kernel they differ from
+  those bytes in the kernel's version label only (`producer.abi`,
+  `manifest.source`, and `manifest.digest`, which covers `source`): with the
+  label put back to 1.1 and the digest recomputed, each is byte-identical to
+  its 1.1 predecessor.
+- Validator: catachresis-colloquium/enaction-engine `main` at `03cb27b`,
+  `enaction-validate`, for the six runs before slice 2. The six model runs were checked
+  with `enaction-validate` built from pull request 112 (`marina/weevil-c0-models`,
+  not merged) at `0a67878`, the contract of `conformance/tom/v1` and ADR-0028;
+  those six runs' documents exit 0 from that build too. Every document here exits 0.
+- Policies: `../enaction-policies.json` (`depth.max_order` 0) for the six
+  runs before slice 2, and `../enaction-policies-models.json` (the same status policy,
+  `depth.max_order` 1) for the six model runs. Under the depth-0 file a model
+  run's runner output is refused as `nesting-bounded`.
 
 ## Files
 
@@ -42,6 +48,12 @@ not match the complete sorted file set.
 | `false-exposure` | `false-exposure.runner-output.json` | `false-exposure.mind-trace.json` |
 | `false-exposure-control` | `false-exposure-control.runner-output.json` | `false-exposure-control.mind-trace.json` |
 
+`the-stalker-control.mind-trace.json` and `caught-control.mind-trace.json` are
+the same bytes: without `CAP_OBSERVATION_CUES` the kernel ignores the cue, so
+the guard's mind does not differ, as evil-weevil ADR-0014 measured for its own
+fixtures. Their runner outputs differ, because the world still records the
+contact's glance and the contact's own belief.
+
 A mind trace's `caused_by` ids name events of the runner output with the same
 profile, which comes from the same run.
 
@@ -57,7 +69,8 @@ for p in decoy-lure cautious-sentry; do
   "$B" --profile "$p" --ticks 200 --seed 7 --emit-epistemic "$D/$p.runner-output.json"
 done
 for p in the-grudge the-grudge-control the-flinch the-flinch-control \
-    the-stalker the-stalker-control caught caught-control false-exposure false-exposure-control; do
+         the-stalker the-stalker-control caught caught-control \
+         false-exposure false-exposure-control; do
   "$B" --profile "$p" --ticks 200 --seed 7 \
     --emit-epistemic "$D/$p.runner-output.json" --emit-mind-trace "$D/$p.mind-trace.json"
 done
@@ -70,19 +83,6 @@ To check one pair with the validator:
 ```sh
 enaction-validate --policies crates/idaptik-weevil/tests/fixtures/enaction-policies.json \
   --mind-trace "$D/the-grudge.mind-trace.json" < "$D/the-grudge.runner-output.json"
-enaction-validate --policies crates/idaptik-weevil/tests/fixtures/enaction-policies-depth-1.json \
+enaction-validate --policies crates/idaptik-weevil/tests/fixtures/enaction-policies-models.json \
   --mind-trace "$D/false-exposure.mind-trace.json" < "$D/false-exposure.runner-output.json"
 ```
-
-## The model scenarios (ABI 1.2)
-
-Each of `the-stalker`, `caught` and `false-exposure` has one contact,
-`contact-41`, and its runner output holds, for the proposition
-`guard-0 in room-0`, four separate facts: the world (`world_truth`), what
-`contact-41` believes (order 0, `bearer` `contact-41`), what `guard-0` thinks
-it believes (order 1, `holders` `["guard-0"]`), and, for a reader that compares
-the two over each model's lifetime, whether `guard-0` is right about it. A
-model is stated only where the kernel's exposure changes. Each control
-withholds `CAP_OBSERVATION_CUES`, so the kernel makes no claim and its runner
-output holds the contact's own beliefs only. See `src/epistemic.rs`, "The
-guard's model of a contact", and `src/world.rs`, "What a contact knows".

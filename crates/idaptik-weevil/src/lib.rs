@@ -38,6 +38,15 @@
 //!   steering. See [`observation`]'s module docs.
 //! * Native pointer checks are not memory isolation. This adapter is an
 //!   in-process seam, not a security boundary against a hostile kernel.
+//!
+//! # Slice 2: the kernel models you (ABI 1.2)
+//!
+//! The kernel holds one belief about another mind, exposure: "a target knows
+//! where I am". The headless corridor states its own rule for what a contact
+//! knows ([`world::knows`]: it observes the guard on that tick, or the guard's
+//! attack on it is applied on that tick), and the runner output states the
+//! contact's own belief beside the guard's model of it, so the two can be
+//! compared ([`epistemic`]).
 
 pub mod abi;
 pub mod canonical;
@@ -55,7 +64,7 @@ pub mod world;
 pub use error::{Result, WeevilError};
 pub use fx::Fx2;
 pub use host::{
-    AgentState, Exposure, Memory, MindOutcome, MindRecord, ModelOutcome, TickOutcome, WeevilHost,
+    AgentState, Memory, MindOutcome, MindRecord, ModelOutcome, ModelRecord, TickOutcome, WeevilHost,
 };
 pub use intent::{Action, Intent, IntentFlags};
 pub use observation::{Contact, ContactSource, Observation};
@@ -64,7 +73,7 @@ pub use replay::{
     AppliedEffect, InitialContext, IntentRecord, ObservationRecord, ReplayEntry, ReplayHeader,
     ReplayMismatch, ReplayRecorder, ReplayTrace, decision_identity, header_from, replay_equal,
 };
-pub use world::{Entrance, HostWorld, Step, TickTruth, contact_knows};
+pub use world::{HostWorld, TickTruth};
 
 /// Run a bounded headless trace through the adapter and return the replay.
 ///
@@ -89,45 +98,36 @@ pub fn run_trace_with_truth(
 }
 
 /// One headless corridor run: the replay, the world's truth on every tick, and,
-/// when the run went through the ABI 1.1 mind, one record per tick; when it
-/// went through the ABI 1.2 model trace, one exposure record per tick as well.
+/// when the run went through the ABI 1.1 mind, one record per tick.
 #[derive(Debug, Clone)]
 pub struct CorridorRun {
     pub trace: ReplayTrace,
     pub truth: Vec<TickTruth>,
     /// Empty unless the run used `ee_tick_mind`.
     pub mind: Vec<host::MindRecord>,
-    /// Empty unless the run used the 1.2 model trace.
-    pub exposure: Vec<host::Exposure>,
+    /// One record per tick when the run went through the ABI 1.2 model record
+    /// (a mind run of a `cues` script); otherwise empty.
+    pub model: Vec<host::ModelRecord>,
 }
+
+/// The scenario id a mind run of a `cues` script records: it goes through the
+/// 1.2 model record and the host's cue, a different decision sequence again.
+pub const MODEL_SCENARIO_ID: &str = "headless-corridor-model";
 
 /// The scenario id a corridor run records: a mind run is a different decision
-/// sequence from a plain one, and a model run (the 1.2 trace and the cue) from
-/// a mind run, so no two of them may replay as equal.
-pub fn corridor_scenario_id(entrance: Entrance) -> &'static str {
-    match entrance {
-        Entrance::Tick => "headless-corridor",
-        Entrance::Mind => "headless-corridor-mind",
-        Entrance::Model => "headless-corridor-model",
+/// sequence from a plain one, so two of them must never replay as equal.
+pub fn corridor_scenario_id(mind: bool) -> &'static str {
+    if mind {
+        "headless-corridor-mind"
+    } else {
+        "headless-corridor"
     }
 }
 
-/// The entrance a corridor run of `profile` takes: `ee_tick`, or with `mind`
-/// the mind, which for a model scenario
-/// ([`profile::CorridorScript::model`]) is the 1.2 model trace.
-pub fn corridor_entrance(profile: &Profile, mind: bool) -> Entrance {
-    let model = profile.host.script.as_ref().is_some_and(|s| s.model);
-    match (mind, model) {
-        (false, _) => Entrance::Tick,
-        (true, false) => Entrance::Mind,
-        (true, true) => Entrance::Model,
-    }
-}
-
-/// Run the corridor through `ee_tick`, or with `mind` through `ee_tick_mind`
-/// (with the model trace for a model scenario).
+/// Run the corridor through `ee_tick`, or with `mind` through `ee_tick_mind`;
+/// a mind run of a `cues` script uses the 1.2 model record
+/// ([`WeevilHost::tick_model`]).
 pub fn run_corridor(ticks: u64, profile: &Profile, seed: u64, mind: bool) -> Result<CorridorRun> {
-    let entrance = corridor_entrance(profile, mind);
     let mut host = WeevilHost::init(
         profile.capabilities,
         profile.max_agents,
@@ -137,26 +137,25 @@ pub fn run_corridor(ticks: u64, profile: &Profile, seed: u64, mind: bool) -> Res
         1,
     )?;
     let mut world = HostWorld::canonical(profile);
-    let mut recorder = ReplayRecorder::new(header_from(
-        &host,
-        profile,
-        seed,
-        (60, 1),
-        corridor_scenario_id(entrance),
-    ));
+    let scenario = if mind && world.gives_cues() {
+        MODEL_SCENARIO_ID
+    } else {
+        corridor_scenario_id(mind)
+    };
+    let mut recorder = ReplayRecorder::new(header_from(&host, profile, seed, (60, 1), scenario));
     let mut truth = Vec::with_capacity(ticks as usize);
     let mut records = Vec::new();
-    let mut exposure = Vec::new();
+    let mut models = Vec::new();
     for _ in 0..ticks {
-        let step = world.step_with(&mut host, profile, &mut recorder, entrance)?;
-        truth.push(step.truth);
-        records.extend(step.mind);
-        exposure.extend(step.exposure);
+        let (t, record, model) = world.step_full(&mut host, profile, &mut recorder, mind)?;
+        truth.push(t);
+        records.extend(record);
+        models.extend(model);
     }
     Ok(CorridorRun {
         trace: recorder.finish(),
         truth,
         mind: records,
-        exposure,
+        model: models,
     })
 }

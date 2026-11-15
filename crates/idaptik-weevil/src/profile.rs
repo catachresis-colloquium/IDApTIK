@@ -135,24 +135,24 @@ pub struct DecoyTuning {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CorridorScript {
     pub contacts: Vec<ScriptedContact>,
-    /// The scenario reads the kernel's model of a target's knowledge (ABI 1.2):
-    /// the corridor runs a mind run through the 40-byte `ee_model_trace`, gives
-    /// the cue on each contact's `observes` ticks, and states what the contact
-    /// knows (see [`crate::world`], "What a contact knows"). Needs exactly one
-    /// contact in the cast, because the kernel's exposure is about "a target",
-    /// not a named one (evil-weevil ADR-0014, "Exposure per target").
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub model: bool,
-    /// World units the guard covers per tick at the kernel's speed 1.0 fx,
-    /// while it advances on or stalks its target. With a pace, the guard closes
-    /// on the intent's target only through `ADVANCE` and `TAKE_COVER` (stalk),
-    /// and an `ATTACK` holds its ground: the kernel fixtures' one world rule,
-    /// "the range closes by speed × 2048 per tick while the agent advances or
-    /// stalks" (evil-weevil ADR-0014 §7). `0.25` is that rule at the corridor's
-    /// scale of 8 world units to 1.0 fx. `None` keeps the corridor's own
-    /// movement, which every stage 1 profile uses.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pace: Option<f64>,
+    /// ABI 1.2: a mind run of this script goes through the 40-byte model
+    /// record ([`crate::WeevilHost::tick_model`]), and the host gives the
+    /// observation cue on each contact's `observes` ticks. Whether the kernel
+    /// reads the cue is the profile's `CAP_OBSERVATION_CUES`, so a control
+    /// sets this too and withholds only the capability.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cues: bool,
+    /// The kernel fixtures' world rule for slice 2 (evil-weevil ADR-0014 §7):
+    /// while the guard advances or stalks, it closes on the kernel's target by
+    /// the proposed speed over [`crate::world::APPROACH_DIVISOR`], and it
+    /// moves on no other action. Without it, a scripted contact keeps its
+    /// distance, as in the corridor's 1.1 scenarios.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub approach: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// One scripted contact.
@@ -171,14 +171,11 @@ pub struct ScriptedContact {
     /// Ticks on which it hits the guard, and for how much health.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hits: Vec<ScriptedHit>,
-    /// Ticks on which it observes the guard: the host's cue. A tick it
-    /// observes on is also a tick it knows where the guard is.
+    /// Ticks on which it observes the guard: the world's schedule, read by
+    /// the world's rule of what a contact knows ([`crate::world::knows`]) and
+    /// given to the kernel as the cue in a `cues` script.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observes: Vec<u64>,
-    /// It keeps its distance: each tick the guard closes on it, it walks off
-    /// by the same step. Read only under a [`CorridorScript::pace`].
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub retreats: bool,
 }
 
 /// One hit on the guard.
@@ -283,8 +280,7 @@ impl std::fmt::Display for ProfileError {
 
 impl std::error::Error for ProfileError {}
 
-/// The set of known, defined capabilities — the kernel's own ladder, as of
-/// ABI 1.2 (bit 10, `CAP_OBSERVATION_CUES`, is the newest).
+/// The set of known, defined capabilities — the kernel's own ladder.
 pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
     | abi::CAP_LINE_OF_SIGHT
     | abi::CAP_RAYCAST
@@ -307,17 +303,6 @@ const CORRIDOR_RESERVED_IDS: [u32; 2] = [1, 100];
 
 fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
     let bad = |why: String| Err(ProfileError::InvalidScript(why));
-    if let Some(pace) = script.pace
-        && !(is_positive(pace) && pace.is_finite())
-    {
-        return bad(format!("pace {pace} is not a positive, finite number"));
-    }
-    if script.model && script.contacts.len() != 1 {
-        return bad(format!(
-            "a model scenario needs exactly one contact, not {}: the kernel's exposure is about a target, not a named one",
-            script.contacts.len()
-        ));
-    }
     let mut seen = std::collections::BTreeSet::new();
     for c in &script.contacts {
         if c.id == 0 || c.id > u32::from(u16::MAX) || CORRIDOR_RESERVED_IDS.contains(&c.id) {
@@ -344,6 +329,14 @@ fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
                 c.id, c.threat
             ));
         }
+        for t in &c.observes {
+            if !(c.present_from..c.present_until).contains(t) {
+                return bad(format!(
+                    "contact {} observes the guard on tick {t} while absent",
+                    c.id
+                ));
+            }
+        }
         for h in &c.hits {
             if !(c.present_from..c.present_until).contains(&h.tick) {
                 return bad(format!(
@@ -357,28 +350,6 @@ fn validate_script(script: &CorridorScript) -> Result<(), ProfileError> {
                     c.id, h.damage
                 ));
             }
-        }
-        if c.observes.windows(2).any(|w| w[0] >= w[1]) {
-            return bad(format!(
-                "contact {} observes on ticks that are not strictly increasing",
-                c.id
-            ));
-        }
-        if let Some(t) = c
-            .observes
-            .iter()
-            .find(|t| !(c.present_from..c.present_until).contains(*t))
-        {
-            return bad(format!(
-                "contact {} observes on tick {t} while absent",
-                c.id
-            ));
-        }
-        if c.retreats && script.pace.is_none() {
-            return bad(format!(
-                "contact {} retreats, which only a paced script reads",
-                c.id
-            ));
         }
     }
     Ok(())
@@ -455,9 +426,7 @@ impl Profile {
 
 /// The three named profiles the first milestone ships, plus `decoy-lure`, the
 /// sentry with a decoy in its room for the epistemic document. The four
-/// `the-grudge` and `the-flinch` profiles stage the kernel's mind fixtures in
-/// the corridor, and the six model profiles (`the-stalker`, `caught`,
-/// `false-exposure` and their controls) stage its ABI 1.2 model fixtures.
+/// `the-*` profiles stage the kernel's mind fixtures in the corridor.
 ///
 /// They are *not* behaviour trees. Each is the same kernel utility graph
 /// fed a different perception policy and applied with different host limits; the
@@ -584,8 +553,8 @@ impl ProfileSet {
                     decoy: None,
                     script: Some(CorridorScript {
                         contacts,
-                        model: false,
-                        pace: None,
+                        cues: false,
+                        approach: false,
                     }),
                     ..sentry.host.clone()
                 },
@@ -610,7 +579,6 @@ impl ProfileSet {
                         })
                         .collect(),
                     observes: Vec::new(),
-                    retreats: false,
                 },
                 ScriptedContact {
                     id: 22,
@@ -620,7 +588,6 @@ impl ProfileSet {
                     threat: 0.125,
                     hits: Vec::new(),
                     observes: Vec::new(),
-                    retreats: false,
                 },
             ]
         };
@@ -635,7 +602,6 @@ impl ProfileSet {
                 threat: 0.5,
                 hits: Vec::new(),
                 observes: Vec::new(),
-                retreats: false,
             }]
         };
         let the_grudge = stage("the-grudge", damage, grudge_cast());
@@ -644,20 +610,16 @@ impl ProfileSet {
         let the_flinch = stage("the-flinch", damage, flinch_cast(54.882_812_5));
         let the_flinch_control = stage("the-flinch-control", damage, flinch_cast(62.0));
 
-        // Mind slice 2, "it models you" (evil-weevil ADR-0014 §7), staged in the
-        // corridor. One target, contact 41, stands 24 world units from the guard
-        // (3.0 fx, beyond attack range, as in the kernel fixtures); the script's
-        // pace is the fixtures' world rule (the range closes by speed × 2048 fx
-        // per tick while the guard advances or stalks), which is 0.25 world
-        // units at this scale. Each control withholds `CAP_OBSERVATION_CUES` and
-        // nothing else: the cast, cue ticks included, is the same.
-        //
-        // The corridor's first tick is 1 where the kernel fixtures' is 0, so the
-        // cue ticks are the fixtures' plus one (caught 100 -> 101, the glance
-        // 20 -> 21) and every measured tick moves by one with them.
+        // Slice 2, "it models you" (evil-weevil ADR-0014 §7), staged in the
+        // corridor. One contact, 41, stands 3.0 fx from the guard (24 world
+        // units at the corridor's scale: x = 74 against the guard's 50), as in
+        // the kernel's fixtures, and is there on every tick. The scenario
+        // declares CAP_OBSERVATION_CUES; its control withholds that one bit
+        // and changes nothing else, cue schedule included. Corridor ticks
+        // count from 1, the fixtures' from 0, so a glance on the fixture's
+        // tick 100 is on the corridor's tick 101.
         let cues = abi::CAP_NAVMESH | abi::CAP_LINE_OF_SIGHT | abi::CAP_OBSERVATION_CUES;
-        let no_cues = abi::CAP_NAVMESH | abi::CAP_LINE_OF_SIGHT;
-        let model = |id: &str, caps: u32, observes: Vec<u64>, retreats: bool| {
+        let model = |id: &str, caps: u32, observes: Vec<u64>, approach: bool| {
             Profile::build(
                 id,
                 caps,
@@ -675,26 +637,27 @@ impl ProfileSet {
                             threat: 0.5,
                             hits: Vec::new(),
                             observes,
-                            retreats,
                         }],
-                        model: true,
-                        pace: Some(0.25),
+                        cues: true,
+                        approach,
                     }),
                     ..sentry.host.clone()
                 },
             )
             .expect("canonical model scenario profile is valid")
         };
-        // "The stalker": the target never looks at the guard.
-        let the_stalker = model("the-stalker", cues, Vec::new(), false);
-        let the_stalker_control = model("the-stalker-control", no_cues, Vec::new(), false);
-        // "Caught": one look, while the guard stalks.
-        let caught = model("caught", cues, vec![101], false);
-        let caught_control = model("caught-control", no_cues, vec![101], false);
-        // "False exposure": one glance, then the target looks away and keeps its
-        // distance as the guard comes on.
-        let false_exposure = model("false-exposure", cues, vec![21], true);
-        let false_exposure_control = model("false-exposure-control", no_cues, vec![21], true);
+        // "The stalker": the contact never observes the guard, and the guard
+        // closes on it.
+        let the_stalker = model("the-stalker", cues, Vec::new(), true);
+        let the_stalker_control = model("the-stalker-control", no_damage, Vec::new(), true);
+        // "Caught": one glance while the guard stalks.
+        let caught = model("caught", cues, vec![101], true);
+        let caught_control = model("caught-control", no_damage, vec![101], true);
+        // "False exposure": one glance, then the contact looks away and keeps
+        // its distance (no approach, as in the fixture, where the range does
+        // not close).
+        let false_exposure = model("false-exposure", cues, vec![21], false);
+        let false_exposure_control = model("false-exposure-control", no_damage, vec![21], false);
 
         Self {
             cautious_sentry: sentry,
@@ -775,79 +738,6 @@ mod tests {
             p.validate().unwrap_err(),
             ProfileError::UnknownCapability(1u32 << 31)
         );
-    }
-
-    #[test]
-    fn the_observation_cue_capability_is_known_and_bit_11_is_not() {
-        // ABI 1.2 defines bit 10 (`EE_CAP_OBSERVATION_CUES`). Written as a
-        // literal so the test states the ABI's number, not the mirror's.
-        let mut p = ProfileSet::canonical().cautious_sentry.clone();
-        p.capabilities |= 1u32 << 10;
-        assert_eq!(p.validate(), Ok(()));
-        p.capabilities |= 1u32 << 11;
-        assert_eq!(
-            p.validate().unwrap_err(),
-            ProfileError::UnknownCapability(1u32 << 11)
-        );
-    }
-
-    #[test]
-    fn no_stage_one_profile_declares_the_cue_capability() {
-        let set = ProfileSet::canonical();
-        for p in [
-            &set.cautious_sentry,
-            &set.aggressive_pursuer,
-            &set.equipment_specialist,
-            &set.decoy_lure,
-            &set.the_grudge,
-            &set.the_grudge_control,
-            &set.the_flinch,
-            &set.the_flinch_control,
-        ] {
-            assert_eq!(p.capabilities & (1u32 << 10), 0, "{} gained bit 10", p.id);
-        }
-    }
-
-    #[test]
-    fn only_the_three_model_scenarios_declare_the_cue_capability() {
-        let set = ProfileSet::canonical();
-        for p in [&set.the_stalker, &set.caught, &set.false_exposure] {
-            assert!(p.has_capability(abi::CAP_OBSERVATION_CUES), "{}", p.id);
-        }
-        for (p, c) in [
-            (&set.the_stalker, &set.the_stalker_control),
-            (&set.caught, &set.caught_control),
-            (&set.false_exposure, &set.false_exposure_control),
-        ] {
-            assert!(!c.has_capability(abi::CAP_OBSERVATION_CUES), "{}", c.id);
-            // A control differs from its scenario in that one bit only.
-            assert_eq!(p.capabilities ^ c.capabilities, abi::CAP_OBSERVATION_CUES);
-            assert_eq!(p.host, c.host, "{}: the same cast and world", c.id);
-        }
-    }
-
-    #[test]
-    fn a_model_script_is_refused_unless_it_is_well_formed() {
-        let base = ProfileSet::canonical().caught.clone();
-        let refused = |edit: &dyn Fn(&mut CorridorScript)| {
-            let mut p = base.clone();
-            edit(p.host.script.as_mut().expect("a script"));
-            matches!(p.validate(), Err(ProfileError::InvalidScript(_)))
-        };
-        assert!(refused(&|s| {
-            let mut other = s.contacts[0].clone();
-            other.id = 42;
-            s.contacts.push(other);
-        }));
-        assert!(refused(&|s| s.contacts[0].observes = vec![5, 5]));
-        assert!(refused(&|s| s.contacts[0].present_from = 200));
-        assert!(refused(&|s| s.pace = Some(0.0)));
-        assert!(refused(&|s| s.pace = Some(f64::NAN)));
-        assert!(refused(&|s| {
-            s.pace = None;
-            s.contacts[0].retreats = true;
-        }));
-        assert_eq!(base.validate(), Ok(()));
     }
 
     #[test]

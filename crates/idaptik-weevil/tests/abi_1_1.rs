@@ -2,18 +2,23 @@
 //!
 //! The layout itself is pinned at compile time in `src/abi.rs` and against
 //! the generated header by `tools/verify_abi_mirror.py`. This test checks what
-//! only the linked kernel can answer: that the mind structs this mirror was
-//! written for are the kernel's (the kernel itself is now 1.2, see
-//! `abi_1_2.rs`; 1.2 changes nothing 1.1 defined), that a host still gets 1.0 from `ee_tick`, and that
-//! `ee_tick_mind` refuses a short struct before writing anything.
+//! only the linked kernel can answer: that the kernel still carries the 1.1
+//! surface this mirror was written for (a 1.2 kernel adds to it and changes
+//! none of it; `tests/abi_1_2.rs` pins the minor), and that `ee_tick_mind`
+//! refuses a short struct before writing anything.
 
 use idaptik_weevil::abi;
 use idaptik_weevil::host::WeevilHost;
 
 #[test]
-fn the_linked_kernel_keeps_the_1_1_mind_fingerprint() {
+fn the_linked_kernel_keeps_the_1_1_surface_and_its_mind_fingerprint() {
     let host = WeevilHost::init(abi::CAP_NAVMESH, 1, 4096, 7, 60, 1).expect("init");
-    assert!(host.kernel_version().minor >= 1, "the kernel has the mind");
+    let v = host.kernel_version();
+    assert_eq!(
+        (v.major as u32, v.minor as u32),
+        (abi::ABI_MAJOR, abi::ABI_MINOR)
+    );
+    assert!(v.minor >= 1, "the linked kernel has the mind, from 1.1 on");
     assert_eq!(host.kernel_fingerprint(), abi::ABI_FINGERPRINT);
     assert_eq!(host.mind_fingerprint(), abi::MIND_FINGERPRINT);
     assert_eq!(abi::MIND_FINGERPRINT, 1_047_490);

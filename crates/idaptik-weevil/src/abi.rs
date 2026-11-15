@@ -30,8 +30,9 @@ use core::mem::{offset_of, size_of};
 /// ABI major version this adapter was written against.
 pub const ABI_MAJOR: u32 = 1;
 /// ABI minor version this adapter was written against. 1.1 adds the mind
-/// (evil-weevil ADR-0013) and 1.2 the model of the target's knowledge
-/// (ADR-0014); neither changes anything an earlier minor defined.
+/// (evil-weevil ADR-0013) and changes nothing that 1.0 defined; 1.2 adds the
+/// model of the target's knowledge (ADR-0014) and changes nothing that 1.1
+/// defined.
 pub const ABI_MINOR: u32 = 2;
 /// The layout fingerprint the kernel pins. A host that links a kernel with a
 /// different fingerprint must refuse to run rather than mis-read the structs.
@@ -40,8 +41,8 @@ pub const ABI_FINGERPRINT: u64 = 18276775;
 /// `ABI_FINGERPRINT` still covers exactly the seven 1.0 structs, so a 1.0 host
 /// keeps working against a 1.1 kernel.
 pub const MIND_FINGERPRINT: u64 = 1047490;
-/// The fingerprint of the one 1.2 struct, `ee_model_trace`, only. The other two
-/// fingerprints are unchanged by 1.2.
+/// The fingerprint of the 1.2 struct, `ee_model_trace`, only. The two above
+/// are unchanged by 1.2.
 pub const MODEL_FINGERPRINT: u64 = 69857;
 
 // ── Fixed point (Q16.16) ────────────────────────────────────────────────────
@@ -117,7 +118,7 @@ pub const CONTACT_FLAG_DAMAGE_SOURCE: u16 = 1;
 pub const TELL_STARTLE: u8 = 1;
 pub const TELL_HESITATE: u8 = 2;
 pub const TELL_FIXATE: u8 = 4;
-/// ABI 1.2: a cue arrived while the agent stalked, on a tick that opened unexposed.
+/// ABI 1.2: the CAUGHT tell (the intent bit shifted down by four).
 pub const TELL_CAUGHT: u8 = 8;
 
 // `ee_mind.flags`.
@@ -145,6 +146,28 @@ pub const CAUSE_DECAY: u8 = 8;
 /// Full scale of `ee_mind_trace.attention`: a mass in 1/10 000.
 pub const MASS_FULL: u16 = 10000;
 
+// ── ABI 1.2: the model of the target's knowledge (evil-weevil ADR-0014) ─────
+
+/// `ee_contact.flags` bit 1: the host's cue that this contact observes the
+/// agent on this tick. Read only by `ee_tick_mind`, and only with
+/// `CAP_OBSERVATION_CUES`.
+pub const CONTACT_FLAG_OBSERVES: u16 = 2;
+
+/// `ee_agent.flags` bit 4: the exposure belief as the last `ee_tick_mind`
+/// closed. `ee_tick` never reads or writes it.
+pub const AGENT_FLAG_EXPOSED: u32 = 16;
+/// `ee_agent.flags` bits 8..15: the ticks the belief still has without new
+/// evidence. Belief bookkeeping; it never enters a document.
+pub const AGENT_EXPOSURE_SHIFT: u32 = 8;
+pub const AGENT_EXPOSURE_MASK: u32 = 65280;
+
+// Why exposure changed: `ee_model_trace.exposure_cause`. NONE exactly when it
+// did not.
+pub const EXPOSURE_CAUSE_NONE: u8 = 0;
+pub const EXPOSURE_CAUSE_CUE: u8 = 1;
+pub const EXPOSURE_CAUSE_OWN_ATTACK: u8 = 2;
+pub const EXPOSURE_CAUSE_EXPIRY: u8 = 3;
+
 // ── Agent flags ─────────────────────────────────────────────────────────────
 
 pub const AGENT_FLAG_MEMORY_VALID: u32 = 1u32 << 0;
@@ -155,33 +178,14 @@ pub const AGENT_MODE_ENGAGE: u32 = 1;
 pub const AGENT_MODE_EVADE: u32 = 2;
 pub const AGENT_MODE_RELOAD: u32 = 3;
 pub const AGENT_MODE_INVESTIGATE: u32 = 4;
-/// ABI 1.2: the stalk mode (action `TAKE_COVER`), ADR-0014 §4.
+/// ABI 1.2: the stalk mode (`EE_ACTION_TAKE_COVER`), the sixth candidate.
 pub const AGENT_MODE_STALK: u32 = 5;
-/// ABI 1.2: `ee_agent.flags` bit 4, the exposure belief as the last mind tick closed.
-pub const AGENT_FLAG_EXPOSED: u32 = 16;
-/// ABI 1.2: the exposure lifetime counter, `ee_agent.flags` bits 8..15.
-pub const AGENT_EXPOSURE_SHIFT: u32 = 8;
-pub const AGENT_EXPOSURE_MASK: u32 = 65280;
 
 /// Ticks a sighting stays actionable before the agent forgets it.
 pub const MEMORY_TTL: u32 = 36;
 
 /// The kernel examines at most this many contacts per snapshot.
 pub const MAX_CONTACTS: usize = 8;
-
-// ── ABI 1.2: the model of the target's knowledge (evil-weevil ADR-0014) ──────
-
-/// `ee_contact.flags` bit 1: this contact observes the agent on this tick (the
-/// host's cue). Read only by `ee_tick_mind`, and only with
-/// `CAP_OBSERVATION_CUES`.
-pub const CONTACT_FLAG_OBSERVES: u16 = 2;
-
-// Why exposure changed: `ee_model_trace.exposure_cause`. NONE exactly when it
-// did not.
-pub const EXPOSURE_CAUSE_NONE: u8 = 0;
-pub const EXPOSURE_CAUSE_CUE: u8 = 1;
-pub const EXPOSURE_CAUSE_OWN_ATTACK: u8 = 2;
-pub const EXPOSURE_CAUSE_EXPIRY: u8 = 3;
 
 // ── Structs ────────────────────────────────────────────────────────────────
 
@@ -342,11 +346,10 @@ pub struct EeMindTrace {
     pub reserved0: u8,
 }
 
-/// ABI 1.2: one record of one mind tick with the exposure belief. Its first
-/// member IS the 1.1 record, so a host passes `&mut model.mind` with
-/// `mind.struct_size` set to 40, and a kernel that sees 32 writes the 1.1
-/// record and nothing past it. The exposure lifetime counter is not here: it
-/// is belief bookkeeping, not part of the trace.
+/// ABI 1.2: one record of one model tick. Its first member IS the 1.1 record,
+/// so a host passes `&mut model.mind` with `mind.struct_size` set to 40, and
+/// the kernel writes all 40 bytes. A record that says it is 32 to 39 long gets
+/// exactly the 1.1 record.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EeModelTrace {
@@ -433,8 +436,7 @@ const _: () = assert!(offset_of!(EeMindTrace, cause) == 29, "trace.cause");
 const _: () = assert!(offset_of!(EeMindTrace, tells) == 30, "trace.tells");
 const _: () = assert!(offset_of!(EeMindTrace, reserved0) == 31, "trace.reserved0");
 
-// ABI 1.2, every field, from the header's EE_SIZEOF_ee_model_trace and
-// EE_OFFSET_ee_model_trace_* defines.
+// ABI 1.2, every field, from the header's EE_SIZEOF_* and EE_OFFSET_* defines.
 const _: () = assert!(size_of::<EeModelTrace>() == 40, "ee_model_trace size");
 const _: () = assert!(offset_of!(EeModelTrace, mind) == 0, "model.mind");
 const _: () = assert!(
@@ -485,7 +487,7 @@ unsafe extern "C" {
     ) -> EeStatus;
     pub fn ee_mind_fingerprint() -> u64;
     // ABI 1.2. No new entrance: `ee_tick_mind` writes an `ee_model_trace` when
-    // the trace's `struct_size` is 40 or more.
+    // the record's `struct_size` is 40 or more.
     pub fn ee_model_fingerprint() -> u64;
 }
 
