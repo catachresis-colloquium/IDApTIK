@@ -36,6 +36,8 @@ C_TO_RUST = {
     "ee_agent": "EeAgent", "ee_intent": "EeIntent", "ee_context": "EeContext",
     # ABI 1.1 (evil-weevil ADR-0013): the caller-owned mind and its trace record.
     "ee_mind": "EeMind", "ee_mind_trace": "EeMindTrace",
+    # ABI 1.2 (evil-weevil ADR-0014): the model trace, whose first member is the 1.1 record.
+    "ee_model_trace": "EeModelTrace",
 }
 
 

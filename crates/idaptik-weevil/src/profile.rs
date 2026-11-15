@@ -257,7 +257,8 @@ impl std::fmt::Display for ProfileError {
 
 impl std::error::Error for ProfileError {}
 
-/// The set of known, defined capabilities — the kernel's own ladder.
+/// The set of known, defined capabilities — the kernel's own ladder, as of
+/// ABI 1.2 (bit 10, `CAP_OBSERVATION_CUES`, is the newest).
 pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
     | abi::CAP_LINE_OF_SIGHT
     | abi::CAP_RAYCAST
@@ -267,7 +268,8 @@ pub const KNOWN_CAPABILITIES: u32 = abi::CAP_NAVMESH
     | abi::CAP_DAMAGE_EVENTS
     | abi::CAP_SOUND_EVENTS
     | abi::CAP_VEHICLE_BOARDING
-    | abi::CAP_TERRAIN_HEIGHT;
+    | abi::CAP_TERRAIN_HEIGHT
+    | abi::CAP_OBSERVATION_CUES;
 
 /// Strictly greater than zero. NaN is not, so a NaN scale or limit is refused.
 fn is_positive(v: f64) -> bool {
@@ -626,6 +628,37 @@ mod tests {
             p.validate().unwrap_err(),
             ProfileError::UnknownCapability(1u32 << 31)
         );
+    }
+
+    #[test]
+    fn the_observation_cue_capability_is_known_and_bit_11_is_not() {
+        // ABI 1.2 defines bit 10 (`EE_CAP_OBSERVATION_CUES`). Written as a
+        // literal so the test states the ABI's number, not the mirror's.
+        let mut p = ProfileSet::canonical().cautious_sentry.clone();
+        p.capabilities |= 1u32 << 10;
+        assert_eq!(p.validate(), Ok(()));
+        p.capabilities |= 1u32 << 11;
+        assert_eq!(
+            p.validate().unwrap_err(),
+            ProfileError::UnknownCapability(1u32 << 11)
+        );
+    }
+
+    #[test]
+    fn no_stage_one_profile_declares_the_cue_capability() {
+        let set = ProfileSet::canonical();
+        for p in [
+            &set.cautious_sentry,
+            &set.aggressive_pursuer,
+            &set.equipment_specialist,
+            &set.decoy_lure,
+            &set.the_grudge,
+            &set.the_grudge_control,
+            &set.the_flinch,
+            &set.the_flinch_control,
+        ] {
+            assert_eq!(p.capabilities & (1u32 << 10), 0, "{} gained bit 10", p.id);
+        }
     }
 
     #[test]
