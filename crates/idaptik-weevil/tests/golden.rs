@@ -1,7 +1,7 @@
 //! The committed Enaction documents are exactly what the driver writes.
 //!
 //! `tests/fixtures/enaction/` holds the `enaction-runner-output/1` and
-//! `enaction-mind-trace/1` documents of eight runs, for a consumer that can
+//! `enaction-mind-trace/1` documents of twelve runs, for a consumer that can
 //! fetch this repository but cannot build the kernel (the UMS preview). These
 //! tests keep them honest:
 //!
@@ -18,11 +18,18 @@ use std::process::Command;
 /// Runs whose runner output is committed.
 const RUNNER_ONLY: [&str; 2] = ["decoy-lure", "cautious-sentry"];
 /// Runs whose runner output and mind trace are both committed.
-const WITH_MIND: [&str; 4] = [
+const WITH_MIND: [&str; 10] = [
     "the-grudge",
     "the-grudge-control",
     "the-flinch",
     "the-flinch-control",
+    // The model scenarios (ABI 1.2), checked under the depth-1 policies.
+    "the-stalker",
+    "the-stalker-control",
+    "caught",
+    "caught-control",
+    "false-exposure",
+    "false-exposure-control",
 ];
 
 fn fixtures() -> PathBuf {

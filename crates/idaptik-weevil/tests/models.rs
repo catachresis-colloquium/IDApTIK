@@ -449,3 +449,22 @@ fn the_host_refuses_a_cue_from_a_contact_the_guard_does_not_perceive() {
     );
     assert_eq!(host.agent(0).expect("slot").tick_last, 0, "nothing ran");
 }
+
+#[test]
+fn the_depth_one_policies_differ_from_the_stage_one_policies_in_depth_only() {
+    let raw = include_str!("fixtures/enaction-policies-depth-1.json");
+    let one: Value = serde_json::from_str(raw).expect("JSON");
+    assert_eq!(
+        raw.trim_end(),
+        idaptik_weevil::canonical::to_jcs(&one).expect("canonical"),
+        "the fixture is canonical"
+    );
+    let mut zero: Value =
+        serde_json::from_str(include_str!("fixtures/enaction-policies.json")).expect("JSON");
+    assert_eq!(
+        zero["depth"]["max_order"], 0,
+        "the stage 1 file is unchanged"
+    );
+    zero["depth"]["max_order"] = 1.into();
+    assert_eq!(one, zero);
+}
