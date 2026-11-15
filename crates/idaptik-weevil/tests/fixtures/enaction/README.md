@@ -23,9 +23,10 @@ not match the complete sorted file set.
   its 1.1 predecessor.
 - Validator: catachresis-colloquium/enaction-engine `main` at `03cb27b`,
   `enaction-validate`, for the six runs before slice 2. The six model runs were checked
-  with `enaction-validate` built from pull request 112 (`marina/weevil-c0-models`,
-  not merged) at `0a67878`, the contract of `conformance/tom/v1` and ADR-0028;
-  those six runs' documents exit 0 from that build too. Every document here exits 0.
+  with `enaction-validate` built from enaction-engine `main` at `81fa3ed` (pull
+  request 112, the contract of `conformance/tom/v1` and ADR-0028; the build was
+  made from that pull request's head `0a67878`, whose tree `1e6da84` is the
+  same); those six runs' documents exit 0 from that build too. Every document here exits 0.
 - Policies: `../enaction-policies.json` (`depth.max_order` 0) for the six
   runs before slice 2, and `../enaction-policies-models.json` (the same status policy,
   `depth.max_order` 1) for the six model runs. Under the depth-0 file a model
