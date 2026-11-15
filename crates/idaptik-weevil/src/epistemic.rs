@@ -725,7 +725,13 @@ pub fn runner_output_with_models(
         // The contacts' own beliefs, by the world's rule. A contact's events
         // have the contact as observer; `contact()` and `agent()` name the
         // two sides.
-        let mut here: Vec<u32> = now.observers.iter().chain(&now.struck).copied().collect();
+        let mut here: Vec<u32> = now
+            .observers
+            .iter()
+            .chain(&now.struck)
+            .chain(&now.knowers)
+            .copied()
+            .collect();
         here.extend(knew.keys().copied());
         here.sort_unstable();
         here.dedup();

@@ -43,8 +43,9 @@
 //!
 //! The kernel holds one belief about another mind, exposure: "a target knows
 //! where I am". The headless corridor states its own rule for what a contact
-//! knows ([`world::knows`]: it observes the guard on that tick, or the guard's
-//! attack on it is applied on that tick), and the runner output states the
+//! knows ([`world::knows_within`]: it observed the guard, or the guard's
+//! attack on it was applied, on that tick or within the contact's `memory`
+//! ticks before it), and the runner output states the
 //! contact's own belief beside the guard's model of it, so the two can be
 //! compared ([`epistemic`]).
 
