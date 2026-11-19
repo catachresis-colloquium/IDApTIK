@@ -1,6 +1,6 @@
 //! The committed Enaction documents are exactly what the driver writes.
 //!
-//! `tests/fixtures/enaction/` holds the `enaction-runner-output/1` and
+//! `tests/fixtures/enaction/` holds the `enaction-runner-output/2` and
 //! `enaction-mind-trace/1` documents of twelve runs (six of them through the
 //! ABI 1.2 model record, checked under `enaction-policies-models.json`), for a
 //! consumer that can

@@ -17,7 +17,7 @@ The architectural boundary is unchanged and is the thing to keep intact:
 | Path | What it is |
 | --- | --- |
 | `crates/idaptik-weevil/` | The native adapter: ABI mirror, fx maths, errors, observation/intent conversion, profile, host, replay, and a headless corridor world. |
-| `crates/idaptik-weevil/src/epistemic.rs` | The guard's beliefs as an `enaction-runner-output/1` document (`--emit-epistemic`). |
+| `crates/idaptik-weevil/src/epistemic.rs` | The guard's beliefs as an `enaction-runner-output/2` document (`--emit-epistemic`). |
 | `crates/idaptik-weevil/src/mind_trace.rs` | The kernel's ABI 1.1 trace records as an `enaction-mind-trace/1` document (`--emit-mind-trace`), with the 1.2 vocabulary for a model run. |
 | `crates/idaptik-weevil/src/canonical.rs` | RFC 8785 canonical bytes and SHA-256 for both documents. |
 | `crates/idaptik-weevil/tests/fixtures/enaction/` | The committed documents of twelve runs (22 files), pinned to the driver by `tests/golden.rs`. |
@@ -184,6 +184,7 @@ cargo run -p idaptik-weevil --bin idaptik-weevil-replay -- \
     --emit-epistemic /tmp/runner.json --emit-mind-trace /tmp/mind.json
 
 # check them with enaction-validate, built from catachresis-colloquium/enaction-engine
+# main at 11bd247 (kernel contract 2.0, a draft)
 enaction-validate --policies crates/idaptik-weevil/tests/fixtures/enaction-policies.json \
     --mind-trace /tmp/mind.json < /tmp/runner.json
 ```
@@ -192,7 +193,7 @@ Both files are written only after the driver's two runs agree, and both are
 RFC 8785 canonical bytes, so two runs in separate processes give identical
 files.
 
-* **`--emit-epistemic`** writes one `enaction-runner-output/1` document for the
+* **`--emit-epistemic`** writes one `enaction-runner-output/2` document for the
   guard, `guard-0`. Each tick on which the kernel acts from memory
   (`INTENT_FLAG_FROM_MEMORY`) becomes one belief, `contact-<id> in room-<r> at
   tick <t>`, citing the last observation of that contact. World truth is taken
@@ -215,11 +216,43 @@ files.
 A mind run records the scenario id `headless-corridor-mind`, so it never
 replays as equal to a plain run of the same profile.
 
-The documents of eight runs are committed under
+The documents of twelve runs (22 files) are committed under
 `crates/idaptik-weevil/tests/fixtures/enaction/`, with a `SHA256SUMS` and a
 README naming the kernel and validator commits. `tests/golden.rs` fails if the
 built binary no longer writes exactly those bytes; regenerate them with the
 README's commands when the change is intended.
+
+### 3b. Kernel contract 2.0, a draft
+
+The runner output follows Enaction kernel contract 2.0 (Enaction ADR-0030),
+as the validator at enaction-engine `main` `11bd247` reads it:
+
+* the tag `enaction-runner-output/2`;
+* `manifest.kernel_version` 2.0 and `manifest.profile.targets_kernel` 2.0;
+* `manifest.migration_from` 1.0, as every package of Enaction's
+  `conformance/tom/v2` keeps it;
+* a supersession link `{belief, because}`, where `because` is the event that
+  caused the revision (see section 9a).
+
+`enaction-policies/1` and `enaction-mind-trace/1` keep their tags, and no
+mind trace changed in the move.
+
+At `11bd247` the contract is a draft: `enaction-validate --version` prints
+`enaction-validate kernel contract 2.0 (draft)`. A draft may still change its
+shape and rules with no further bump, and nothing may be published as
+conforming to it. The committed documents track the draft at `11bd247`; they
+do not claim conformance to a released contract. When the draft moves, the
+goldens are regenerated against the new commit. Enaction releases 2.0 only
+after IDApTIK and UMS emit the new tag (ADR-0030, stage C).
+
+`tests/kernel_contract_2.rs` checks the tag, the versions, the six cause rules
+and `belief-key-chained` from the contract text. Its ignored test runs the
+real validator over every golden and over one planted mutant per cause rule:
+
+```sh
+ENACTION_VALIDATE=/path/to/enaction-validate \
+    cargo test -p idaptik-weevil --test kernel_contract_2 -- --ignored --nocapture
+```
 
 ## 4. Run the game on the kernel
 
@@ -416,6 +449,13 @@ without a tick, `guard-0 in room-0`:
   `contact-41 observes guard-0 at tick T` (cue), `guard-0 attacked contact-41
   at tick T` (own attack) or the guard's perception that tick (expiry, as for
   decay);
+* each link names its cause (Enaction ADR-0030): `supersedes` is
+  `{belief, because}`, and `because` is the first event the successor cites.
+  That is the cue, the attack or, on expiry, the first event of the guard's
+  perception for a model; and the contact's sight, blow or loss of sight for
+  its own belief. The revising mind received it, the successor cites it, the
+  replaced belief does not, and its tick lies between the two beliefs'
+  `valid_from`, so it meets all six cause rules;
 * whether the guard is right: derived by the reader (CAC-KERNEL §9), never
   asserted.
 

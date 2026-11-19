@@ -1,4 +1,4 @@
-//! The `enaction-runner-output/1` document the replay driver emits.
+//! The `enaction-runner-output/2` document the replay driver emits.
 //!
 //! These tests link the native kernel, like `replay_repro.rs`. They check the
 //! properties the document must have for `enaction-validate` to admit it and
@@ -56,7 +56,7 @@ fn the_document_is_canonical_and_a_pure_function_of_the_run() {
         &a[..],
         "the emitted bytes are already in JCS form"
     );
-    assert_eq!(parse(&a)["contract"], "enaction-runner-output/1");
+    assert_eq!(parse(&a)["contract"], "enaction-runner-output/2");
 }
 
 #[test]

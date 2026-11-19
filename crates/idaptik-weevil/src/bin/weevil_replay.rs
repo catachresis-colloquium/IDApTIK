@@ -13,7 +13,7 @@
 //! ```
 //!
 //! `--emit-epistemic PATH` writes the guard's beliefs as one
-//! `enaction-runner-output/1` document in canonical bytes (see
+//! `enaction-runner-output/2` document in canonical bytes (see
 //! `idaptik_weevil::epistemic`). It is written only after the two runs below
 //! agree, which is what its `esm/replay-deterministic` guarantee claims.
 //!

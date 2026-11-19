@@ -99,19 +99,25 @@ fn holds_status(s: &str) -> bool {
 }
 
 /// Each belief after the first supersedes the one before it, and the first
-/// supersedes nothing.
+/// supersedes nothing. A link is `{belief, because}` (Enaction ADR-0030).
 fn assert_chain(id: &str, chain: &[Value]) {
     for (i, b) in chain.iter().enumerate() {
         match i {
             0 => assert!(b.get("supersedes").is_none(), "{id}: the first is new"),
             _ => assert_eq!(
-                b["supersedes"],
+                b["supersedes"]["belief"],
                 chain[i - 1]["belief_id"],
                 "{id}: belief {} supersedes the one before it",
                 b["belief_id"]
             ),
         }
     }
+}
+
+/// The event a link names as its cause.
+fn because<'a>(b: &Value, events: &'a BTreeMap<u64, Value>) -> &'a Value {
+    let id = b["supersedes"]["because"].as_u64().expect("a cause");
+    &events[&id]
 }
 
 #[test]
@@ -145,6 +151,24 @@ fn the_contact_believes_exactly_what_the_world_rule_says_it_knows() {
                 assert_eq!(e["observer"], CONTACT, "{id}: belief {}", b["belief_id"]);
                 assert_eq!(e["subject"]["agent"], "guard-0", "{id}");
                 assert_eq!(e["tick"], b["valid_from"], "{id}");
+            }
+            // A change names the contact's evidence of that tick as its
+            // cause: its sight of the guard (or else the blow it took) when
+            // it comes to know, its loss of sight when its memory ends.
+            if b.get("supersedes").is_some() {
+                let cause = because(b, &events);
+                let first = b["source_events"][0].as_u64().expect("a source");
+                assert_eq!(cause["event_id"].as_u64(), Some(first), "{id}");
+                let form = if holds_status(status(b)) {
+                    "guard-0 in room-0"
+                } else {
+                    "contact-41 does not observe guard-0 at tick"
+                };
+                let p = cause["proposition"].as_str().expect("a proposition");
+                assert!(
+                    p.starts_with(form) || p.starts_with("guard-0 attacked"),
+                    "{id}: {p}"
+                );
             }
         }
     }
@@ -235,6 +259,10 @@ fn each_model_change_cites_the_event_that_caused_it() {
                 }
                 other => panic!("{id}: tick {t} has a model and cause {other}"),
             }
+            // The link names the event the change cites: the cue or the
+            // attack, and for an expiry the first event of the guard's
+            // perception that tick.
+            assert_eq!(because(b, &events), cited[0], "{id}: tick {t}");
         }
     }
 }
@@ -252,7 +280,7 @@ fn false_exposure_holds_a_model_that_outlives_the_contacts_own_belief() {
     assert_eq!(mine, [(21, "certain"), (52, "unknown")]);
     // One model stated at 21 stands until 112, while the contact's own
     // belief stopped holding at 52: the stale model a reader must see.
-    assert_eq!(models[2]["supersedes"], models[1]["belief_id"]);
+    assert_eq!(models[2]["supersedes"]["belief"], models[1]["belief_id"]);
     let (_, control, _) = emit("false-exposure-control");
     assert!(self::models(&control).is_empty());
     assert_eq!(

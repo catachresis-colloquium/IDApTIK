@@ -1,5 +1,5 @@
 //! The `enaction-mind-trace/1` document the replay driver emits beside its
-//! `enaction-runner-output/1`, from one run through the ABI 1.1 mind.
+//! `enaction-runner-output/2`, from one run through the ABI 1.1 mind.
 //!
 //! These tests link the native kernel. They check what `enaction-validate`
 //! checks and what a reader relies on:

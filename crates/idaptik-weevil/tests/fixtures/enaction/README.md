@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Enaction documents from the headless corridor
 
-The `enaction-runner-output/1` and `enaction-mind-trace/1` documents that
+The `enaction-runner-output/2` and `enaction-mind-trace/1` documents that
 `idaptik-weevil-replay` writes for twelve corridor runs (22 documents), committed for
 consumers that can fetch this repository but cannot build the Evil Weevil
 kernel. Six of them are slice 2, "it models you": runs through the ABI 1.2
@@ -11,22 +11,61 @@ They are written by the binary, never by hand. `tests/golden.rs` fails if any
 file differs from what the built binary writes today, or if `SHA256SUMS` does
 not match the complete sorted file set.
 
+## Kernel contract 2.0 is a draft
+
+The runner outputs follow Enaction kernel contract 2.0 (Enaction ADR-0030):
+the tag `enaction-runner-output/2`, `manifest.kernel_version` 2.0,
+`manifest.profile.targets_kernel` 2.0, and `manifest.migration_from` 1.0, as
+every package of Enaction's `conformance/tom/v2` keeps it. The policies keep
+the tag `enaction-policies/1` and the mind traces keep
+`enaction-mind-trace/1`.
+
+At enaction-engine `main` `11bd247`, 2.0 is a draft: `enaction-validate
+--version` prints `enaction-validate kernel contract 2.0 (draft)`. A draft may
+still change its shape and rules with no further bump, and nothing may be
+published as conforming to it. These goldens track the draft at `11bd247`.
+They are not a claim of conformance to a released contract.
+
+A supersession link is `{belief, because}`: the belief replaced and the event
+that caused the revision. The emitter names the first event the successor
+already cites:
+
+- the guard's model, on a cue: the guard's observation `contact-41 observes
+  guard-0 at tick T` (`caught`, `false-exposure`);
+- the guard's model, on its own attack: the action outcome `guard-0 attacked
+  contact-41 at tick T` (`the-stalker`);
+- the guard's model, on expiry: the first event of the guard's perception on
+  that tick (`false-exposure`, tick 112);
+- the contact's own belief, when its memory ends: its observation `contact-41
+  does not observe guard-0 at tick T` (`false-exposure` and
+  `false-exposure-control`, tick 52);
+- the contact's own belief, when it comes to know again: its sight of the
+  guard, or else the blow it took. No committed run has such a link.
+
+Each cause meets the six rules of ADR-0030. `tests/kernel_contract_2.rs`
+checks them, and checks `belief-key-chained` (ADR-0029), from the contract
+text.
+
+The move from contract 1.0 changed every runner output and no mind trace.
+Each runner output changed its tag, its two kernel versions and its digest.
+The four with a link (`caught`, `the-stalker`, `false-exposure` and
+`false-exposure-control`) also changed each link from a bare id to
+`{belief, because}`. Nothing else in any document changed, and event ids are
+the same, so every `caused_by` in a mind trace still names the same event.
+
 ## Provenance
 
-- Kernel: catachresis-colloquium/evil-weevil `marina/weevil-c1-mind-slice-2`
-  at `f7c333d` (ABI 1.2, evil-weevil ADR-0014; pull request 11, not merged),
-  built with Zig 0.16.0. The ten documents of the runs before slice 2 were first
-  written on `main` at `c655f46` (ABI 1.1). On the 1.2 kernel they differ from
-  those bytes in the kernel's version label only (`producer.abi`,
-  `manifest.source`, and `manifest.digest`, which covers `source`): with the
-  label put back to 1.1 and the digest recomputed, each is byte-identical to
-  its 1.1 predecessor.
-- Validator: catachresis-colloquium/enaction-engine `main` at `03cb27b`,
-  `enaction-validate`, for the six runs before slice 2. The six model runs were checked
-  with `enaction-validate` built from enaction-engine `main` at `81fa3ed` (pull
-  request 112, the contract of `conformance/tom/v1` and ADR-0028; the build was
-  made from that pull request's head `0a67878`, whose tree `1e6da84` is the
-  same); those six runs' documents exit 0 from that build too. Every document here exits 0.
+- Kernel: catachresis-colloquium/evil-weevil, a checkout whose `src` and
+  `include` equal `main` at `db850ed` (ABI 1.2), built with Zig 0.16.0. The
+  slice 2 documents were first written on `marina/weevil-c1-mind-slice-2` at
+  `f7c333d` (pull request 11). The ten documents of the runs before slice 2
+  were first written on `main` at `c655f46` (ABI 1.1). On the 1.2 kernel they
+  differ from those bytes in the kernel's version label only (`producer.abi`,
+  `manifest.source`, and `manifest.digest`, which covers `source`).
+- Validator: catachresis-colloquium/enaction-engine `main` at `11bd247`,
+  `enaction-validate` (kernel contract 2.0, draft). Every document here exits
+  0 from that build, with the policies below and with its mind trace where
+  it has one. No validator of contract 1.0 was run on them.
 - Policies: `../enaction-policies.json` (`depth.max_order` 0) for the six
   runs before slice 2, and `../enaction-policies-models.json` (the same status policy,
   `depth.max_order` 1) for the six model runs. Under the depth-0 file a model
