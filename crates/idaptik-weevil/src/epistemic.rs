@@ -73,6 +73,13 @@
 //!   at tick T`, and expiry as decay is cited, by the guard's perception on
 //!   that tick. A run without `CAP_OBSERVATION_CUES` states no model: the
 //!   kernel makes no claim.
+//! * **Each link names its cause** (Enaction ADR-0030): `supersedes` is
+//!   `{belief, because}`, and `because` is the first event the successor
+//!   cites. That is the contact's sight, blow or loss of sight for its own
+//!   belief, and the cue, the attack or the perception on expiry for the
+//!   guard's model. It meets the contract's six cause rules: it exists, the
+//!   revising mind received it, the successor cites it, the replaced belief
+//!   does not, and its tick lies between the two beliefs' `valid_from`.
 //! * **World truth** is closed over the order-0 propositions and the events,
 //!   as before. A model is never compared with world truth, so no atom is
 //!   added for a model as such.
@@ -228,9 +235,18 @@ pub struct Belief {
     pub confidence: Interval,
     pub source_events: Vec<u64>,
     pub valid_from: u64,
-    /// The belief this one ends, when it is a later state of the same mind.
+    /// The belief this one ends, when it is a later state of the same mind,
+    /// and the event that caused the revision.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub supersedes: Option<u64>,
+    pub supersedes: Option<Supersession>,
+}
+
+/// A supersession link (Enaction ADR-0030): the belief replaced, and the
+/// event that caused the revision. A link with no cause has no wire form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Supersession {
+    pub belief: u64,
+    pub because: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -984,10 +1000,35 @@ pub fn runner_output_with_models(
     }
     // The contacts' own beliefs and the guard's models of them, by tick, own
     // belief before model; each supersedes the last of its own chain.
+    //
+    // A link names its cause (Enaction ADR-0030): the first event the
+    // successor cites, which is the evidence of the change on the
+    // successor's own tick. For a contact's own belief that is its sight of
+    // the guard (or the blow it took) when it comes to know, and its loss of
+    // sight when its memory ends. For the guard's model it is the cue, its own
+    // attack, or on expiry the first event of its perception that tick. Each
+    // is received by the revising mind (the contact for its own belief, the
+    // guard for its model), is cited by the successor, and lies on the
+    // successor's tick, after every event the replaced belief cites.
     models.sort_by_key(|p| (p.tick, p.order, p.bearer));
     let mut last: BTreeMap<(Option<u32>, u32), u64> = BTreeMap::new();
     for p in models {
         let belief_id = beliefs.len() as u64 + 1;
+        let supersedes = match last.insert((p.holder, p.bearer), belief_id) {
+            None => None,
+            Some(belief) => {
+                let Some(cause) = p.sources.first() else {
+                    return Err(epistemic(format!(
+                        "tick {}: belief {belief_id} replaces belief {belief} and cites no event",
+                        p.tick
+                    )));
+                };
+                Some(Supersession {
+                    belief,
+                    because: ids[cause],
+                })
+            }
+        };
         let proposition = positioned(trace.entries[0].agent_id, room);
         // An order-0 proposition is decided by the world, whatever the
         // bearer's status: the guard is in `room` on every tick, so it holds.
@@ -1004,7 +1045,7 @@ pub fn runner_output_with_models(
             confidence: p.interval,
             source_events: p.sources.iter().map(|k| ids[k]).collect(),
             valid_from: p.tick,
-            supersedes: last.insert((p.holder, p.bearer), belief_id),
+            supersedes,
         });
     }
     let causes = cause_keys

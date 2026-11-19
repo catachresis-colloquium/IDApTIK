@@ -79,7 +79,10 @@ fn read(doc: &Value) -> Vec<B> {
             proposition: b["proposition"].as_str().expect("a string").to_owned(),
             status: b["status"].as_str().expect("a status").to_owned(),
             valid_from: b["valid_from"].as_u64().expect("valid_from"),
-            supersedes: b.get("supersedes").map(|s| s.as_u64().expect("an id")),
+            // A 2.0 link is `{belief, because}`. The reader needs the belief.
+            supersedes: b
+                .get("supersedes")
+                .map(|s| s["belief"].as_u64().expect("an id")),
         })
         .collect()
 }
@@ -197,7 +200,9 @@ fn the_reader_rule_marks_a_restated_model_as_not_stale() {
             v["holders"] = serde_json::json!(holders);
         }
         if let Some(s) = sup {
-            v["supersedes"] = serde_json::json!(s);
+            // The reader does not read the cause, and this package has no
+            // events, so `because` names none.
+            v["supersedes"] = serde_json::json!({ "belief": s, "because": 0 });
         }
         v
     };
