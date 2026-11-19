@@ -2,7 +2,7 @@
 //!
 //! Evil Weevil ABI 1.1 (ADR-0013) writes one `ee_mind_trace` for every
 //! `ee_tick_mind` call. This module turns a run's records into the contract's
-//! document (CAC-KERNEL §10), paired with the `enaction-runner-output/1`
+//! document (CAC-KERNEL §10), paired with the `enaction-runner-output/2`
 //! document of the same run. As with that one, ADR-0009 forbids a dependency on
 //! any Enaction crate: the shape is written here and checked by the validator.
 //!

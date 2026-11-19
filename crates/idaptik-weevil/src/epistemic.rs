@@ -1,9 +1,14 @@
-//! The guard's beliefs, as an `enaction-runner-output/1` document.
+//! The guard's beliefs, as an `enaction-runner-output/2` document.
 //!
 //! Enaction's validator (`enaction-validate`, CAC-KERNEL §9) admits a game
 //! runner's output as data, through a process. IDApTIK's ADR-0009 forbids a
 //! dependency on any Enaction crate, so this module writes the document's
 //! wire shape itself and leaves the checking to the validator.
+//!
+//! The shape is Enaction kernel contract 2.0 (Enaction ADR-0030). At
+//! enaction-engine `11bd247` that contract is a draft. Its shape and rules may
+//! still change with no further bump, and nothing may be published as
+//! conforming to it.
 //!
 //! # What is in it, and what is not
 //!
@@ -94,7 +99,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 /// The envelope's contract tag.
-pub const RUNNER_OUTPUT_CONTRACT: &str = "enaction-runner-output/1";
+pub const RUNNER_OUTPUT_CONTRACT: &str = "enaction-runner-output/2";
 /// The contract's full mass.
 pub const MASS_FULL: u16 = 10_000;
 
@@ -119,6 +124,9 @@ pub struct Version {
 }
 
 const V1_0: Version = Version { major: 1, minor: 0 };
+/// Enaction kernel contract 2.0 (ADR-0030). A draft at enaction-engine
+/// `11bd247`: nothing may be published as conforming to it.
+pub const KERNEL_CONTRACT: Version = Version { major: 2, minor: 0 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProfileRef {
@@ -1014,11 +1022,11 @@ pub fn runner_output_with_models(
     let (kmaj, kmin, kpatch) = hdr.kernel_version;
     let mut package = Package {
         manifest: Manifest {
-            kernel_version: V1_0,
+            kernel_version: KERNEL_CONTRACT,
             profile: ProfileRef {
                 id: PROFILE_ID.to_owned(),
                 version: V1_0,
-                targets_kernel: V1_0,
+                targets_kernel: KERNEL_CONTRACT,
             },
             schema_version: V1_0,
             source: format!(
