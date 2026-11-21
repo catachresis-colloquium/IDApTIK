@@ -796,8 +796,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      # Known-compatible game-session lane plus the post-merge socket fixes.
-      BURBLE_REF: ef6756cf1591406d434c5c04c3c018e935836e4c
+      # Known-compatible game-session lane (legacy-json-v1, loopback-only in test env).
+      BURBLE_REF: db2f4f3f017829181ed67ebc449e0700cb2541ee
     steps:
       - name: Checkout
         run: |
