@@ -42,9 +42,10 @@ be extended.
 | `crates/idaptik-weevil/src/abi.rs` transcribes the generated `ee.h` as
   `#[repr(C)]` mirrors with compile-time `size_of!`/`offset_of!` assertions;
   `build.rs` resolves the library, it does not regenerate the header.
-  **Verified**: `tools/verify_abi_mirror.py` lays out every struct in both
-  languages and reports all seven matching on field name, order, offset and
-  size; the C null host compiles the header under `-Werror` and prints the same
+  **Verified**: the ABI mirror check (then a script, now the Rust test
+  `crates/idaptik-weevil/tests/abi_mirror.rs`, `just weevil-abi-mirror`) lays
+  out every struct in both languages and reported all seven matching on field
+  name, order, offset and size; the C null host compiles the header under `-Werror` and prints the same
   sizes and the four golden digests.
 
 | C2
@@ -103,7 +104,8 @@ Rust distribution. Concretely:
   compiled from the generated header with `-Werror` — reports `null host: OK`
   and prints the golden digests.
 * The **ABI mirror** in `crates/idaptik-weevil/src/abi.rs` was verified against
-  that header by `tools/verify_abi_mirror.py`, independently of either
+  that header by the ABI mirror check (now
+  `crates/idaptik-weevil/tests/abi_mirror.rs`), independently of either
   compiler.
 * `cargo build`, `cargo test`, `cargo clippy` and `cargo fmt` were **not** run:
   no Rust toolchain is obtainable in this sandbox (`static.rust-lang.org` and

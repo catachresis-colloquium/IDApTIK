@@ -127,7 +127,7 @@ Four facts make this the leading candidate, and they are not marketing:
    modalities.
 3. **It already spans the Rust/Elixir seam.** `verisim-nif` exists so the BEAM
    can call the store in-process. IDApTIK has exactly that seam — burble behind
-   `burble-client`, pinned at `ef6756c`.
+   `burble-client`, pinned at `db2f4f3`.
 4. **The estate already deploys it as a service.** `standards/.verisimdb/` ships
    `config.toml`, `compose.yml`, `Containerfile` and `deploy.sh` for an instance
    on port 8097 with per-instance octad schemas. An IDApTIK instance would be
