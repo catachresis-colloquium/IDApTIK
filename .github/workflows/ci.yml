@@ -615,10 +615,10 @@ jobs:
   # poll, tick, quit. A regression there is invisible to a test that never
   # allocates a terminal.
   #
-  # `just smoke` runs the harness's own `--self-test` first (four deliberately
-  # broken apps, each of which it must reject) and only then boots the real
-  # binary on a pty. The self-test is what keeps this from being a gate that
-  # cannot fail.
+  # `just smoke` runs crates/idaptik-tui/tests/runtime_smoke.rs: a Rust
+  # integration test that boots the real binary on a pty, plus stub apps that
+  # each break one of its four checks and must be rejected. Those negative
+  # controls keep this from being a gate that cannot fail.
   #
   # run:-only steps and no new `uses:` ref, per the actions.lock rule above.
   runtime-smoke:
