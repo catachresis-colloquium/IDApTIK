@@ -129,8 +129,9 @@ Two further confusions worth pre-empting:
   bool. Not driven by any shipped floor yet (issue #192).
 - **Water, gas and airflow** (`scenario/infrastructure/`, ADR-0013) and
   consequences-as-observations (`scenario/infra.rs`, ADR-0014): integer-only
-  derivations, not a fluid solver; the infrastructure runtime is not yet called
-  from the game tick.
+  derivations, not a fluid solver; the infrastructure runtime is called every tick
+  (`scenario/sim/mod.rs:727`) but inert on the canonical floor, which sets
+  `infra: None` (`ghost_lobby.rs:603`).
 - **The hosted companion.** Moletaire is no longer a seam: `Command::Mole`,
   `MoleHostState` on `RuntimeState`, `scenario/sim/mole.rs`.
 - **Durable storage** (`crates/idaptik-persist`): a store *beside* the tick for
