@@ -21,7 +21,7 @@ The architectural boundary is unchanged and is the thing to keep intact:
 | `crates/idaptik-weevil/src/mind_trace.rs` | The kernel's ABI 1.1 trace records as an `enaction-mind-trace/1` document (`--emit-mind-trace`), with the 1.2 vocabulary for a model run. |
 | `crates/idaptik-weevil/src/canonical.rs` | RFC 8785 canonical bytes and SHA-256 for both documents. |
 | `crates/idaptik-weevil/tests/fixtures/enaction/` | The committed documents of twelve runs (22 files), pinned to the driver by `tests/golden.rs`. |
-| `tools/verify_abi_mirror.py` | The ABI mirror check: `abi.rs` against the generated `ee.h`, every field, offset and size. |
+| `crates/idaptik-weevil/tests/abi_mirror.rs` | The ABI mirror check (`just weevil-abi-mirror`): `abi.rs` against the generated `ee.h`, every struct, field, type, offset and size, with firing fixtures. |
 | `crates/idaptik-core/src/scenario/guard_brain.rs` | The game's own seam: plain-data perception and decision types, no dependency on the kernel. |
 | `crates/idaptik-core/src/scenario/sim/mod.rs` | `guard_perception`, `is_live_target`, `apply_guard_decision`, `GuardBrainKind` selection. |
 | `crates/idaptik-bevy/src/guard_weevil.rs` | The Bevy driver: owns the `WeevilHost`, converts perception → observation, proposal → decision. |
@@ -35,34 +35,29 @@ the adapter and the game). Install both so every user gets them.
 
 ### Zig (system-wide)
 
-Match the version the project's CI pins — `.github/workflows/seam.yml` keys its
+Match the version the project's CI pins: `.github/workflows/seam.yml` keys its
 cache on `zig0.16.0`, and newer Zig releases are stricter about source style and
-will reject the kernel's test sources. The simplest route that needs no access
-to `ziglang.org` is the PyPI wheel, which is the full compiler:
+will reject the kernel's test sources. Install the upstream tarball and check
+its SHA-256 before unpacking it. The digest is the one
+`ziglang.org/download/index.json` publishes for 0.16.0, and the same one the
+`weevil-adapter` CI job verifies:
 
 ```sh
-python3 -m pip install --no-cache-dir --target /tmp/zig16 ziglang==0.16.0
-sudo mkdir -p /opt/zig
-sudo cp -a /tmp/zig16/ziglang /opt/zig/
-sudo ln -sf /opt/zig/ziglang/zig /usr/local/bin/zig
-echo 'export PATH="/opt/zig/ziglang:$PATH"' | sudo tee /etc/profile.d/zig.sh
-sudo chmod -R a+rX /opt/zig
-
+sudo curl -fsSL -o /tmp/zig.tar.xz \
+  https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz
+echo "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00  /tmp/zig.tar.xz" \
+  | sha256sum -c -
+sudo mkdir -p /opt/zig-0.16.0
+sudo tar -xJf /tmp/zig.tar.xz -C /opt/zig-0.16.0 --strip-components=1
+sudo ln -sf /opt/zig-0.16.0/zig /usr/local/bin/zig
+echo 'export PATH="/opt/zig-0.16.0:$PATH"' | sudo tee /etc/profile.d/zig.sh
+sudo chmod -R a+rX /opt/zig-0.16.0
 # check it as an unprivileged user
 sudo -u nobody bash -lc 'command -v zig && zig version'
 ```
 
-Or, if you have normal internet access, the upstream tarball is simpler:
-
-```sh
-sudo curl -fsSL -o /tmp/zig.tar.xz \
-  https://ziglang.org/download/0.16.0/zig-linux-x86_64-0.16.0.tar.xz
-sudo mkdir -p /opt/zig-upstream
-sudo tar -xJf /tmp/zig.tar.xz -C /opt/zig-upstream --strip-components=1
-sudo ln -sf /opt/zig-upstream/zig /usr/local/bin/zig
-echo 'export PATH="/opt/zig-upstream:$PATH"' | sudo tee /etc/profile.d/zig.sh
-sudo chmod -R a+rX /opt/zig-upstream
-```
+`mise install zig@0.16.0` is the other route; point `EVIL_WEEVIL_ZIG` at
+`$(mise where zig@0.16.0)/zig`.
 
 ### Rust (system-wide)
 
@@ -133,14 +128,20 @@ adapter that looks built and is not.
 Then check the Rust mirror against the header the library was built from:
 
 ```sh
-python3 tools/verify_abi_mirror.py \
-    "$(bash scripts/weevil_kernel.sh locate)/include/evil_weevil/ee.h" \
-    crates/idaptik-weevil/src/abi.rs
+just weevil-abi-mirror
+# runs: EVIL_WEEVIL_ROOT="$(bash scripts/weevil_kernel.sh locate)" \
+#       cargo test -p idaptik-weevil --test abi_mirror -- --nocapture
 ```
 
-It lays out all ten structs (the seven 1.0 ones, `ee_mind`, `ee_mind_trace` and
-the 1.2 `ee_model_trace`) in both files and fails on any field, offset or size
-that differs. `abi.rs` also carries a compile-time assert for every 1.1 and 1.2
+`crates/idaptik-weevil/tests/abi_mirror.rs` lays out all ten structs (the seven
+1.0 ones, `ee_mind`, `ee_mind_trace` and the 1.2 `ee_model_trace`) in both files
+and fails on any struct, field, type, offset or size that differs, and on any
+header `EE_SIZEOF_*`/`EE_OFFSET_*` define that disagrees with the header's own
+struct bodies. A missing header is a failure. Its `firing_*` tests are the
+negative controls: each makes one exact edit to the real files (a widened field,
+a reorder, a signedness change, a dropped field, a missing struct, an array
+member, a wrong or missing define) and requires the check to fail for that
+reason. `abi.rs` also carries a compile-time assert for every 1.1 and 1.2
 size and offset, so a moved field fails the Rust build as well.
 
 ## 3. Run the headless replay

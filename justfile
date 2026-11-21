@@ -479,11 +479,14 @@ weevil-kernel:
 weevil-kernel-check:
     bash scripts/weevil_kernel.sh check
 
-# The Rust #[repr(C)] transcription against the generated ee.h. Needs no
-# compiler, so it runs anywhere Python does — including a machine that has not
-# built the kernel yet.
+# The Rust #[repr(C)] transcription against the generated ee.h: every struct,
+# field, type, offset and size, plus the header's own EE_SIZEOF/EE_OFFSET defines
+# (crates/idaptik-weevil/tests/abi_mirror.rs, with its firing fixtures). It reads
+# both files as text and does not call the kernel, but cargo links the crate's
+# replay binary for any integration test, so build the kernel first
+# (`just weevil-kernel`). A missing header fails; it is never skipped.
 weevil-abi-mirror:
-    @root="$$(bash scripts/weevil_kernel.sh locate)" && python3 tools/verify_abi_mirror.py "$root/include/evil_weevil/ee.h" crates/idaptik-weevil/src/abi.rs
+    @root="$(bash scripts/weevil_kernel.sh locate)" && EVIL_WEEVIL_ROOT="$root" cargo test -p idaptik-weevil --test abi_mirror -- --nocapture
 
 # Build the adapter crate (links the native kernel).
 weevil-build:
