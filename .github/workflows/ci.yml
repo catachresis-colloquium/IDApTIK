@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #

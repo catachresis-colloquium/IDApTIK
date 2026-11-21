@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # Machine-checked proof of the IDApTIK determinism kernel (issue #121).
 #
 # Two jobs, deliberately separated by cost:

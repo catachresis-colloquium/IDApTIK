@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # TEMPORARY authoring aid (removed before merge): the authoring sandbox can
 # reach api.github.com but not the Azure blob host the Actions log API
 # redirects to, so this job runs a subset of `just test-ghost` (formatting and
