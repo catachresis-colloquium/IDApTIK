@@ -50,8 +50,16 @@ env:
   # below. A tag would be a moving target under sha_pinning_required; the
   # commit is not. The superseded pin was
   # 318615be3b8bbc60d1f6d52469ba5c0bdebed4f1 (v0.13.0).
-  CREUSOT_REF: 65349025c67e69fcd7479f1f420fa5904f69bc27
-  CREUSOT_VERSION: v0.14.0
+  #
+  # MEASURED again, the same failure one release on. Dependabot #238 moved
+  # the kernel to creusot-std 0.15.0 while this pin stayed at v0.14.0, which
+  # is the refused pairing above with every number one higher. The toolchain
+  # moves again: v0.15.0 (release 2026-11-10, tag commit
+  # fd4d85b2c237ef93147e99f6a0c04acfc89a6a17) pairs with creusot-std 0.15.0
+  # and declares the same nightly-2026-08-03, so the rustc step is unchanged.
+  # The superseded pin was 65349025c67e69fcd7479f1f420fa5904f69bc27 (v0.14.0).
+  CREUSOT_REF: fd4d85b2c237ef93147e99f6a0c04acfc89a6a17
+  CREUSOT_VERSION: v0.15.0
 
 jobs:
   ledgers:
@@ -126,8 +134,8 @@ jobs:
           # and aborted the switch.
           #
           # The cure is upstream's own, not a workaround. creusot-deps.opam
-          # declares the IDE conditionally:
-          #     "why3-ide" {= "git-54c92f96" & !?in-creusot-ci}
+          # declares the IDE conditionally (as of v0.15.0):
+          #     "why3-ide" {= "git-05bf4ddf" & !?in-creusot-ci}
           # so setting that variable drops the GUI and the entire GTK stack with
           # it. why3, why3find and the four provers -- everything a headless
           # proof actually uses -- are unaffected. This is how Creusot's own CI
@@ -371,6 +379,12 @@ jobs:
             mutant-contrast-*.log
             restored.log
             verif/
+            why3find.proofs/
+          # MEASURED (local run, Creusot v0.15.0): the why3find it ships moves
+          # every verif/**/proof.json into ./why3find.proofs/ during the prove
+          # step ("Moving proof files to `./why3find.proofs"), so verif/ alone
+          # would upload the .coma files without the proof sessions.
+          #
           # `warn`, not `error`: with `if: always()` a bootstrap failure reaches
           # this step before any log exists, and a second red there would only
           # obscure the first. The guarantee that evidence EXISTS on a green run

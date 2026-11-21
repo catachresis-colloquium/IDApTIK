@@ -56,7 +56,7 @@ bevy_winit = { version = "0.20.0", default-features = false, features = ["waylan
 # The client-side session transport (ADR-0006 §2): async runtime + WebSocket.
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
 idaptik-net = { path = "crates/idaptik-net", version = "0.1.0" }
-burble-client = { git = "https://github.com/metadatastician/burble", rev = "ef6756cf1591406d434c5c04c3c018e935836e4c", version = "2.0.0" }
+burble-client = { git = "https://github.com/metadatastician/burble", rev = "db2f4f3f017829181ed67ebc449e0700cb2541ee", version = "2.0.0" }
 tokio-tungstenite = "0.30"
 futures-util = "0.3"
 

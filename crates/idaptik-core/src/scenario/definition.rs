@@ -318,6 +318,33 @@ pub struct HatchDef {
     pub room: RoomId,
 }
 
+/// The first preset field that breaks a run: `trace_threshold` 0 fails on
+/// tick 1, `sprint` 0 makes movement noise infinite, and a negative
+/// `billy_speed` panics in the guard clamp. Every number must be finite and
+/// non-negative.
+fn preset_out_of_range(p: &DifficultyPreset) -> Option<&'static str> {
+    let numbers = [
+        ("arrival", p.arrival.0.min(p.arrival.1)),
+        ("player_speed", p.player_speed),
+        ("sprint", p.sprint),
+        ("billy_speed", p.billy_speed),
+        ("billy_sight", p.billy_sight),
+        ("support_limit", p.support_limit),
+        ("bandwidth_regen", p.bandwidth_regen),
+        ("badge_delay", p.badge_delay),
+        ("usb_timer", p.usb_timer),
+        ("camera_lock", p.camera_lock),
+        ("alert_gain", p.alert_gain),
+        ("score_mult", p.score_mult),
+    ];
+    numbers
+        .into_iter()
+        .find(|(_, v)| !v.is_finite() || *v < 0.0)
+        .map(|(f, _)| f)
+        .or((p.sprint == 0.0).then_some("sprint"))
+        .or((p.trace_threshold == 0).then_some("trace_threshold"))
+}
+
 /// A typed validation failure.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValidationError {
@@ -353,6 +380,23 @@ pub enum ValidationError {
         room: RoomId,
         count: usize,
         max: usize,
+    },
+    /// More doors on the floor than the frontend's door buffer holds (see
+    /// [`crate::interp::MAX_DOORS`]).
+    TooManyDoors {
+        count: usize,
+        max: usize,
+    },
+    /// A difficulty preset value is out of range: not finite, negative, or
+    /// zero where zero breaks the run (`sprint`, `trace_threshold`).
+    DifficultyValueOutOfRange {
+        difficulty: DifficultyId,
+        field: String,
+    },
+    /// A snapshot whose state does not have the shape its definition gives:
+    /// `field` is the first sub-state whose length differs.
+    SnapshotStateMismatch {
+        field: String,
     },
     /// A snapshot whose format tag is not the one this build restores.
     UnsupportedSnapshotFormat {
@@ -568,6 +612,19 @@ impl ScenarioDefinition {
                     format!("{id:?} arrival={:?}", p.arrival),
                     Some(ValidationError::ArrivalInverted(id)),
                 );
+                let bad = preset_out_of_range(p);
+                check(
+                    &mut checks,
+                    "difficulty",
+                    "difficulty.values_in_range",
+                    "Preset values are finite and in range",
+                    bad.is_none(),
+                    format!("{id:?} out of range: {}", bad.unwrap_or("none")),
+                    bad.map(|field| ValidationError::DifficultyValueOutOfRange {
+                        difficulty: id,
+                        field: field.into(),
+                    }),
+                );
             }
         }
 
@@ -607,6 +664,19 @@ impl ScenarioDefinition {
                 count <= max,
                 format!("{count} camera(s), max {max}"),
                 Some(ValidationError::TooManyCameras { count, max }),
+            );
+        }
+        {
+            let max = crate::interp::MAX_DOORS;
+            let count = self.doors.len();
+            check(
+                &mut checks,
+                "capacity",
+                "capacity.doors",
+                "Doors fit the frontend's door buffer",
+                count <= max,
+                format!("{count} door(s), max {max}"),
+                Some(ValidationError::TooManyDoors { count, max }),
             );
         }
         if rooms_present {

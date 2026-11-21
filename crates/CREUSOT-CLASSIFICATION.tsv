@@ -217,6 +217,7 @@ T	crates/idaptik-net/tests/mole_routing.rs	test
 T	crates/idaptik-tui/tests/headless_smoke.rs	test
 T	crates/idaptik-tui/tests/infra_script.rs	test
 T	crates/idaptik-tui/tests/net_smoke.rs	test
+T	crates/idaptik-tui/tests/runtime_smoke.rs	test
 T	crates/idaptik-tui/tests/tutorial.rs	test
 T	crates/idaptik-core/tests/infrastructure.rs	infrastructure simulation acceptance and validation tests
 T	crates/idaptik-evil-weevil/src/agent.rs	bounded adversarial testing agent; proposes test intents only
@@ -275,6 +276,7 @@ T	crates/idaptik-weevil/tests/model_documents.rs	test of the contacts' own belie
 T	crates/idaptik-weevil/tests/model_timelines.rs	test of the guard's model timelines and stale divergence, derived from the contract text; observing it would be circular
 T	crates/idaptik-weevil/tests/epistemic.rs	test of the emitted epistemic document; observing it would be circular
 T	crates/idaptik-weevil/tests/kernel_contract_2.rs	test of the committed runner outputs against Enaction kernel contract 2.0, written from the contract text; observing it would be circular
+T	crates/idaptik-weevil/tests/abi_mirror.rs	ABI mirror test: abi.rs against the generated ee.h, read as text; observing it would be circular
 P	crates/idaptik-bevy/src/guard_weevil.rs	the Bevy half of the kernel integration: turns sim perception into observations and the returned intent into the guard action
 D	crates/idaptik-core/src/scenario/guard_brain.rs	the selectable brain seam: plain enums, contact ids and perception/decision records with no kernel dependency
 L	crates/idaptik-core/src/scenario/secondary_spaces/access.rs	actor access rules over routes: actor mask, clearance against the body box, route state and equipment
