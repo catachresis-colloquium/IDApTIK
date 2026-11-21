@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # Watch upstream bevy_winit releases for the retirement condition of the
 # vendored feature patch (issue #105). Runs weekly and on demand; the check
 # fails — with removal steps — once a published release exposes independently
