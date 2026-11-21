@@ -15,7 +15,7 @@ different things and should not be read as the same thing.
 | Evil Weevil kernel builds to `libevil_weevil.a` | **Verified** — real build, 9,996,806 bytes |
 | The kernel's own test suite passes | **Verified** — 32/32 (21 + 11) |
 | The C null host passes (the other side of the ABI) | **Verified** — `null host: OK` |
-| The ABI constants in `crates/idaptik-weevil/src/abi.rs` match the generated `ee.h` | **Verified** — `tools/verify_abi_mirror.py`, every field/offset/size |
+| The ABI constants in `crates/idaptik-weevil/src/abi.rs` match the generated `ee.h` | **Verified**, the ABI mirror check (§3), every field/offset/size |
 | The DEED document conforms to the normative grammar | **Verified** — run against the owner's own linter |
 | The adapter crate compiles | **Not run** — no Rust toolchain obtainable |
 | The game runs on the kernel brain | **Not run** — no Rust toolchain |
@@ -94,16 +94,18 @@ The struct sizes and the four digests are exactly the constants recorded in
 `crates/idaptik-weevil/src/abi.rs` and in the session's kernel notes. This is
 independent confirmation from a C compiler that knows nothing about Rust.
 
-### 3. The Rust ABI mirror matches the header (`tools/verify_abi_mirror.py`)
+### 3. The Rust ABI mirror matches the header
 
-The header is self-describing. This script parses `include/evil_weevil/ee.h` and
+The header is self-describing. The check parses `include/evil_weevil/ee.h` and
 `crates/idaptik-weevil/src/abi.rs`, lays each struct out with x86-64 alignment
-rules, and diffs field names, field order, offsets and total size:
+rules, and diffs field names, field order, offsets and total size. At the time
+of this record it was a standalone script; it has since been replaced by the
+Rust integration test `crates/idaptik-weevil/tests/abi_mirror.rs`
+(`just weevil-abi-mirror`), which also compares field types and the header's
+own `EE_SIZEOF_*`/`EE_OFFSET_*` defines and carries firing fixtures. The output
+recorded then, for the seven 1.0 structs:
 
 ```
-$ python3 tools/verify_abi_mirror.py \
-      evil-weevil/include/evil_weevil/ee.h \
-      crates/idaptik-weevil/src/abi.rs
 ok   ee_version       size=   8 fields= 4
 ok   ee_init_desc     size=  64 fields=11
 ok   ee_contact       size=  16 fields= 6
@@ -244,12 +246,13 @@ All of it is on branch `arena/9d80877f-idaptik`, uncommitted.
   `src/profile.rs`, `src/host.rs`, `src/replay.rs`, `src/world.rs`,
   `src/lib.rs`, `src/bin/weevil_replay.rs`, `tests/replay_repro.rs`.
 
-**`tools/verify_abi_mirror.py`** — the ABI mirror checker used in §3.
+**ABI mirror checker**, the check used in §3, since replaced by
+`crates/idaptik-weevil/tests/abi_mirror.rs`.
 
 **`scripts/weevil_kernel.sh`** (new) — resolves the evil-weevil checkout
 (`$EVIL_WEEVIL_ROOT`, `../evil-weevil`, `../../evil-weevil`, `$HOME/evil-weevil`,
 verified by `include/evil_weevil/ee.h` rather than by directory name), resolves
-Zig, and refuses < 0.16.0 with the exact pip command to fix it. Subcommands
+Zig, and refuses < 0.16.0 with the exact install command to fix it. Subcommands
 `locate`, `build`, `test`, `host`, `check`, `doctor`. Every subcommand fails
 loudly on a missing kernel; a missing build is an error, never a skip.
 

@@ -73,15 +73,20 @@ an unlinkable library.
 
 Two ways to get 0.16.0:
 
-**a) Install it directly (verified working):**
+**a) Install the upstream tarball, verified by SHA-256 before it is unpacked:**
 
 ```sh
-python3 -m pip install --target /opt/zig16 ziglang==0.16.0
-export EVIL_WEEVIL_ZIG=/opt/zig16/ziglang/zig
+curl -fsSLO https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz
+echo "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00  zig-x86_64-linux-0.16.0.tar.xz" \
+  | sha256sum -c -
+mkdir -p /opt/zig-0.16.0
+tar -xJf zig-x86_64-linux-0.16.0.tar.xz -C /opt/zig-0.16.0 --strip-components=1
+export EVIL_WEEVIL_ZIG=/opt/zig-0.16.0/zig
 ```
 
-The `ziglang` PyPI wheel is the full compiler. This is the route used to build
-and test the kernel for the evidence in `docs/evidence/`.
+The digest is the one `ziglang.org/download/index.json` publishes for 0.16.0,
+and the `weevil-adapter` CI job checks the same one. `scripts/weevil_kernel.sh`
+prints these commands when it finds no usable Zig.
 
 **b) Let `mise` provide it.** `mise.toml` currently pins 0.14.0 for IDApTIK's own
 Zig adapter (`crates/idaptik-ffi/zig-adapter/`), which is a different thing from
@@ -99,7 +104,7 @@ Expected, on a machine with everything in place:
 
 ```
 evil-weevil : /home/you/evil-weevil
-zig         : /opt/zig16/ziglang/zig (0.16.0)
+zig         : /opt/zig-0.16.0/zig (0.16.0)
 cargo       : cargo 1.95.0 (...)
 adapter     : present
 ```
@@ -133,7 +138,7 @@ chase digest: 12283675074724005768
 flap digest: 5191914376283395890
 ```
 
-## 5. Check the ABI mirror (no compiler needed)
+## 5. Check the ABI mirror
 
 ```sh
 just weevil-abi-mirror
@@ -146,11 +151,15 @@ ABI mirror matches the generated header on every field, offset and size
 ```
 
 This compares the Rust `#[repr(C)]` transcription in
-`crates/idaptik-weevil/src/abi.rs` against the *generated* `ee.h`, field by
-field, offset and size. It needs only Python, so it runs before the kernel is
-built — and it is the check that catches a transcription which is the right size
-but the wrong field order, which compiles fine in Rust and corrupts the kernel's
-view of the world at runtime.
+`crates/idaptik-weevil/src/abi.rs` against the *generated* `ee.h`, struct by
+struct and field by field: name, order, type, offset and size, plus the header's
+own `EE_SIZEOF_*`/`EE_OFFSET_*` defines. It is a Rust integration test
+(`crates/idaptik-weevil/tests/abi_mirror.rs`) that reads both files as text, so
+it is independent of both compilers; cargo still links the crate's replay
+binary, so build the kernel (step 4) first. It is the check that catches a
+transcription which is the right size but the wrong field order, which compiles
+fine in Rust and corrupts the kernel's view of the world at runtime. A missing
+header fails it.
 
 ## 6. Build and test the adapter
 
