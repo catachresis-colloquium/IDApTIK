@@ -174,8 +174,8 @@ choice.
 
 - D0. ADR-0019 (#248) rules on storage: plain Git, no LFS, 1 MiB per file,
   enforced by `scripts/asset_size_check.sh`. The loadable assets are built
-  from `source/` at package time. The 92 hand-committed files move to
-  `source/` with a package-time build before new art lands.
+  from `source/` at package time. Moving the 92 hand-committed files to
+  `source/` with a package-time build is follow-up work; its order is open.
 - D1. Every asset has a row in `crates/idaptik-bevy/assets/CREDITS.md` with its
   source and licence. Game content is CC-BY-SA-4.0.
 - D2. Colour, type and spacing come only from `config/brand-tokens.ncl` through
