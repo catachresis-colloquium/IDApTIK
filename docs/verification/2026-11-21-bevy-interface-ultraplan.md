@@ -88,7 +88,8 @@ Bevy PR is not judged against an inherited red.
 ### A1. Core review findings on the Bevy path
 
 The max review of `idaptik-core` (21 Nov) found 3 defects that the shell
-reaches directly. The owner decides if they are fixed before B0 or in it:
+reaches directly. The owner ruled (21 Nov) that they are fixed before B0, in
+1 PR: #247.
 
 | Finding | Where | Why the shell reaches it |
 |---|---|---|
@@ -102,7 +103,7 @@ The other 10 findings are in the review report and are out of this plan.
 
 | # | Decision | Blocks |
 |---|---|---|
-| 1 | DR-0003: where binary assets live, Git or LFS, committed or built `assets/` | D0 and all new art |
+| 1 | DR-0003: ruled 21 Nov, recorded as ADR-0019 (#248): plain Git in this repository, no LFS, assets built from `source/`, 1 MiB per file | Closed |
 | 2 | DR-0004: which checks are required, and if `bevy-frontend` is one | A0 exit, every B PR |
 | 3 | DR-0001 (SonarCloud organisation), DR-0002 (security contact) | Nothing here |
 | 4 | Schema `$id` and `contract_id` in `contracts/` after the move to `catachresis-colloquium` | Nothing here |
@@ -171,8 +172,10 @@ choice.
 
 ## 6. Workstream D: art and assets
 
-- D0. Rule on DR-0003 before the next binary asset lands. A later ruling can
-  need a history rewrite, and DR-0003 says so itself.
+- D0. ADR-0019 (#248) rules on storage: plain Git, no LFS, 1 MiB per file,
+  enforced by `scripts/asset_size_check.sh`. The loadable assets are built
+  from `source/` at package time. The 92 hand-committed files move to
+  `source/` with a package-time build before new art lands.
 - D1. Every asset has a row in `crates/idaptik-bevy/assets/CREDITS.md` with its
   source and licence. Game content is CC-BY-SA-4.0.
 - D2. Colour, type and spacing come only from `config/brand-tokens.ncl` through
@@ -203,7 +206,7 @@ Every Bevy PR contains:
 
 ## 9. Delivery order and completion
 
-No calendar promise before A0 and A2 decisions 1, 2 and 9.
+No calendar promise before A0 and A2 decisions 2 and 9.
 
 1. A0 and A2 (owner).
 2. E2 and the A1 fixes the owner selects.
