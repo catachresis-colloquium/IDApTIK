@@ -272,17 +272,17 @@ evil-weevil-check:
 evil-weevil-relay-check:
     bash scripts/evil_weevil_relay_check.sh
 
-# The runtime smoke gate: builds the real `idaptik-tui` binary and drives it on
-# a pseudo-terminal -- it must boot, paint a frame, quit on Ctrl-C, and hand the
-# terminal back. `test-ghost` already runs the built binary through its TTY-free
-# paths (`crates/idaptik-tui/tests/headless_smoke.rs`); this is the interactive
-# loop a player actually sits in front of, which nothing else launches.
-# `--self-test` goes first and requires the harness to reject four deliberately
-# broken apps, so a regression cannot pass because the gate stopped looking.
+# The runtime smoke gate: drives the real `idaptik-tui` binary on a pseudo-terminal
+# -- it must boot, paint a frame, quit on Ctrl-C, and hand the terminal back.
+# `test-ghost` already runs the built binary through its TTY-free paths
+# (`crates/idaptik-tui/tests/headless_smoke.rs`); this is the interactive loop a
+# player actually sits in front of, which nothing else launches. It is a Rust
+# integration test (`crates/idaptik-tui/tests/runtime_smoke.rs`, no Python). The
+# same test file carries the negative controls: stub apps that each break one of
+# the four checks and must be rejected with the matching verdict, so the gate
+# cannot pass because it stopped looking. Cargo builds the binary itself.
 smoke:
-    python3 scripts/runtime_smoke.py --self-test
-    cargo build -p idaptik-tui
-    python3 scripts/runtime_smoke.py --bin target/debug/idaptik-tui
+    cargo test -p idaptik-tui --test runtime_smoke
 
 # The ADR-0006 §4 loopback gate: throwaway burble server + seat processes; asserts
 # byte-identical artifacts (vs each other AND the headless reference) for the
@@ -479,11 +479,14 @@ weevil-kernel:
 weevil-kernel-check:
     bash scripts/weevil_kernel.sh check
 
-# The Rust #[repr(C)] transcription against the generated ee.h. Needs no
-# compiler, so it runs anywhere Python does — including a machine that has not
-# built the kernel yet.
+# The Rust #[repr(C)] transcription against the generated ee.h: every struct,
+# field, type, offset and size, plus the header's own EE_SIZEOF/EE_OFFSET defines
+# (crates/idaptik-weevil/tests/abi_mirror.rs, with its firing fixtures). It reads
+# both files as text and does not call the kernel, but cargo links the crate's
+# replay binary for any integration test, so build the kernel first
+# (`just weevil-kernel`). A missing header fails; it is never skipped.
 weevil-abi-mirror:
-    @root="$$(bash scripts/weevil_kernel.sh locate)" && python3 tools/verify_abi_mirror.py "$root/include/evil_weevil/ee.h" crates/idaptik-weevil/src/abi.rs
+    @root="$(bash scripts/weevil_kernel.sh locate)" && EVIL_WEEVIL_ROOT="$root" cargo test -p idaptik-weevil --test abi_mirror -- --nocapture
 
 # Build the adapter crate (links the native kernel).
 weevil-build:

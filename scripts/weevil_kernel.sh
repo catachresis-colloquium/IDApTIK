@@ -83,6 +83,21 @@ require_root() {
 # be there: it takes $EVIL_WEEVIL_ZIG, then PATH, and refuses a stale version
 # with the exact command that fixes it.
 
+# The install hint: the official tarball, verified by SHA-256 before it is
+# unpacked (the digest is ziglang.org/download/index.json's for 0.16.0, the same
+# one the weevil-adapter CI job checks), or mise. Argument: the line prefix.
+ZIG_TARBALL=zig-x86_64-linux-0.16.0.tar.xz
+ZIG_TARBALL_SHA256=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+
+zig_install_hint() {
+    local p="${1:-weevil-kernel:}"
+    echo "$p   curl -fsSLO https://ziglang.org/download/0.16.0/$ZIG_TARBALL"
+    echo "$p   echo \"$ZIG_TARBALL_SHA256  $ZIG_TARBALL\" | sha256sum -c -"
+    echo "$p   mkdir -p /opt/zig-0.16.0 && tar -xJf $ZIG_TARBALL -C /opt/zig-0.16.0 --strip-components=1"
+    echo "$p   export EVIL_WEEVIL_ZIG=/opt/zig-0.16.0/zig"
+    echo "$p or: mise install zig@0.16.0 && export EVIL_WEEVIL_ZIG=\"\$(mise where zig@0.16.0)/zig\""
+}
+
 weevil_zig() {
     local z="${EVIL_WEEVIL_ZIG:-}"
     if [ -z "$z" ]; then
@@ -90,7 +105,8 @@ weevil_zig() {
     fi
     if [ -z "$z" ] || [ ! -x "$z" ]; then
         echo "weevil-kernel: no Zig found (set EVIL_WEEVIL_ZIG)" >&2
-        echo "weevil-kernel: python3 -m pip install --target /opt/zig16 ziglang==0.16.0" >&2
+        echo "weevil-kernel: install one:" >&2
+        zig_install_hint >&2
         return 1
     fi
 
@@ -121,9 +137,9 @@ weevil_zig() {
         echo "weevil-kernel: 0.14.0 builds the library yet leaves __zig_probe_stack undefined," >&2
         echo "weevil-kernel: so no host can link it, and its test binaries fail to spawn." >&2
         echo "weevil-kernel: Pin the kernel build, e.g." >&2
-        echo "weevil-kernel:   EVIL_WEEVIL_ZIG=/opt/zig16/ziglang/zig just weevil-kernel-check" >&2
+        echo "weevil-kernel:   EVIL_WEEVIL_ZIG=/opt/zig-0.16.0/zig just weevil-kernel-check" >&2
         echo "weevil-kernel: or install one:" >&2
-        echo "weevil-kernel:   python3 -m pip install --target /opt/zig16 ziglang==0.16.0" >&2
+        zig_install_hint >&2
         return 1
     fi
     printf '%s\n' "$z"
@@ -202,7 +218,8 @@ cmd_doctor() {
         ok=0
     else
         echo "zig         : NOT FOUND (need >= $REQUIRED_ZIG_MAJOR.$REQUIRED_ZIG_MINOR)"
-        echo "              set EVIL_WEEVIL_ZIG, or: python3 -m pip install --target /opt/zig16 ziglang==0.16.0"
+        echo "              set EVIL_WEEVIL_ZIG, or install one:"
+        zig_install_hint "           "
         ok=0
     fi
     if command -v cargo >/dev/null 2>&1; then
@@ -211,7 +228,7 @@ cmd_doctor() {
         echo "cargo       : NOT FOUND (rust-toolchain.toml pins the channel)"
         ok=0
     fi
-    if [ -f crates/idaptik-weevil/src/abi.rs ] && [ -f tools/verify_abi_mirror.py ]; then
+    if [ -f crates/idaptik-weevil/src/abi.rs ] && [ -f crates/idaptik-weevil/tests/abi_mirror.rs ]; then
         echo "adapter     : present"
     else
         echo "adapter     : MISSING"

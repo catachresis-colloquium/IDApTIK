@@ -1,7 +1,7 @@
 //! ABI 1.1: the mind entrance and its two structs, against the linked kernel.
 //!
 //! The layout itself is pinned at compile time in `src/abi.rs` and against
-//! the generated header by `tools/verify_abi_mirror.py`. This test checks what
+//! the generated header by `tests/abi_mirror.rs`. This test checks what
 //! only the linked kernel can answer: that the kernel still carries the 1.1
 //! surface this mirror was written for (a 1.2 kernel adds to it and changes
 //! none of it; `tests/abi_1_2.rs` pins the minor), and that `ee_tick_mind`

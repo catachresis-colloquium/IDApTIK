@@ -17,6 +17,9 @@ clap = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = "2"
+# A real pseudo-terminal for tests/runtime_smoke.rs. Safe API, no `unsafe`; the
+# crate is already in the lock via crossterm, so no new package is added.
+rustix = { version = "1", features = ["fs", "pty", "termios"] }
 
 [[bin]]
 name = "idaptik-tui"
