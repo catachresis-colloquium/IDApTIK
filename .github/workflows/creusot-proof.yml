@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # Machine-checked proof of the IDApTIK determinism kernel (issue #121).
 #
 # Two jobs, deliberately separated by cost:
@@ -66,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -84,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -101,7 +102,7 @@ jobs:
       # else does.
       - name: Cache the Creusot toolchain
         id: creusot-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.local/share/creusot
@@ -367,7 +368,7 @@ jobs:
 
       - name: Retain the proof evidence
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: creusot-proof-evidence
           path: |

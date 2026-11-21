@@ -51,7 +51,7 @@ jobs:
 
   kernel:
     name: Shared kernel proof
-    uses: hyperpolymath/cicd-suite/.github/workflows/creusot-gate.yml@faba7124aee223098d33497bdadc96e111829752
+    uses: hyperpolymath/proven-cicd-and-workflows/.github/workflows/creusot-gate.yml@6a35e510a41037adfd422b7f449c3503c5e26a98
     with:
       working_directory: crates/idaptik-kernel
       # The shared gate clones Creusot at the tag `v<creusot_version>`; it
