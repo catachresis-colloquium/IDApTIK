@@ -45,6 +45,7 @@ a private repository.
 ## Later: presentation and wider integration
 
 - [ ] Connect the same state to the Bevy frontend.
+      (Plan: `docs/verification/2026-11-21-bevy-interface-ultraplan.md`.)
 - [ ] Add player-visible patrol consequences without exposing omniscient state.
 - [ ] Export/import versioned UMS profile packages.
 - [ ] Add typed/proof conformance checks in the Enaction Engine and formal
