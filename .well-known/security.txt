@@ -31,14 +31,14 @@
 # that appears twice, it is a role address on a project-owned domain rather than
 # a personal mailbox, and it survives a change of maintainer.
 #
-# ⚠ OPEN OWNER RULING — docs/decisions-pending/DR-0002-security-contact.md.
+# ⚠ OPEN OWNER RULING — docs/decisions-pending/DR-0002-security-contact.adoc.
 # Which inbox is actually monitored was not verifiable from inside this
 # repository. If the gmail is the real one, change ALL THREE files together:
 #   .well-known/security.txt   SECURITY.md   CODE_OF_CONDUCT.md
 # tests/ci_security_config_test.sh's check_contact_consistency fails the build
 # if they ever disagree again, so a partial edit cannot land.
 
-Contact: https://github.com/metadatastician/IDApTIK/security/advisories/new
+Contact: https://github.com/catachresis-colloquium/IDApTIK/security/advisories/new
 Contact: mailto:developer@joshuajewell.dev
 Expires: 2027-07-27T23:59:59.000Z
 # No Encryption field. https://github.com/metadatastician.gpg returns HTTP 200
@@ -48,4 +48,4 @@ Expires: 2027-07-27T23:59:59.000Z
 # when a key is actually published.
 Preferred-Languages: en
 Canonical: https://idaptik.net/.well-known/security.txt
-Policy: https://github.com/metadatastician/IDApTIK/blob/main/SECURITY.md
+Policy: https://github.com/catachresis-colloquium/IDApTIK/blob/main/SECURITY.md

@@ -6,7 +6,7 @@ Do not report vulnerabilities through public issues, pull requests,
 discussions, or social media.
 
 Use GitHub's private
-[security-advisory form](https://github.com/metadatastician/IDApTIK/security/advisories/new).
+[security-advisory form](https://github.com/catachresis-colloquium/IDApTIK/security/advisories/new).
 If that is unavailable, email
 [developer@joshuajewell.dev](mailto:developer@joshuajewell.dev) with the
 affected component, reproduction steps, potential impact, and any suggested
@@ -28,7 +28,7 @@ repository which one was monitored. The role address won because it appears in
 more places, it belongs to a project-owned domain rather than a personal
 mailbox, and it survives a change of maintainer. **Which inbox is actually
 monitored was not verifiable from here** and is recorded as an open owner
-ruling in `docs/decisions-pending/DR-0002-security-contact.md`. If the answer is
+ruling in `docs/decisions-pending/DR-0002-security-contact.adoc`. If the answer is
 the gmail, change all four files in one commit; the check will reject a partial
 edit.
 

@@ -135,4 +135,4 @@ on its own findings the check is not ready to be mandatory. Rules 4's markers
 and the repository-prefix convention are the groundwork; the check is tracked
 separately rather than shipped noisy.
 
-[#119]: https://github.com/metadatastician/IDApTIK/issues/119
+[#119]: https://github.com/catachresis-colloquium/IDApTIK/issues/119

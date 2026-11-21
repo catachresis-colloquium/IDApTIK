@@ -1,7 +1,7 @@
 # idaptik-abi — Idris2 model of the `idaptik-ffi` C ABI
 
 An executable specification of the boundary `crates/idaptik-ffi` exports, in
-total Idris2, per [issue #103](https://github.com/metadatastician/IDApTIK/issues/103)
+total Idris2, per [issue #103](https://github.com/catachresis-colloquium/IDApTIK/issues/103)
 and ADR-0001. The C header (`include/idaptik.h`) is the product surface; this
 package is its proof-carrying shadow.
 
@@ -36,7 +36,7 @@ the properties below are equations the typechecker verified, not claims:
 `Idaptik.Abi.Exports.exportedFunctions` is diffed against the header by the
 gate, so the model cannot drift from the C surface in either direction.
 
-### The four proof obligations of [#117](https://github.com/metadatastician/IDApTIK/issues/117)
+### The four proof obligations of [#117](https://github.com/catachresis-colloquium/IDApTIK/issues/117)
 
 `Idaptik.Abi.Protocol` states the C calling protocol as one indexed session
 type, `Session : HandleState -> Nat -> HandleState -> Nat -> Type`: the

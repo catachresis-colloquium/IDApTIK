@@ -235,5 +235,5 @@ assets/**  -diff
 # Today the repository tracks zero binary assets, so the question is not yet
 # live. It becomes live the first time a real texture, sound, or cutscene lands.
 # The trade-off is recorded as an open owner ruling in
-# docs/decisions-pending/DR-0003-asset-storage-and-lfs.md rather than being
+# docs/decisions-pending/DR-0003-asset-storage-and-lfs.adoc rather than being
 # decided here unilaterally.

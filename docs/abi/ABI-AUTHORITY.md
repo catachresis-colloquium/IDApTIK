@@ -2,7 +2,7 @@
 
 Status: **authority ruled and pinned** — this resolves the conformance blocker
 recorded in
-[issue #103](https://github.com/metadatastician/IDApTIK/issues/103)
+[issue #103](https://github.com/catachresis-colloquium/IDApTIK/issues/103)
 ("did not locate a canonical Zig unified Hexadeca API repository/specification").
 
 ## The authority, and which layer is normative

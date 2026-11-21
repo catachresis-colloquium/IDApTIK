@@ -30,6 +30,6 @@ recuse where a conflict exists, and apply a proportionate response ranging
 from correction or warning to temporary or permanent exclusion.
 
 Questions that do not involve a private conduct report can be raised in
-[GitHub Discussions](https://github.com/metadatastician/IDApTIK/discussions).
+[GitHub Discussions](https://github.com/catachresis-colloquium/IDApTIK/discussions).
 
 This policy is informed by Contributor Covenant 2.1 and the Speak Up! project.

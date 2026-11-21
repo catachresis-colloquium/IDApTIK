@@ -8,7 +8,7 @@
 /* TEAM */
 Maintainer: IDApTIK contributors (metadatastician)
 Contact: developer@joshuajewell.dev
-Security: https://github.com/metadatastician/IDApTIK/security/advisories/new
+Security: https://github.com/catachresis-colloquium/IDApTIK/security/advisories/new
 From: United Kingdom
 
 # The maintainer line names no individual, because this repository deliberately
@@ -18,7 +18,7 @@ From: United Kingdom
 # same one SECURITY.md, CODE_OF_CONDUCT.md and .well-known/security.txt name;
 # tests/ci_security_config_test.sh fails the build if those four ever disagree.
 #
-# ⚠ OPEN OWNER RULING — docs/decisions-pending/DR-0002-security-contact.md
+# ⚠ OPEN OWNER RULING — docs/decisions-pending/DR-0002-security-contact.adoc
 # also asks whether this file should name a person. Until the owner rules, it
 # does not, and the reason is recorded rather than guessed at.
 

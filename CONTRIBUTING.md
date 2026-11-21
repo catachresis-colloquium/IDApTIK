@@ -6,7 +6,7 @@ and `AGENTS.md` before making changes.
 ## Development setup
 
 ```sh
-git clone https://github.com/metadatastician/IDApTIK.git
+git clone https://github.com/catachresis-colloquium/IDApTIK.git
 cd IDApTIK
 mise trust
 just setup
