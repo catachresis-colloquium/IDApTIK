@@ -68,6 +68,10 @@ Existing evidence inputs:
   when the crate is newer than the toolchain ("creusot-std is newer than
   Creusot"). Workstream A0's instruction to isolate toolchain repair holds:
   the correction is one commit, with the failure text quoted in the workflow.
+  Superseded again on 2026-11-21: the pin is now
+  `fd4d85b2c237ef93147e99f6a0c04acfc89a6a17`, version 0.15.0, the same proof
+  nightly `nightly-2026-08-03`, after Dependabot #238 moved the kernel to
+  creusot-std 0.15.0. Same repair, same reason.
 - Normal project toolchain: Rust 1.97.1. Preserve separate toolchains; do not
   assume the proof nightly can compile the entire Bevy dependency graph.
 - `crates/CREUSOT-CLASSIFICATION.tsv`, `crates/CREUSOT-PROOF-DEBT.tsv`,
