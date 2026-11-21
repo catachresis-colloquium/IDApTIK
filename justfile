@@ -483,7 +483,7 @@ weevil-kernel-check:
 # compiler, so it runs anywhere Python does — including a machine that has not
 # built the kernel yet.
 weevil-abi-mirror:
-    @root="$$(bash scripts/weevil_kernel.sh locate)" && python3 tools/verify_abi_mirror.py "$root/include/evil_weevil/ee.h" crates/idaptik-weevil/src/abi.rs
+    @root="$(bash scripts/weevil_kernel.sh locate)" && python3 tools/verify_abi_mirror.py "$root/include/evil_weevil/ee.h" crates/idaptik-weevil/src/abi.rs
 
 # Build the adapter crate (links the native kernel).
 weevil-build:
