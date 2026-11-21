@@ -2,7 +2,7 @@
 //! against the linked kernel.
 //!
 //! The layout is pinned at compile time in `src/abi.rs` and against the
-//! generated header by `tools/verify_abi_mirror.py`. This test checks what only
+//! generated header by `tests/abi_mirror.rs`. This test checks what only
 //! the linked kernel can answer:
 //!
 //! * it is the 1.2 kernel, with the 1.0 and 1.1 fingerprints unchanged and the

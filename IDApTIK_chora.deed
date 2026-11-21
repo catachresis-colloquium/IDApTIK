@@ -104,7 +104,7 @@
   (status
     :phase Envelope
     :build-status "Envelope-stage vertical slice; the player-facing windowed shell and fuller gameplay experience remain in progress."
-    :test-status "In-repository Rust, Bevy, configuration, ABI, relay, and Evil Weevil adversarial suites are CI-gated. The cross-repository UMS round trip is gated in the sibling Universal Modding Studio repository, not by this repository's workflows."
+    :test-status "In-repository Rust, Bevy, configuration, ABI, relay, Evil Weevil adversarial, and Evil Weevil adapter (idaptik-weevil, built against the evil-weevil kernel at a pinned commit) suites are CI-gated. The cross-repository UMS round trip is gated in the sibling Universal Modding Studio repository, not by this repository's workflows."
     :live-network-status "Relay-only multiplayer path; both clients simulate."
     :unimplemented "Direct peer transport, hosted-authority server, federated session routing, and a live GSA adapter are not implemented.")
 
