@@ -36,7 +36,7 @@ change that list?
 
 == Why it is not decidable here
 
-`GET /repos/metadatastician/IDApTIK/branches/main/protection` returns
+`GET /repos/catachresis-colloquium/IDApTIK/branches/main/protection` returns
 `403 Resource not accessible by integration` for the token this repository's
 automation uses. The classic branch-protection API is therefore unreadable.
 

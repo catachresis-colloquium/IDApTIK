@@ -68,7 +68,7 @@ The Rust era's stack is being pinned as decisions are made, and each decision is
   (`crates/idaptik-ffi/zig-adapter`, gated by `.github/workflows/abi-conformance.yml`:
   surface lockstep, fixture conformance incl. a planted failing fixture, and
   authority-digest drift rejection per `docs/abi/ABI-AUTHORITY.md`) — remaining
-  work continues in [#103](https://github.com/metadatastician/IDApTIK/issues/103)
+  work continues in [#103](https://github.com/catachresis-colloquium/IDApTIK/issues/103)
   ([ADR-0001](docs/adr/0001-toolchain-and-runtime-management.md)).
 - **Config:** **Nickel** (typed configuration).
 - **Toolchains:** pinned in `mise.toml` + `rust-toolchain.toml`; `just` runs tasks. On a fresh Debian/Ubuntu/WSL2 clone run `./install.sh` (also `just install`): it installs rustup, the pinned Rust, the mise tools and Bevy's system libraries (asks for `sudo`), builds the Bevy frontend, and ends with the runtime doctor. Otherwise provision with `just setup` (or `just bootstrap` for a fast, prebuilt-only bring-up), and check with `just doctor`.

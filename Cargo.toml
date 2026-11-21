@@ -26,7 +26,7 @@ version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 authors = ["IDApTIK contributors"]
-repository = "https://github.com/metadatastician/IDApTIK"
+repository = "https://github.com/catachresis-colloquium/IDApTIK"
 
 [workspace.dependencies]
 idaptik-kernel = { path = "crates/idaptik-kernel", version = "0.1.0" }

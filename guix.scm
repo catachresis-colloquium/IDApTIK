@@ -136,5 +136,5 @@ system libraries the Bevy frontend links against, Podman, and mise -- the
 version manager that owns every non-Rust tool version.  Rust is bootstrapped
 separately with scripts/install-rustup.sh so that rust-toolchain.toml stays the
 only authority for the compiler version.")
-  (home-page "https://github.com/metadatastician/IDApTIK")
+  (home-page "https://github.com/catachresis-colloquium/IDApTIK")
   (license agpl3+))

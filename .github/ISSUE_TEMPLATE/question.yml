@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Question issue template for metadatastician/IDApTIK
+# Question issue template for catachresis-colloquium/IDApTIK
 name: Question
 description: Ask a question about usage or behaviour
 title: "[Question]: "
@@ -10,7 +10,7 @@ body:
     attributes:
       value: |
         Have a question? You can also ask in
-        [Discussions](https://github.com/metadatastician/IDApTIK/discussions)
+        [Discussions](https://github.com/catachresis-colloquium/IDApTIK/discussions)
         for broader conversations.
 
   - type: textarea
