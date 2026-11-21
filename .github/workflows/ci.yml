@@ -139,6 +139,10 @@ jobs:
       # when the gate is green is a control that never fires on a broken change.
       - name: Secret-gate control (a planted secret must fail the scan)
         run: bash tests/secret_scan_self_test.sh
+      - name: Asset size gate (ADR-0019, 1 MiB per committed file)
+        run: |
+          bash scripts/asset_size_check.sh --self-test
+          bash scripts/asset_size_check.sh
       - name: Pons scan and summary fixtures (was invoked by nothing)
         run: |
           bash tests/pons_scan_test.sh

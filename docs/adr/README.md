@@ -23,6 +23,7 @@ asserted in the README and quietly contradicted later.
 | [0016](0016-electrical-infrastructure.md) | Electrical infrastructure in `idaptik-core` | Proposed |
 | [0017](0017-evil-weevil-adversarial-testing-adapter.md) | Evil Weevil deterministic adversarial testing adapter | Proposed |
 | [0018](0018-infrastructure-interaction-rules.md) | Infrastructure interactions are composable rules over typed capabilities | Proposed |
+| [0019](0019-asset-storage.md) | Binary assets are plain Git blobs in this repository, built from `source/` | Accepted |
 
 New ADRs: copy the format of an existing one, take the next number, and add a row
 above.

@@ -232,8 +232,6 @@ assets/**  -diff
 # produce pointer files instead of content for anyone without the client. That
 # failure is silent and confusing.
 #
-# Today the repository tracks zero binary assets, so the question is not yet
-# live. It becomes live the first time a real texture, sound, or cutscene lands.
-# The trade-off is recorded as an open owner ruling in
-# docs/decisions-pending/DR-0003-asset-storage-and-lfs.md rather than being
-# decided here unilaterally.
+# The owner ruled in ADR-0019 (docs/adr/0019-asset-storage.md): binary assets
+# are plain Git blobs in this repository, no LFS, and no committed file is
+# larger than 1 MiB (scripts/asset_size_check.sh enforces it in CI).
