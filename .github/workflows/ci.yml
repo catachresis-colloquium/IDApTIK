@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Build + test CI for IDApTIK. These jobs mirror the real local gates:
 #
@@ -139,6 +140,10 @@ jobs:
       # when the gate is green is a control that never fires on a broken change.
       - name: Secret-gate control (a planted secret must fail the scan)
         run: bash tests/secret_scan_self_test.sh
+      - name: Asset size gate (ADR-0019, 1 MiB per committed file)
+        run: |
+          bash scripts/asset_size_check.sh --self-test
+          bash scripts/asset_size_check.sh
       - name: Pons scan and summary fixtures (was invoked by nothing)
         run: |
           bash tests/pons_scan_test.sh
@@ -607,6 +612,86 @@ jobs:
       - name: just evil-weevil-check (deterministic adversarial corpus)
         run: just evil-weevil-check
 
+  # The Evil Weevil guard-brain adapter (`idaptik-weevil`, the crate behind
+  # `just weevil-test`). test-ghost does not build or test it: the crate links
+  # the native kernel (libevil_weevil.a), which is a separate repository built
+  # with Zig 0.16. This job builds that kernel from a PINNED evil-weevil commit
+  # and runs the ABI mirror check, the crate's tests, clippy and fmt against it.
+  #
+  # Fails closed. A Zig tarball whose SHA-256 differs from the pin, a missing
+  # Zig, a Zig that is not exactly 0.16.0, an ABI mirror drift, an unreachable
+  # or wrong evil-weevil commit, or a kernel build that does not produce the
+  # archive is a red job, never a skip: the crate's build.rs does not stub an
+  # absent library, so the linker names it.
+  #
+  # To move the kernel, change EVIL_WEEVIL_REV in one commit together with any
+  # adapter change it needs. Do not point this at a branch.
+  #
+  # run: steps only; no `uses:` entry, so actions.lock is unaffected.
+  weevil-adapter:
+    name: weevil-adapter (kernel at pinned rev + idaptik-weevil tests/clippy/fmt)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # evil-weevil main at the commit idaptik-weevil was verified against
+      # (88 tests across 13 suites, ABI mirror clean, kernel gates green).
+      EVIL_WEEVIL_REV: 6c7864ebf41e5c7f59f77a4417dbbb5974c210fa
+      EVIL_WEEVIL_ZIG_VERSION: 0.16.0
+      # SHA-256 of zig-x86_64-linux-0.16.0.tar.xz, from
+      # ziglang.org/download/index.json. Change it together with the version.
+      EVIL_WEEVIL_ZIG_SHA256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+    steps:
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach --force FETCH_HEAD
+      - name: Provision pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup show
+      - name: Install Zig (SHA-256 pinned, exact version verified after install)
+        run: |
+          set -euo pipefail
+          url="https://ziglang.org/download/${EVIL_WEEVIL_ZIG_VERSION}/zig-x86_64-linux-${EVIL_WEEVIL_ZIG_VERSION}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/zig.tar.xz"
+          # Fail closed: a tarball whose digest differs is never unpacked.
+          echo "$EVIL_WEEVIL_ZIG_SHA256  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          got="$("$RUNNER_TEMP/zig/zig" version)"
+          if [ "$got" != "$EVIL_WEEVIL_ZIG_VERSION" ]; then
+            echo "::error::Zig is $got, the kernel build needs exactly $EVIL_WEEVIL_ZIG_VERSION"
+            exit 1
+          fi
+          echo "EVIL_WEEVIL_ZIG=$RUNNER_TEMP/zig/zig" >> "$GITHUB_ENV"
+      - name: Fetch evil-weevil at the pinned commit
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/evil-weevil"
+          git init -q "$root"
+          git -C "$root" remote add origin "$GITHUB_SERVER_URL/catachresis-colloquium/evil-weevil.git"
+          git -C "$root" fetch -q --no-tags --depth=1 origin "$EVIL_WEEVIL_REV"
+          git -C "$root" checkout -q --detach --force FETCH_HEAD
+          head="$(git -C "$root" rev-parse HEAD)"
+          if [ "$head" != "$EVIL_WEEVIL_REV" ]; then
+            echo "::error::evil-weevil is at $head, expected $EVIL_WEEVIL_REV"
+            exit 1
+          fi
+          echo "EVIL_WEEVIL_ROOT=$root" >> "$GITHUB_ENV"
+      - name: Build the kernel (libevil_weevil.a)
+        run: bash scripts/weevil_kernel.sh build
+      # abi.rs against the pinned kernel's generated ee.h, every struct, field,
+      # type, offset and size, with its firing fixtures. A missing header at
+      # EVIL_WEEVIL_ROOT fails the test. Run on its own so a drift is named.
+      - name: ABI mirror (abi.rs against the generated ee.h)
+        run: cargo test --locked -p idaptik-weevil --test abi_mirror -- --nocapture
+      - name: cargo test -p idaptik-weevil
+        run: cargo test --locked -p idaptik-weevil
+      - name: cargo clippy -p idaptik-weevil (-D warnings)
+        run: cargo clippy --locked -p idaptik-weevil --all-targets -- -D warnings
+      - name: cargo fmt -p idaptik-weevil --check
+        run: cargo fmt -p idaptik-weevil -- --check
+
   # The interactive frontend, launched for real. `test-ghost` runs the built
   # binary through its TTY-free paths (`--headless`/`--replay`/`--export`, see
   # crates/idaptik-tui/tests/headless_smoke.rs), and `bevy-frontend` tests the
@@ -615,10 +700,10 @@ jobs:
   # poll, tick, quit. A regression there is invisible to a test that never
   # allocates a terminal.
   #
-  # `just smoke` runs the harness's own `--self-test` first (four deliberately
-  # broken apps, each of which it must reject) and only then boots the real
-  # binary on a pty. The self-test is what keeps this from being a gate that
-  # cannot fail.
+  # `just smoke` runs crates/idaptik-tui/tests/runtime_smoke.rs: a Rust
+  # integration test that boots the real binary on a pty, plus stub apps that
+  # each break one of its four checks and must be rejected. Those negative
+  # controls keep this from being a gate that cannot fail.
   #
   # run:-only steps and no new `uses:` ref, per the actions.lock rule above.
   runtime-smoke:

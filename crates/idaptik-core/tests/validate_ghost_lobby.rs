@@ -6,7 +6,7 @@ use idaptik_core::ghost_lobby;
 use idaptik_core::scenario::constants as c;
 use idaptik_core::scenario::definition::{RoomDef, ValidationError};
 use idaptik_core::scenario::ids::{CameraId, DoorId, ObjectiveId, RoomId};
-use idaptik_core::scenario::tuning::{ActionKind, DifficultyId};
+use idaptik_core::scenario::tuning::{ActionKind, DifficultyId, DifficultyPreset};
 
 #[test]
 fn canonical_definition_validates_clean() {
@@ -257,4 +257,48 @@ fn reachable_props_stay_within_a_body_height_of_the_floor() {
         );
         assert!(y <= c::FLOOR, "{name} sits below the floor");
     }
+}
+
+#[test]
+fn more_doors_than_the_frontend_buffer_fails_validation() {
+    use idaptik_core::interp::MAX_DOORS;
+    use idaptik_core::scenario::definition::DoorDef;
+    let mut def = ghost_lobby();
+    let anchor_x = def.doors[0].x;
+    while def.doors.len() <= MAX_DOORS {
+        def.doors.push(DoorDef {
+            id: format!("D-extra-{}", def.doors.len()).into(),
+            x: anchor_x,
+            label: "EXTRA".into(),
+        });
+    }
+    expect_one(
+        &def,
+        ValidationError::TooManyDoors {
+            count: MAX_DOORS + 1,
+            max: MAX_DOORS,
+        },
+    );
+}
+
+/// Corrupt one Standard preset field and expect exactly its range error.
+#[track_caller]
+fn expect_preset_rejected(field: &str, corrupt: impl Fn(&mut DifficultyPreset)) {
+    let mut def = ghost_lobby();
+    corrupt(def.difficulty.get_mut(&DifficultyId::Standard).unwrap());
+    expect_one(
+        &def,
+        ValidationError::DifficultyValueOutOfRange {
+            difficulty: DifficultyId::Standard,
+            field: field.into(),
+        },
+    );
+}
+
+#[test]
+fn preset_values_that_break_a_run_fail_validation() {
+    expect_preset_rejected("trace_threshold", |p| p.trace_threshold = 0);
+    expect_preset_rejected("billy_speed", |p| p.billy_speed = -1.0);
+    expect_preset_rejected("sprint", |p| p.sprint = 0.0);
+    expect_preset_rejected("player_speed", |p| p.player_speed = f64::NAN);
 }

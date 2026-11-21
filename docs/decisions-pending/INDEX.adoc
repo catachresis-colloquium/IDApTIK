@@ -56,12 +56,6 @@ contact?]
 |`developer@joshuajewell.dev` in all four files that name one
 |2026-09-27
 
-|DR-0003
-|link:DR-0003-asset-storage-and-lfs.adoc[Where do binary game assets live, and
-does this repository use Git LFS?]
-|No binary assets tracked; no `filter=lfs` anywhere in `.gitattributes`
-|2026-09-27
-
 |DR-0004
 |link:DR-0004-required-status-checks.adoc[Is the lock-sync gate a required
 status check, and who owns branch protection?]
