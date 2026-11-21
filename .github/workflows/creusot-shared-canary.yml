@@ -54,6 +54,9 @@ jobs:
     uses: hyperpolymath/cicd-suite/.github/workflows/creusot-gate.yml@faba7124aee223098d33497bdadc96e111829752
     with:
       working_directory: crates/idaptik-kernel
-      creusot_version: "0.14.0"
+      # The shared gate clones Creusot at the tag `v<creusot_version>`; it
+      # must match the creusot-std the kernel depends on (0.15.0, #238) and
+      # the commit creusot-proof.yml pins (fd4d85b2, v0.15.0).
+      creusot_version: "0.15.0"
       rust_nightly: "nightly-2026-08-03"
       enforce_hollow: true
