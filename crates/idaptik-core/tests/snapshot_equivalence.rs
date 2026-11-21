@@ -133,3 +133,47 @@ fn snapshot_round_trips_through_json() {
         idaptik_core::scenario::snapshot::SNAPSHOT_FORMAT
     );
 }
+
+#[test]
+fn restore_refuses_a_state_whose_shape_differs_from_its_definition() {
+    use idaptik_core::scenario::command::RunConfig;
+    use idaptik_core::scenario::rooftop::ghost_lobby_rooftop;
+    // Lobby: one door state missing.
+    let mut r = Runner::standard();
+    r.step(&step_stream(0));
+    let mut snap = r.sim.snapshot();
+    snap.state.doors.pop();
+    let errs = GhostLobbySim::restore(ghost_lobby(), snap).expect_err("short doors");
+    assert_eq!(
+        errs,
+        vec![ValidationError::SnapshotStateMismatch {
+            field: "doors".into()
+        }]
+    );
+    // Rooftop: the signal devices cut to 2. Before the check this restored
+    // and the first tick panicked with an index out of bounds.
+    let sim = GhostLobbySim::new(
+        ghost_lobby_rooftop(),
+        RunConfig {
+            difficulty: idaptik_core::scenario::tuning::DifficultyId::Standard,
+            reduced_motion: false,
+            supervised: false,
+        },
+        7,
+    )
+    .expect("valid");
+    let mut snap = sim.snapshot();
+    snap.state
+        .signal
+        .as_mut()
+        .expect("rooftop is wired")
+        .devices
+        .truncate(2);
+    let errs = GhostLobbySim::restore(ghost_lobby_rooftop(), snap).expect_err("short signal");
+    assert_eq!(
+        errs,
+        vec![ValidationError::SnapshotStateMismatch {
+            field: "signal".into()
+        }]
+    );
+}

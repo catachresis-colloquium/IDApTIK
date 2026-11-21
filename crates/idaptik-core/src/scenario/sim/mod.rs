@@ -181,7 +181,15 @@ impl GhostLobbySim {
                 found: snap.format,
             }]);
         }
-        def.ok()?;
+        // The fresh run validates the definition and gives the shape the
+        // snapshot must have: the tick indexes these vectors by definition
+        // index, so a short one would panic there rather than fail here.
+        let fresh = Self::new(def.clone(), snap.cfg, snap.seed)?;
+        if let Some(field) = shape_mismatch(&fresh.state, &snap.state) {
+            return Err(vec![ValidationError::SnapshotStateMismatch {
+                field: field.into(),
+            }]);
+        }
         let preset = def
             .difficulty
             .get(&snap.cfg.difficulty)
@@ -1713,6 +1721,35 @@ impl GhostLobbySim {
         });
         self.events.push(Event::RunEnded { outcome });
     }
+}
+
+/// The first definition-indexed sub-state whose length differs between two
+/// states. Signal links are left out: wiring adds links at run time.
+fn shape_mismatch(want: &RuntimeState, got: &RuntimeState) -> Option<&'static str> {
+    let signal = |s: &RuntimeState| s.signal.as_ref().map(|s| s.devices.len());
+    let power = |s: &RuntimeState| {
+        s.power.as_ref().map(|p| {
+            [
+                p.sources.len(),
+                p.feeds.len(),
+                p.breakers.len(),
+                p.loads.len(),
+                p.hazards.len(),
+            ]
+        })
+    };
+    [
+        ("doors", want.doors.len() != got.doors.len()),
+        (
+            "camera_looped",
+            want.camera_looped.len() != got.camera_looped.len(),
+        ),
+        ("signal", signal(want) != signal(got)),
+        ("power", power(want) != power(got)),
+    ]
+    .into_iter()
+    .find(|(_, bad)| *bad)
+    .map(|(field, _)| field)
 }
 
 #[cfg(test)]
