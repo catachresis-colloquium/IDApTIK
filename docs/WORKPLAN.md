@@ -1,6 +1,6 @@
 # IDApTIK workplan
 
-Status: **organised first draft — 2026-07-26; refreshed 2026-10-25** (the
+Status: **organised first draft, 2026-07-26; refreshed 2026-11-21** (the
 work queue is the cognitive-model line; the building systems that landed
 alongside it are summarised in *Where things stand* below)
 
@@ -60,7 +60,7 @@ relays events but does not become semantic authority. Private AI details remain
 in the canonical private UMS repository unless a public interface requires
 their disclosure.
 
-## Where things stand (2026-10-25)
+## Where things stand (2026-11-21)
 
 The work queue above is the cognitive-model line, and it has not been the only
 line. Since this plan was drafted, the building itself grew four systems and the
@@ -74,14 +74,30 @@ below:
   breakers, and `OffReason` naming the first failed rung. **Not yet driven by any
   shipped floor** (issue #192).
 - **Water, gas and air** (`scenario/infrastructure/`, ADR-0013), with
-  consequences-as-observations in `scenario/infra.rs` (ADR-0014). **Not yet
-  called from the game tick.**
+  consequences-as-observations in `scenario/infra.rs` (ADR-0014). **Called from
+  every game tick but inert on the canonical floor:** `system_infra()` runs at
+  `scenario/sim/mod.rs:727`, and `ghost_lobby.rs:603` sets `infra: None`, so it
+  returns early unless a synth diversion is live. No shipped floor defines water,
+  gas or air yet.
 - **Moletaire is hosted** (`Command::Mole`, `sim/mole.rs`), so the companion is
   no longer a seam waiting for a host.
 - **`crates/idaptik-persist`** holds the command log, checkpoints and
   replay-safe resume; **`crates/idaptik-evil-weevil`** exercises the acceptance
   rules offline, and **`crates/idaptik-weevil`** is the guard brain's host
   adapter.
+- **November (2026-11-02 to 2026-11-20).** The weevil adapter moved from B1
+  stages 1 and 2 (#225, #227) to C2 (#230): it mirrors kernel ABI 1.2, the
+  corridor observes, and contacts remember (#232). Since #234 it emits Enaction
+  kernel contract 2.0 (`enaction-runner-output/2`); IDApTIK's side is done and
+  what remains is the UMS side emitting the new tag (the deed's open decisions
+  hold the detail). The proof ledger became machine data
+  (`config/proof-ledger.ncl`, #222) beside a brand contrast gate decided by the
+  kernel's integer contrast law, and the Creusot migration plan landed
+  (`docs/verification/2026-10-31-creusot-ultraplan.md`, #212). The legacy test
+  relay is confined to local-only sessions (#214, #219); `idaptik-persist`
+  resume replays the first unapplied command and builds on redb 4 (#213); and
+  `launcher.sh --windows-client` offers a native Windows client under WSL2
+  (#215).
 
 Two things are still outstanding in the cognitive-model line, both below:
 **developer telemetry** (truth / readouts / beliefs) is the next visible item and
